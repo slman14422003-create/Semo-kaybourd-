@@ -97,11 +97,8 @@ private fun RootNavigation(settingsRepository: SettingsRepository) {
         true -> OnboardingScreen(
             step = step,
             status = OnboardingKeyboardStatus(isEnabled = isEnabled, isSelected = isSelected),
-            onOpenEnableSettings = { context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
-            onOpenKeyboardPicker = {
-                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.showInputMethodPicker()
-            },
+            onOpenEnableSettings = { openInputMethodSettings(context) },
+            onOpenKeyboardPicker = { openKeyboardPicker(context) },
             onNext = {
                 step = OnboardingStep.entries.getOrElse(step.ordinal + 1) { OnboardingStep.DONE }
             },
@@ -118,16 +115,26 @@ private fun RootNavigation(settingsRepository: SettingsRepository) {
             settingsRepository = settingsRepository,
             isKeyboardEnabled = isEnabled,
             isKeyboardSelected = isSelected,
-            onOpenLanguageSettings = { context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
-            onPickKeyboard = {
-                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.showInputMethodPicker()
-            },
+            onOpenLanguageSettings = { openInputMethodSettings(context) },
+            onPickKeyboard = { openKeyboardPicker(context) },
             onReplayOnboarding = {
                 step = OnboardingStep.WELCOME
                 showOnboarding = true
             }
         )
+    }
+}
+
+/** يفتح شاشة إدارة لوحات المفاتيح بأمان؛ لو تعذّر (روم غير قياسي) ما بيكرش التطبيق */
+private fun openInputMethodSettings(context: Context) {
+    runCatching { context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
+}
+
+/** يفتح منتقي لوحة المفاتيح بأمان */
+private fun openKeyboardPicker(context: Context) {
+    runCatching {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.showInputMethodPicker()
     }
 }
 
