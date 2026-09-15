@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.iOS26Keyboard" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
