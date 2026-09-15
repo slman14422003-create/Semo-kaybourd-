@@ -1,10 +1,6 @@
 package com.ios26.keyboard.ime
 
 import android.inputmethodservice.InputMethodService
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -15,12 +11,12 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import com.ios26.keyboard.data.SettingsRepository
 import com.ios26.keyboard.ui.keyboard.KeyboardScreen
 import com.ios26.keyboard.ui.keyboard.KeyboardViewModel
@@ -31,6 +27,12 @@ import com.ios26.keyboard.ui.keyboard.KeyboardViewModel
  *
  * ندوّر يدويًا حلقة حياة (Lifecycle/ViewModelStore/SavedState) لأن IME ليست
  * Activity أو Fragment، وهذا ضروري لتشغيل ComposeView خارج تلك السياقات.
+ *
+ * ملاحظة مهمة: نستخدم DisposeOnLifecycleDestroyed(this) بدل DisposeOnDetachedFromWindow.
+ * النظام يفصل ويعيد إرفاق نفس الـ View بشكل متكرر أثناء إخفاء/إظهار اللوحة بدون تدمير
+ * الخدمة، وDisposeOnDetachedFromWindow كان يهدم الـ Composition عند أول إخفاء، فتتحول
+ * أي محاولة إعادة استخدام لاحقة لها إلى استثناء (composition تم التخلص منها) ويصير كراش
+ * فوري بمجرد اختيار اللوحة من النظام. الربط الآن بدورة حياة الخدمة نفسها يحل المشكلة جذريًا.
  */
 class IOSKeyboardService :
     InputMethodService(),
@@ -48,34 +50,33 @@ class IOSKeyboardService :
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
     private lateinit var settingsRepository: SettingsRepository
-    private lateinit var viewModel: KeyboardViewModel
+    private var viewModel: KeyboardViewModel? = null
 
     override fun onCreate() {
         savedStateRegistryController.performRestore(null)
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
         super.onCreate()
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
         settingsRepository = SettingsRepository(applicationContext)
     }
 
     override fun onCreateInputView(): View {
-        viewModel = KeyboardViewModel(
+        val vm = KeyboardViewModel(
             settingsRepository = settingsRepository,
-            onCommitText = { text -> currentInputConnection?.commitText(text, 1) },
-            onDeleteBackward = { currentInputConnection?.deleteSurroundingText(1, 0) },
+            onCommitText = { text -> safeInputConnection { commitText(text, 1) } },
+            onDeleteBackward = { safeInputConnection { deleteSurroundingText(1, 0) } },
             onCommitEnter = { sendEnter() },
             onSwitchInputMethod = { switchToNextInputMethod(false) }
         )
+        viewModel = vm
 
-        val composeView = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent { KeyboardScreen(viewModel = viewModel) }
+        return ComposeView(this).apply {
+            // ننسّق التخلص من الـ Composition مع دورة حياة الخدمة نفسها، لا مع إرفاق/فصل الـ View
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnLifecycleDestroyed(this@IOSKeyboardService))
+            setViewTreeLifecycleOwner(this@IOSKeyboardService)
+            setViewTreeViewModelStoreOwner(this@IOSKeyboardService)
+            setViewTreeSavedStateRegistryOwner(this@IOSKeyboardService)
+            setContent { KeyboardScreen(viewModel = vm) }
         }
-
-        composeView.setViewTreeLifecycleOwner(this)
-        composeView.setViewTreeViewModelStoreOwner(this)
-        composeView.setViewTreeSavedStateRegistryOwner(this)
-
-        return composeView
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -85,31 +86,35 @@ class IOSKeyboardService :
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        // نرجع لـ STARTED فقط (وليس أدنى)، لأن الـ View ما زال قد يكون مرئيًا لفترة قصيرة
+        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+    }
+
+    override fun onWindowHidden() {
+        super.onWindowHidden()
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
     }
 
     override fun onDestroy() {
+        super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         store.clear()
-        super.onDestroy()
+        viewModel = null
     }
 
     private fun sendEnter() {
-        val ic = currentInputConnection ?: return
-        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        safeInputConnection {
+            sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        }
     }
 
-    private fun vibrateKeyPress() {
-        val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(VIBRATOR_SERVICE) as Vibrator
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(8, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
+    /**
+     * ينفّذ عملية على InputConnection الحالي بأمان: قد يكون null أو غير صالح (مثلًا الحقل
+     * فقد التركيز لحظة الضغط)، فنتجنب أي استثناء يوقف الخدمة بالكامل بدل تعطّل ضغطة واحدة فقط.
+     */
+    private inline fun safeInputConnection(action: android.view.inputmethod.InputConnection.() -> Unit) {
+        val ic = currentInputConnection ?: return
+        runCatching { ic.action() }
     }
 }
-
