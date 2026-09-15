@@ -26,8 +26,12 @@ class KeyboardViewModel(
     private val onSwitchInputMethod: () -> Unit
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(KeyboardUiState())
+    // تبدأ اللوحة بحالة Shift مفعّلة تلقائيًا (نفس iOS: أول حرف بأي حقل يطلع كابيتال)
+    private val _uiState = MutableStateFlow(KeyboardUiState(shiftState = ShiftState.ON))
     val uiState: StateFlow<KeyboardUiState> = _uiState
+
+    /** آخر محرف تم إرساله فعليًا للحقل، تُستخدم لاكتشاف نمط "مسافة-مسافة" و"نهاية جملة" */
+    private var lastCommittedChar: Char? = null
 
     init {
         combine(
@@ -45,11 +49,19 @@ class KeyboardViewModel(
         when (action) {
             is KeyAction.Character -> {
                 onCommitText(action.char)
+                lastCommittedChar = action.char.lastOrNull()
                 consumeOneShotShift()
             }
-            KeyAction.Space -> onCommitText(" ")
-            KeyAction.Enter -> onCommitEnter()
-            KeyAction.Backspace -> onDeleteBackward()
+            KeyAction.Space -> handleSpace()
+            KeyAction.Enter -> {
+                onCommitEnter()
+                lastCommittedChar = '\n'
+                autoCapitalize()
+            }
+            KeyAction.Backspace -> {
+                onDeleteBackward()
+                lastCommittedChar = null
+            }
             KeyAction.Shift -> toggleShift()
             KeyAction.SwitchToSymbols -> _uiState.update { it.copy(page = KeyboardPage.SYMBOLS_1) }
             KeyAction.SwitchToSymbols2 -> _uiState.update { it.copy(page = KeyboardPage.SYMBOLS_2) }
@@ -57,6 +69,25 @@ class KeyboardViewModel(
             KeyAction.Emoji -> _uiState.update { it.copy(page = KeyboardPage.EMOJI) }
             KeyAction.Globe -> onSwitchInputMethod()
         }
+    }
+
+    /** مسافة عادية، إلا إذا كانت آخر ضغطة كانت مسافة برضو: يومها نستبدلها بنقطة+مسافة (نمط iOS الكلاسيكي) */
+    private fun handleSpace() {
+        if (lastCommittedChar == ' ') {
+            onDeleteBackward()
+            onCommitText(". ")
+            lastCommittedChar = ' '
+            autoCapitalize()
+        } else {
+            val previous = lastCommittedChar
+            onCommitText(" ")
+            lastCommittedChar = ' '
+            if (previous == '.' || previous == '!' || previous == '؟' || previous == '?') autoCapitalize()
+        }
+    }
+
+    private fun autoCapitalize() {
+        _uiState.update { if (it.shiftState == ShiftState.OFF) it.copy(shiftState = ShiftState.ON) else it }
     }
 
     private fun toggleShift() {
