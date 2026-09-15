@@ -1,5 +1,6 @@
 package com.ios26.keyboard.ui
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
@@ -98,7 +99,7 @@ private fun RootNavigation(settingsRepository: SettingsRepository) {
             status = OnboardingKeyboardStatus(isEnabled = isEnabled, isSelected = isSelected),
             onOpenEnableSettings = { context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
             onOpenKeyboardPicker = {
-                val imm = context.getSystemService(ComponentActivity.INPUT_METHOD_SERVICE) as InputMethodManager
+                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.showInputMethodPicker()
             },
             onNext = {
@@ -119,7 +120,7 @@ private fun RootNavigation(settingsRepository: SettingsRepository) {
             isKeyboardSelected = isSelected,
             onOpenLanguageSettings = { context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
             onPickKeyboard = {
-                val imm = context.getSystemService(ComponentActivity.INPUT_METHOD_SERVICE) as InputMethodManager
+                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.showInputMethodPicker()
             },
             onReplayOnboarding = {
