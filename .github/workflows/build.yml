@@ -1,1 +1,53 @@
+name: Build APK
 
+# يبني نسخة Debug من التطبيق تلقائيًا عند كل push على main أو عند طلب Pull Request،
+# ويتيح أيضًا تشغيله يدويًا من تبويب Actions (workflow_dispatch).
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout المستودع
+        uses: actions/checkout@v4
+
+      - name: تثبيت JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: إعداد Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: بناء APK (Debug)
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: رفع الـ APK كـ Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS26Keyboard-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: تشغيل فحوصات Lint (اختياري، لا يوقف البناء عند فشلها)
+        if: always()
+        run: gradle lintDebug --no-daemon
+        continue-on-error: true
+
+      - name: رفع تقرير Lint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
