@@ -19,7 +19,9 @@ data class KeyDefinition(
     val label: String,
     val action: KeyAction,
     val weight: Float = 1f,
-    val isAccent: Boolean = false
+    val isAccent: Boolean = false,
+    /** بدائل تظهر بفقاعة عند الضغط المطوّل (مثل a → à á â ã ä å)، متل لوحة iOS */
+    val longPressChars: List<String> = emptyList()
 )
 
 enum class ShiftState { OFF, ON, LOCKED }
