@@ -16,6 +16,21 @@ object KeyboardLayoutProvider {
     private val row2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
     private val row3 = listOf("z", "x", "c", "v", "b", "n", "m")
 
+    /** بدائل الضغط المطوّل لكل حرف (نفس فكرة لوحة iOS: امسك الحرف ليطلع صف بدائله) */
+    private val longPressAlternates: Map<String, List<String>> = mapOf(
+        "a" to listOf("à", "á", "â", "ä", "æ", "ã", "å"),
+        "e" to listOf("è", "é", "ê", "ë"),
+        "i" to listOf("ì", "í", "î", "ï"),
+        "o" to listOf("ò", "ó", "ô", "ö", "õ", "ø"),
+        "u" to listOf("ù", "ú", "û", "ü"),
+        "s" to listOf("ß", "ś", "š"),
+        "c" to listOf("ç", "ć"),
+        "n" to listOf("ñ", "ń"),
+        "y" to listOf("ý", "ÿ"),
+        "z" to listOf("ž", "ź", "ż"),
+        "l" to listOf("ł")
+    )
+
     private val symbols1Row1 = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
     private val symbols1Row2 = listOf("-", "/", ":", ";", "(", ")", "$", "&", "@", "\"")
     private val symbols1Row3 = listOf(".", ",", "?", "!", "'")
@@ -39,8 +54,10 @@ object KeyboardLayoutProvider {
 
     private fun lettersRows(shiftState: ShiftState): List<List<KeyDefinition>> {
         val upper = shiftState != ShiftState.OFF
-        fun mapRow(chars: List<String>) = chars.map {
-            KeyDefinition(if (upper) it.uppercase() else it, KeyAction.Character(if (upper) it.uppercase() else it))
+        fun mapRow(chars: List<String>) = chars.map { base ->
+            val shown = if (upper) base.uppercase() else base
+            val alternates = longPressAlternates[base]?.map { if (upper) it.uppercase() else it } ?: emptyList()
+            KeyDefinition(shown, KeyAction.Character(shown), longPressChars = alternates)
         }
 
         val shiftKey = KeyDefinition(
