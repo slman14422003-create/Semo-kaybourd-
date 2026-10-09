@@ -136,23 +136,27 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
         state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind
     ) { KeyboardLayoutProvider.rows(state) }
-    val rowHeights = remember(rows, metrics) {
-        rows.map { if (isUtilityRow(it)) metrics.utilHeight else metrics.rowHeight }
+    // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل. فبدل ما نترك مساحة فارغة تحت الصف الأخير،
+    // نجعل صف الكرة الأرضية والميكروفون بنفس ارتفاع شريط التنقل ونوسّط أيقوناته فيه (مثل آيفون
+    // حيث تقع هذه الأيقونات بمستوى مؤشر الرجوع للرئيسية)، فتتنسّق مع شريط One UI السفلي.
+    val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
+    val density = LocalDensity.current
+    val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).toDp() } else 0.dp
+    val utilHeight = if (edgeToEdgeIme) navInset.coerceIn(40.dp, 56.dp) else metrics.utilHeight
+    val rowHeights = remember(rows, metrics, utilHeight) {
+        rows.map { if (isUtilityRow(it)) utilHeight else metrics.rowHeight }
     }
 
     val currentOnChrome by rememberUpdatedState(onChrome)
     LaunchedEffect(colors.panel, isDark) { currentOnChrome(colors.panel.toArgb(), isDark) }
 
-    // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل، فنضيف حشوة سفلية بمقداره بالضبط.
-    // لون اللوحة يمتد خلف الشريط (الخلفية قبل الحشوة)، فيبدو الشريط جزءًا من اللوحة مثل آيفون.
-    val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
-    val bottomInsets = if (edgeToEdgeIme) WindowInsets.navigationBars else WindowInsets(0, 0, 0, 0)
-    val extraBottom = if (edgeToEdgeIme) 6.dp else 8.dp
+    // لون اللوحة يمتد خلف الشريط؛ لو كان الشريط أطول من صف الأيقونات نكمّل الفرق بحشوة سفلية
+    val extraBottom = if (edgeToEdgeIme) (navInset - utilHeight).coerceAtLeast(0.dp) else 8.dp
 
     val panelShape = RectangleShape
 
     // ارتفاع صفحات الإيموجي/الحافظة/التحرير = أربعة صفوف + الصف السفلي الإضافي
-    val panelHeight = metrics.rowHeight * 4 + metrics.utilHeight
+    val panelHeight = metrics.rowHeight * 4 + utilHeight
     val sideHeight = metrics.stripHeight + panelHeight
     val oneHanded = state.oneHand != OneHandMode.OFF
 
@@ -168,7 +172,6 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.panel, panelShape)
-                .windowInsetsPadding(bottomInsets)
                 .padding(bottom = extraBottom)
         ) {
             if (state.oneHand == OneHandMode.RIGHT) {
@@ -692,9 +695,10 @@ private fun RowScope.KeyButton(
             .padding(
                 start = metrics.keySpacing / 2,
                 end = metrics.keySpacing / 2,
-                top = if (def.plain) 4.dp else verticalPadding,
+                top = if (def.plain) 0.dp else verticalPadding,
                 bottom = if (def.plain) 0.dp else verticalPadding
-            )
+            ),
+        contentAlignment = if (def.plain) Alignment.Center else Alignment.TopStart
     ) {
         Box(
             modifier = (if (def.plain) Modifier.fillMaxWidth().height(34.dp) else Modifier.fillMaxSize())

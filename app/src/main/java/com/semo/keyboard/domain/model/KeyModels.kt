@@ -1,5 +1,7 @@
 package com.semo.keyboard.domain.model
 
+import androidx.compose.runtime.Immutable
+
 /** أنواع المفاتيح المدعومة داخل اللوحة */
 sealed class KeyAction {
     data class Character(val char: String) : KeyAction()
@@ -19,6 +21,7 @@ sealed class KeyAction {
 }
 
 /** تعريف مفتاح واحد على اللوحة، مع وزن العرض النسبي */
+@Immutable
 data class KeyDefinition(
     val label: String,
     val action: KeyAction,

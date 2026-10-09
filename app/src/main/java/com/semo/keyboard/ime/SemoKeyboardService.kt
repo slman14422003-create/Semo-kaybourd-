@@ -7,6 +7,9 @@ import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -81,6 +84,28 @@ class SemoKeyboardService :
 
     /** صوت ضغط شبيه بآيفون (مُولَّد برمجيًا) */
     private var clickPlayer: KeyClickPlayer? = null
+
+    /** الصوت والاهتزاز على خيط خلفي كي لا يؤخّرا رسم الضغطة التالية على الخيط الرئيسي */
+    private val feedbackThread = HandlerThread("semo-feedback").also { it.start() }
+    private val feedbackHandler = Handler(feedbackThread.looper)
+    private val vibrator: Vibrator? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+    }
+    private val vibrationEffect: VibrationEffect by lazy {
+        VibrationEffect.createOneShot(12, VibrationEffect.DEFAULT_AMPLITUDE)
+    }
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val cursorMovedTask = Runnable {
+        if (::viewModel.isInitialized) {
+            viewModel.onCursorMoved(shouldCapitalize(currentInputEditorInfo?.inputType ?: 0))
+        }
+    }
 
     /** حقل كلمة مرور: لا نسجّل الحافظة ولا نتعلّم كلمات */
     private var passwordField = false
@@ -208,7 +233,9 @@ class SemoKeyboardService :
         candidatesStart: Int, candidatesEnd: Int
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        viewModel.onCursorMoved(shouldCapitalize(currentInputEditorInfo?.inputType ?: 0))
+        // نجمع تحديثات المؤشر المتتالية (تصل مع كل حرف) بمهمة واحدة، لأن كل واحدة تكلّف استدعاءات للتطبيق
+        mainHandler.removeCallbacks(cursorMovedTask)
+        mainHandler.postDelayed(cursorMovedTask, 40)
     }
 
     override fun onWindowShown() {
@@ -228,8 +255,12 @@ class SemoKeyboardService :
             (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipListener)
         }
         serviceScope.cancel()
-        clickPlayer?.release()
-        clickPlayer = null
+        mainHandler.removeCallbacks(cursorMovedTask)
+        feedbackHandler.post {
+            clickPlayer?.release()
+            clickPlayer = null
+        }
+        feedbackThread.quitSafely()
         KeyboardStatusHelper.setImeVisible(this, false)
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
@@ -342,8 +373,11 @@ class SemoKeyboardService :
             runCatching { currentInputConnection?.getTextBeforeCursor(length, 0)?.toString() }.getOrNull().orEmpty()
 
         override fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback, volume: Float) {
-            if (sound) runCatching { clickPlayer?.play(kind, volume) }
-            if (haptic) runCatching { vibrateTick() }
+            if (!sound && !haptic) return
+            feedbackHandler.post {
+                if (sound) runCatching { clickPlayer?.play(kind, volume) }
+                if (haptic) runCatching { vibrateTick() }
+            }
         }
     }
 
@@ -381,14 +415,7 @@ class SemoKeyboardService :
     }
 
     private fun vibrateTick() {
-        val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-        }
-        if (vibrator?.hasVibrator() == true) {
-            vibrator.vibrate(VibrationEffect.createOneShot(12, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
+        val v = vibrator ?: return
+        if (v.hasVibrator()) v.vibrate(vibrationEffect)
     }
 }

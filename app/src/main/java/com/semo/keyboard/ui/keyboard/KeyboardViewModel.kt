@@ -24,6 +24,8 @@ import com.semo.keyboard.domain.model.MathResult
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ShiftState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -461,7 +463,22 @@ class KeyboardViewModel(
         }
     }
 
+    private var refreshJob: Job? = null
+
+    /**
+     * تحديث الاقتراحات يحتاج قراءة النص من التطبيق (استدعاء بين عمليتين وهو أبطأ شيء بالكتابة)،
+     * وكان يُنفَّذ مرتين أو أكثر لكل ضغطة. هلأ نجمع الطلبات المتتالية بتحديث واحد بعد لحظة قصيرة،
+     * فتبقى الضغطة نفسها خفيفة وسلسة حتى مع الكتابة السريعة.
+     */
     private fun refreshSuggestions() {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            delay(30)
+            doRefreshSuggestions()
+        }
+    }
+
+    private fun doRefreshSuggestions() {
         val state = uiState.value
         val t = transient.value
         if (!t.suggestionsAllowed || (!state.suggestionsEnabled && !state.mathResults)) {
