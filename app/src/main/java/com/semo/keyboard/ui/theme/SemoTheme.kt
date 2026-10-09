@@ -45,7 +45,7 @@ fun SemoAppTheme(content: @Composable () -> Unit) {
     )
 }
 
-/** ألوان لوحة المفاتيح نفسها (فاتح / داكن) بنفس لغة الهوية */
+/** ألوان لوحة المفاتيح بأسلوب iOS الحديث (رمادي ناعم، مفاتيح الحروف أفتح من المفاتيح الخاصة بالوضع الداكن) */
 data class SemoKeyboardColors(
     val background: Color,
     val key: Color,
@@ -56,40 +56,50 @@ data class SemoKeyboardColors(
     val textMuted: Color,
     val textOnAccent: Color,
     val keyShadow: Color,
-    val chip: Color
+    val chip: Color,
+    val shiftActive: Color,
+    val onShiftActive: Color,
+    val bubble: Color
 ) {
     companion object {
         val Light = SemoKeyboardColors(
-            background = Color(0xFFD3D6DD),
+            background = Color(0xFFD1D3D9),
             key = Color(0xFFFFFFFF),
-            keyPressed = Color(0xFFB4B9C4),
-            keySpecial = Color(0xFFB4B9C4),
-            keyAccent = SemoPalette.Accent,
-            text = Color(0xFF1C1C1E),
+            keyPressed = Color(0xFFADB1BB),
+            keySpecial = Color(0xFFADB1BB),
+            keyAccent = Color(0xFF007AFF),
+            text = Color(0xFF000000),
             textMuted = Color(0xFF6B6F7A),
             textOnAccent = Color.White,
-            keyShadow = Color(0xFF8E939E),
-            chip = Color(0xFFFFFFFF)
+            keyShadow = Color(0xFF898C94),
+            chip = Color(0xFFFFFFFF),
+            shiftActive = Color(0xFFFFFFFF),
+            onShiftActive = Color(0xFF000000),
+            bubble = Color(0xFFFFFFFF)
         )
         val Dark = SemoKeyboardColors(
-            background = Color(0xFF101013),
-            key = Color(0xFF2C2C33),
-            keyPressed = Color(0xFF45454F),
-            keySpecial = Color(0xFF1D1D22),
-            keyAccent = SemoPalette.Accent,
+            background = Color(0xFF1E1E21),
+            key = Color(0xFF5B5B60),
+            keyPressed = Color(0xFF3F3F44),
+            keySpecial = Color(0xFF3F3F44),
+            keyAccent = Color(0xFF0A84FF),
             text = Color(0xFFFFFFFF),
-            textMuted = Color(0xFF8A8A96),
+            textMuted = Color(0xFF8E8E96),
             textOnAccent = Color.White,
-            keyShadow = Color(0xFF000000),
-            chip = Color(0xFF2C2C33)
+            keyShadow = Color(0xFF0A0A0B),
+            chip = Color(0xFF5B5B60),
+            shiftActive = Color(0xFFF2F2F7),
+            onShiftActive = Color(0xFF000000),
+            bubble = Color(0xFF6C6C72)
         )
     }
 }
 
 object SemoDimens {
-    val keyHeight = 44.dp
+    val keyHeight = 48.dp
     val keySpacing = 6.dp
-    val rowSpacing = 10.dp
-    val sidePadding = 4.dp
-    val keyShape = RoundedCornerShape(7.dp)
+    val rowSpacing = 11.dp
+    val sidePadding = 3.dp
+    val keyRadius = 9.dp
+    val keyShape = RoundedCornerShape(keyRadius)
 }

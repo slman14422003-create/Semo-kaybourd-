@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -82,7 +86,10 @@ fun KeyboardScreen(viewModel: KeyboardViewModel) {
     val rows = remember(state) { KeyboardLayoutProvider.rows(state) }
 
     // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل، فنضيف حشوة سفلية بمقداره
-    val bottomInsets = if (Build.VERSION.SDK_INT >= 35) WindowInsets.navigationBars else WindowInsets(0, 0, 0, 0)
+    val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
+    val bottomInsets = if (edgeToEdgeIme) WindowInsets.navigationBars else WindowInsets(0, 0, 0, 0)
+    // زر إخفاء اللوحة الذي يرسمه النظام يقع بمنطقة شريط التنقل، فنترك له مساحة كافية كي لا يغطي مفتاح Return
+    val extraBottom = if (edgeToEdgeIme) 20.dp else 4.dp
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Column(
@@ -91,7 +98,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel) {
                 .background(colors.background)
                 .windowInsetsPadding(bottomInsets)
                 .padding(horizontal = SemoDimens.sidePadding)
-                .padding(top = 2.dp, bottom = 4.dp)
+                .padding(top = 0.dp, bottom = extraBottom)
         ) {
             TopStrip(
                 alternates = state.alternates,
@@ -122,7 +129,7 @@ private fun TopStrip(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(44.dp)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -155,15 +162,7 @@ private fun TopStrip(
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             )
         } else {
-            Box(Modifier.size(8.dp).background(colors.keyAccent, CircleShape))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Semo Keyboard",
-                color = colors.textMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
+            Spacer(Modifier.weight(1f))
             Box(
                 modifier = Modifier
                     .size(width = 44.dp, height = 36.dp)
@@ -215,24 +214,34 @@ private fun RowScope.KeyButton(
     val isBackspace = def.action == KeyAction.Backspace
     val special = isSpecial(def)
 
+    val shiftOn = def.action == KeyAction.Shift && def.isAccent
     val bg = when {
+        shiftOn -> colors.shiftActive
         def.isAccent -> colors.keyAccent
         pressed && special -> colors.key
         pressed -> colors.keyPressed
         special -> colors.keySpecial
         else -> colors.key
     }
-    val textColor = if (def.isAccent) colors.textOnAccent else colors.text
+    val textColor = when {
+        shiftOn -> colors.onShiftActive
+        def.isAccent -> colors.textOnAccent
+        else -> colors.text
+    }
     val shadowColor = colors.keyShadow
 
     // منطقة اللمس تشمل الفراغات بين المفاتيح (تقلّل الضغطات الضائعة)، والشكل المرئي أصغر منها
-    val longPressHandler: ((Offset) -> Unit)? =
-        if (hasAlternates) ({ _: Offset -> currentOnLong(def) }) else null
+    val longPressHandler: ((Offset) -> Unit)? = when {
+        hasAlternates -> ({ _: Offset -> currentOnLong(def) })
+        def.longPressAction != null -> ({ _: Offset -> currentOnKey(def.longPressAction) })
+        else -> null
+    }
 
     Box(
         modifier = Modifier
             .weight(def.weight)
             .height(SemoDimens.keyHeight + SemoDimens.rowSpacing)
+            .zIndex(if (pressed) 1f else 0f)
             .pointerInput(def) {
                 detectTapGestures(
                     onPress = {
@@ -271,13 +280,28 @@ private fun RowScope.KeyButton(
                         color = shadowColor,
                         topLeft = Offset(0f, 1.5.dp.toPx()),
                         size = size,
-                        cornerRadius = CornerRadius(7.dp.toPx())
+                        cornerRadius = CornerRadius(SemoDimens.keyRadius.toPx())
                     )
                 }
                 .background(bg, SemoDimens.keyShape),
             contentAlignment = Alignment.Center
         ) {
             KeyContent(def, textColor)
+        }
+
+        // فقاعة معاينة الحرف فوق المفتاح أثناء الضغط (مثل iOS)
+        if (pressed && def.action is KeyAction.Character) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .requiredSize(width = 58.dp, height = 70.dp)
+                    .offset(y = (-64).dp)
+                    .shadow(6.dp, RoundedCornerShape(14.dp))
+                    .background(colors.bubble, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = def.label, color = colors.text, fontSize = 36.sp, maxLines = 1)
+            }
         }
     }
 }
@@ -287,7 +311,7 @@ private fun KeyContent(def: KeyDefinition, textColor: Color) {
     val iconRes = if (def.textOnly) null else when (def.action) {
         KeyAction.Shift -> if (def.label == "⇪") R.drawable.ic_key_shift_locked else R.drawable.ic_key_shift
         KeyAction.Backspace -> R.drawable.ic_key_backspace
-        KeyAction.Globe -> R.drawable.ic_key_globe
+        KeyAction.Globe, KeyAction.SwitchLanguage -> R.drawable.ic_key_globe
         KeyAction.Emoji -> R.drawable.ic_key_emoji
         KeyAction.Enter -> R.drawable.ic_key_enter
         else -> null
@@ -305,9 +329,10 @@ private fun KeyContent(def: KeyDefinition, textColor: Color) {
             text = def.label,
             color = textColor,
             fontSize = when {
-                def.action == KeyAction.Space -> 14.sp
-                isLetter -> 22.sp
-                def.label.length > 2 -> 14.sp
+                def.action == KeyAction.Space -> 15.sp
+                isLetter -> 25.sp
+                def.action == KeyAction.Enter -> 16.sp
+                def.label.length > 2 -> 15.sp
                 else -> 18.sp
             },
             textAlign = TextAlign.Center,
@@ -343,5 +368,6 @@ private fun isSpecial(def: KeyDefinition): Boolean = when (def.action) {
     KeyAction.Shift, KeyAction.Backspace, KeyAction.Globe, KeyAction.Emoji,
     KeyAction.SwitchToSymbols, KeyAction.SwitchToSymbols2, KeyAction.SwitchToLetters,
     KeyAction.SwitchLanguage -> true
+    KeyAction.Enter -> !def.isAccent
     else -> false
 }

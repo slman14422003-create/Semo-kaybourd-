@@ -127,38 +127,41 @@ object KeyboardLayoutProvider {
     private fun bottomRow(state: KeyboardUiState, letters: Boolean): List<KeyDefinition> {
         val arabic = state.language == KeyboardLanguage.ARABIC
         val left = if (letters)
-            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = 1.4f)
+            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = 1.5f)
         else
-            KeyDefinition(if (arabic) "أبج" else "ABC", KeyAction.SwitchToLetters, weight = 1.4f)
+            KeyDefinition(if (arabic) "أبج" else "ABC", KeyAction.SwitchToLetters, weight = 1.5f)
 
-        val keys = mutableListOf(
+        // الكرة الأرضية: ضغطة = تبديل اللغة (عربي/إنكليزي)، ضغطة مطوّلة = لوحة المفاتيح التالية بالنظام
+        val globe = if (letters)
+            KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 1.2f, longPressAction = KeyAction.Globe)
+        else
+            KeyDefinition("🌐", KeyAction.Globe, weight = 1.2f)
+
+        return listOf(
             left,
-            KeyDefinition("🌐", KeyAction.Globe, weight = 1.1f),
-            KeyDefinition("😊", KeyAction.Emoji, weight = 1.1f)
+            KeyDefinition("😊", KeyAction.Emoji, weight = 1.2f),
+            globe,
+            KeyDefinition(if (arabic) "مسافة" else "space", KeyAction.Space, weight = 4.2f),
+            enterKey(state.enterKind, arabic)
         )
-        if (letters) {
-            keys += KeyDefinition(if (arabic) "EN" else "ع", KeyAction.SwitchLanguage, weight = 1.1f)
-        }
-        keys += KeyDefinition(if (arabic) "العربية" else "English", KeyAction.Space, weight = if (letters) 3.4f else 4.5f)
-        keys += enterKey(state.enterKind, arabic)
-        return keys
     }
 
     private fun enterKey(kind: EnterKind, arabic: Boolean): KeyDefinition {
         val text = when (kind) {
-            EnterKind.RETURN -> null
+            EnterKind.RETURN -> if (arabic) "إدخال" else "return"
             EnterKind.SEARCH -> if (arabic) "بحث" else "Search"
             EnterKind.SEND -> if (arabic) "إرسال" else "Send"
             EnterKind.GO -> if (arabic) "اذهب" else "Go"
             EnterKind.DONE -> if (arabic) "تم" else "Done"
             EnterKind.NEXT -> if (arabic) "التالي" else "Next"
         }
+        // مثل iOS: مفتاح return رمادي عادي، ويصير أزرق فقط لما يكون له إجراء (بحث/إرسال/اذهب...)
         return KeyDefinition(
-            label = text ?: "⏎",
+            label = text,
             action = KeyAction.Enter,
-            weight = 1.8f,
-            isAccent = true,
-            textOnly = text != null
+            weight = 2f,
+            isAccent = kind != EnterKind.RETURN,
+            textOnly = true
         )
     }
 }

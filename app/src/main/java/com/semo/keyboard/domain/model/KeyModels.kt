@@ -28,7 +28,9 @@ data class KeyDefinition(
     /** true = يُعرض النص فقط حتى لو للمفتاح أيقونة (مثل مفتاح "بحث") */
     val textOnly: Boolean = false,
     /** فراغ غير قابل للضغط لتوسيط الصفوف الأقصر */
-    val isSpacer: Boolean = false
+    val isSpacer: Boolean = false,
+    /** إجراء بديل عند الضغط المطوّل (مثلًا الكرة الأرضية: ضغطة = لغة، مطوّلة = لوحة النظام التالية) */
+    val longPressAction: KeyAction? = null
 ) {
     companion object {
         fun spacer(weight: Float) = KeyDefinition("", KeyAction.None, weight, isSpacer = true)
