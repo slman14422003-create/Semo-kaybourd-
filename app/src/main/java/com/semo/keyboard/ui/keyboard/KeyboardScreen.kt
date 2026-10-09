@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -107,9 +108,11 @@ import com.semo.keyboard.ui.theme.KeyMetrics
 import com.semo.keyboard.ui.theme.SemoKeyboardColors
 import com.semo.keyboard.ui.theme.keyMetrics
 import com.semo.keyboard.ui.theme.semoColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
 
@@ -162,8 +165,15 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // يوسّط أزرار الشريط (زر إخفاء الكيبورد) بنفس المنتصف. ويمكن للمستخدم تعديل الفرق الصغير
     // بين الأجهزة من الإعدادات (globeOffsetDp).
     val utilHeight = if (edgeToEdgeIme) maxOf(navInset, 48.dp) else metrics.utilHeight
-    val navCenter = if (edgeToEdgeIme && navInset > 0.dp) navInset / 2 else utilHeight / 2
+    // أزرار النظام (زر إخفاء الكيبورد) تقع بمنتصف شريط ارتفاعه 48dp من أسفل الشاشة حتى لو أبلغ النظام
+    // عن inset أصغر (قياس من جهاز One UI: الـ inset ~24dp بينما مركز الزر على 24dp من الأسفل)
+    val navCenter = utilHeight / 2
     val globeCenter = (navCenter + state.globeOffsetDp.dp).coerceIn(14.dp, utilHeight - 14.dp)
+    // صفحات الإيموجي/الحافظة/التحرير: شريطها السفلي كان يقع تحت زر إخفاء الكيبورد (يتداخل مع لمس النظام)،
+    // فنحجز منطقة شريط التنقل أسفل الصفحة ونقصّر المحتوى بنفس المقدار
+    val bottomReserve = if (edgeToEdgeIme) utilHeight else 0.dp
+    // نسخّن فلترة الإيموجي بخيط خلفي كي لا تعلّق فتح لوحة الإيموجي أول مرة
+    LaunchedEffect(Unit) { withContext(Dispatchers.Default) { supportedEmojiCache.size } }
     val rowHeights = remember(rows, metrics, utilHeight) {
         rows.map { if (isUtilityRow(it)) utilHeight else metrics.rowHeight }
     }
@@ -207,9 +217,9 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                 TopStrip(state, colors, metrics, viewModel)
 
                 when (state.page) {
-                    KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight, viewModel)
-                    KeyboardPage.CLIPBOARD -> ClipboardPanel(state, colors, panelHeight, viewModel)
-                    KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight, viewModel)
+                    KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.CLIPBOARD -> ClipboardPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
                     else -> Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -238,6 +248,11 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                         }
                         SwipeTrail(trail, colors.keyAccent)
                     }
+                }
+                if (bottomReserve > 0.dp &&
+                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD || state.page == KeyboardPage.EDIT)
+                ) {
+                    Spacer(Modifier.height(bottomReserve))
                 }
             }
 
@@ -646,7 +661,8 @@ private fun RowScope.KeyButton(
 
     val shiftOn = def.action == KeyAction.Shift && def.isAccent
     val bg = when {
-        def.plain -> Color.Transparent
+        // الكرة الأرضية: قرص بنفس شكل زر إخفاء الكيبورد بالنظام لتتقابلا بصريًا
+        def.plain -> if (pressed) colors.key else colors.keySpecial
         shiftOn -> colors.shiftActive
         def.isAccent -> colors.keyAccent
         pressed && special -> colors.key
@@ -724,17 +740,18 @@ private fun RowScope.KeyButton(
             .zIndex(if (pressed) 1f else 0f)
             .then(gestureModifier)
             .padding(
-                start = metrics.keySpacing / 2,
+                // القرص يبدأ بنفس الهامش (~12dp) الذي يبعد به زر النظام عن الحافة المقابلة
+                start = metrics.keySpacing / 2 + (if (def.plain) 6.dp else 0.dp),
                 end = metrics.keySpacing / 2,
                 top = if (def.plain) 0.dp else verticalPadding,
-                // الأيقونة العائمة (ارتفاعها 34dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
+                // القرص (ارتفاعه 42dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
                 // على بعد plainCenterFromBottom من أسفل الشاشة = نفس مستوى أزرار شريط التنقل
-                bottom = if (def.plain) (plainCenterFromBottom - 17.dp).coerceAtLeast(0.dp) else verticalPadding
+                bottom = if (def.plain) (plainCenterFromBottom - 21.dp).coerceAtLeast(0.dp) else verticalPadding
             ),
-        contentAlignment = if (def.plain) Alignment.BottomCenter else Alignment.TopStart
+        contentAlignment = if (def.plain) Alignment.BottomStart else Alignment.TopStart
     ) {
         Box(
-            modifier = (if (def.plain) Modifier.fillMaxWidth().height(34.dp) else Modifier.fillMaxSize())
+            modifier = (if (def.plain) Modifier.widthIn(max = 92.dp).fillMaxWidth().height(42.dp).offset(y = (21.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
                 .drawBehind {
                     if (!def.plain) {
                         drawRoundRect(
@@ -745,11 +762,11 @@ private fun RowScope.KeyButton(
                         )
                     }
                 }
-                .background(bg, metrics.keyShape),
+                .background(bg, if (def.plain) RoundedCornerShape(50) else metrics.keyShape),
             contentAlignment = Alignment.Center
         ) {
             if (!hideLabels) {
-                KeyContent(def, textColor, iconSize = if (def.plain) 26.dp else 23.dp)
+                KeyContent(def, textColor, iconSize = if (def.plain) 24.dp else 23.dp)
             }
         }
 
@@ -1025,6 +1042,8 @@ private fun supportedEmojiCategories(): List<EmojiCategory> {
     }.filter { it.emojis.isNotEmpty() }
 }
 
+private val supportedEmojiCache: List<EmojiCategory> by lazy { supportedEmojiCategories() }
+
 @Composable
 private fun EmojiPanel(
     state: KeyboardUiState,
@@ -1033,7 +1052,7 @@ private fun EmojiPanel(
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language == KeyboardLanguage.ARABIC
-    val categories = remember { supportedEmojiCategories() }
+    val categories = supportedEmojiCache
     // التبويب 0 = الأخيرة، والباقي = فئات الإيموجي
     var tab by remember { mutableIntStateOf(if (state.recentEmojis.isEmpty()) 1 else 0) }
     val list = if (tab == 0) state.recentEmojis else categories[tab - 1].emojis

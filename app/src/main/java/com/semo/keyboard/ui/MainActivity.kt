@@ -360,8 +360,8 @@ private fun SettingsScreen(
                         value = globeOffset,
                         onValueChange = { globeOffset = it },
                         onValueChangeFinished = { scope.launch { repo.setGlobeOffset(globeOffset.roundToInt().toFloat()) } },
-                        valueRange = -16f..16f,
-                        steps = 31,
+                        valueRange = -8f..8f,
+                        steps = 15,
                         colors = SliderDefaults.colors(
                             thumbColor = SemoPalette.Accent,
                             activeTrackColor = SemoPalette.Accent,
