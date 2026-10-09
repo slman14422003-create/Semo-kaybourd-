@@ -147,8 +147,8 @@ object KeyboardLayoutProvider {
      * ضغطة على الكرة = تبديل اللغة (عربي/إنكليزي)، ضغطة مطوّلة = لوحة المفاتيح التالية بالنظام.
      */
     fun utilityRow(): List<KeyDefinition> = listOf(
-        KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 2.5f, longPressAction = KeyAction.Globe, plain = true),
-        KeyDefinition.spacer(7.5f)
+        KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 2.8f, longPressAction = KeyAction.Globe, plain = true),
+        KeyDefinition.spacer(7.2f)
     )
 
     private fun numberRow(state: KeyboardUiState): List<List<KeyDefinition>> =

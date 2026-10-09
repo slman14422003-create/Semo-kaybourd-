@@ -661,8 +661,8 @@ private fun RowScope.KeyButton(
 
     val shiftOn = def.action == KeyAction.Shift && def.isAccent
     val bg = when {
-        // الكرة الأرضية: قرص بنفس شكل زر إخفاء الكيبورد بالنظام لتتقابلا بصريًا
-        def.plain -> if (pressed) colors.key else colors.keySpecial
+        // الكرة الأرضية: أيقونة عائمة بدون حاوية (مثل آيفون)؛ تظهر خلفية خفيفة فقط لحظة الضغط
+        def.plain -> if (pressed) colors.keySpecial else Color.Transparent
         shiftOn -> colors.shiftActive
         def.isAccent -> colors.keyAccent
         pressed && special -> colors.key
@@ -740,18 +740,19 @@ private fun RowScope.KeyButton(
             .zIndex(if (pressed) 1f else 0f)
             .then(gestureModifier)
             .padding(
-                // القرص يبدأ بنفس الهامش (~12dp) الذي يبعد به زر النظام عن الحافة المقابلة
-                start = metrics.keySpacing / 2 + (if (def.plain) 6.dp else 0.dp),
+                // منطقة الكرة (96dp) تبدأ عند الحافة بنفس موضع زر النظام المقابل، فيقع مركز الأيقونة
+                // على بعد ~51dp من الحافة اليسرى تمامًا كما يقع مركز سهم الإخفاء من الحافة اليمنى
+                start = if (def.plain) 0.dp else metrics.keySpacing / 2,
                 end = metrics.keySpacing / 2,
                 top = if (def.plain) 0.dp else verticalPadding,
-                // القرص (ارتفاعه 42dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
+                // منطقة الكرة (ارتفاعها 42dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
                 // على بعد plainCenterFromBottom من أسفل الشاشة = نفس مستوى أزرار شريط التنقل
                 bottom = if (def.plain) (plainCenterFromBottom - 21.dp).coerceAtLeast(0.dp) else verticalPadding
             ),
         contentAlignment = if (def.plain) Alignment.BottomStart else Alignment.TopStart
     ) {
         Box(
-            modifier = (if (def.plain) Modifier.widthIn(max = 92.dp).fillMaxWidth().height(42.dp).offset(y = (21.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
+            modifier = (if (def.plain) Modifier.widthIn(max = 96.dp).fillMaxWidth().height(42.dp).offset(y = (21.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
                 .drawBehind {
                     if (!def.plain) {
                         drawRoundRect(
