@@ -132,11 +132,21 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         ThemeMode.DARK -> true
     }
     val colors = remember(state.style, isDark) { semoColors(state.style, isDark) }
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val metrics = remember(state.style, state.size, screenWidthDp, state.oneHand) {
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp
+    val screenHeightDp = configuration.screenHeightDp
+    val metrics = remember(state.style, state.size, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow) {
         // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
         val width = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
-        keyMetrics(state.style, state.size, width)
+        val base = keyMetrics(state.style, state.size, width)
+        if (screenWidthDp > screenHeightDp) {
+            // الوضع الأفقي: العرض كبير فكانت المفاتيح تطلع بأقصى ارتفاع وتغطي معظم الشاشة.
+            // نحصر ارتفاع اللوحة بحوالي نصف الشاشة كي يبقى الحقل النصي ظاهرًا.
+            val rowsCount = if (state.numberRow) 5f else 4f
+            val budget = screenHeightDp * 0.52f - base.stripHeight.value - base.utilHeight.value
+            val keyH = (budget / rowsCount - base.rowSpacing.value).coerceIn(30f, base.keyHeight.value)
+            base.copy(keyHeight = keyH.dp)
+        } else base
     }
     val rows = remember(
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
@@ -148,9 +158,12 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
     val density = LocalDensity.current
     val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).toDp() } else 0.dp
-    // ارتفاع 56dp: مركز الأيقونة على نحو 28dp من أسفل الشاشة، أي بمحاذاة زر إخفاء الكيبورد بشريط One UI
-    // وفوق مؤشر الرجوع للرئيسية بمسافة مشابهة لآيفون (الأيقونات فوق المؤشر مو بمستواه)
-    val utilHeight = if (edgeToEdgeIme) maxOf(navInset, 56.dp) else metrics.utilHeight
+    // صف الأيقونات بنفس ارتفاع شريط التنقل بالضبط، وأيقونة الكرة تتوسّط ارتفاعه تمامًا، لأن النظام
+    // يوسّط أزرار الشريط (زر إخفاء الكيبورد) بنفس المنتصف. ويمكن للمستخدم تعديل الفرق الصغير
+    // بين الأجهزة من الإعدادات (globeOffsetDp).
+    val utilHeight = if (edgeToEdgeIme) maxOf(navInset, 48.dp) else metrics.utilHeight
+    val navCenter = if (edgeToEdgeIme && navInset > 0.dp) navInset / 2 else utilHeight / 2
+    val globeCenter = (navCenter + state.globeOffsetDp.dp).coerceIn(14.dp, utilHeight - 14.dp)
     val rowHeights = remember(rows, metrics, utilHeight) {
         rows.map { if (isUtilityRow(it)) utilHeight else metrics.rowHeight }
     }
@@ -214,6 +227,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                                     showPreview = state.keyPreview,
                                     hideLabels = trackpad,
                                     isTopRow = index == 0,
+                                    plainCenterFromBottom = globeCenter,
                                     viewModel = viewModel,
                                     onTrackpad = { active ->
                                         trackpad = active
@@ -575,6 +589,7 @@ private fun KeyRow(
     showPreview: Boolean,
     hideLabels: Boolean,
     isTopRow: Boolean,
+    plainCenterFromBottom: Dp,
     viewModel: KeyboardViewModel,
     onTrackpad: (Boolean) -> Unit
 ) {
@@ -588,6 +603,7 @@ private fun KeyRow(
                 showPreview = showPreview,
                 hideLabels = hideLabels,
                 isTopRow = isTopRow,
+                plainCenterFromBottom = plainCenterFromBottom,
                 onKey = viewModel::onKeyPressed,
                 onLongPress = viewModel::onKeyLongPressed,
                 onCursor = viewModel::onCursorMove,
@@ -606,6 +622,7 @@ private fun RowScope.KeyButton(
     showPreview: Boolean,
     hideLabels: Boolean,
     isTopRow: Boolean,
+    plainCenterFromBottom: Dp,
     onKey: (KeyAction) -> Unit,
     onLongPress: (KeyDefinition) -> Unit,
     onCursor: (Int, Int) -> Unit,
@@ -666,9 +683,12 @@ private fun RowScope.KeyButton(
                     coroutineScope {
                         val repeat = launch {
                             delay(400)
+                            var repeats = 0
                             while (true) {
                                 currentOnKey(KeyAction.Backspace)
-                                delay(50)
+                                repeats++
+                                // يتسارع الحذف مع طول الضغط (مثل iOS)
+                                delay(if (repeats < 10) 55L else 32L)
                             }
                         }
                         tryAwaitRelease()
@@ -706,11 +726,12 @@ private fun RowScope.KeyButton(
             .padding(
                 start = metrics.keySpacing / 2,
                 end = metrics.keySpacing / 2,
-                top = if (def.plain) 9.dp else verticalPadding,
-                // الأيقونات العائمة تنزل حوالي 4.5dp عن المنتصف (حشوة علوية 9dp) لتصير بمحاذاة سهم الإخفاء بشريط التنقل
-                bottom = if (def.plain) 0.dp else verticalPadding
+                top = if (def.plain) 0.dp else verticalPadding,
+                // الأيقونة العائمة (ارتفاعها 34dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
+                // على بعد plainCenterFromBottom من أسفل الشاشة = نفس مستوى أزرار شريط التنقل
+                bottom = if (def.plain) (plainCenterFromBottom - 17.dp).coerceAtLeast(0.dp) else verticalPadding
             ),
-        contentAlignment = if (def.plain) Alignment.Center else Alignment.TopStart
+        contentAlignment = if (def.plain) Alignment.BottomCenter else Alignment.TopStart
     ) {
         Box(
             modifier = (if (def.plain) Modifier.fillMaxWidth().height(34.dp) else Modifier.fillMaxSize())

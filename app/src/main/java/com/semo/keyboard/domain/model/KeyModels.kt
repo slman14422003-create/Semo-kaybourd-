@@ -104,7 +104,9 @@ data class SemoSettings(
     /** تصحيح الاختصارات والأخطاء الشائعة (dont → don't) */
     val autoCorrect: Boolean = true,
     /** إظهار ناتج العمليات الحسابية بشريط الاقتراحات */
-    val mathResults: Boolean = true
+    val mathResults: Boolean = true,
+    /** تعديل يدوي لارتفاع أيقونة الكرة الأرضية (dp، موجب = لفوق) لمحاذاتها تمامًا مع أزرار شريط التنقل */
+    val globeOffsetDp: Float = 0f
 )
 
 data class KeyboardUiState(
@@ -135,6 +137,7 @@ data class KeyboardUiState(
     val swipeTyping: Boolean = true,
     val autoCorrect: Boolean = true,
     val mathResults: Boolean = true,
+    val globeOffsetDp: Float = 0f,
     /** اقتراحات الإكمال (بدون الكلمة المكتوبة نفسها) */
     val suggestions: List<String> = emptyList(),
     /** الكلمة الجارية كما كُتبت: تظهر بين علامتي اقتباس بأول خانة (مثل iOS) */

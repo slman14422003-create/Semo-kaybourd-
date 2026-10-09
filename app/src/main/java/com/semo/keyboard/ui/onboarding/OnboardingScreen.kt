@@ -3,6 +3,10 @@ package com.semo.keyboard.ui.onboarding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,10 +29,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -80,8 +89,9 @@ fun OnboardingScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 // نرفع المحتوى قليلًا عن المنتصف تمامًا كي يبدو متوازنًا بصريًا
-                .padding(bottom = 40.dp),
+                .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -99,9 +109,12 @@ fun OnboardingScreen(
                     StatusPill(status.isEnabled, "مفعّلة ✓", "لسا ما انفعلت")
                     Spacer(Modifier.height(18.dp))
                     if (status.isEnabled) {
-                        Hint("تمام! جاري الانتقال للخطوة التالية...")
+                        // لو كانت مفعّلة أصلًا عند دخول الخطوة ما في انتقال تلقائي (ممكن المستخدم رجع للخلف عمدًا)
+                        Hint(if (enabledAtEntry) "اللوحة مفعّلة مسبقًا. اضغط «التالي» للمتابعة." else "تمام! جاري الانتقال للخطوة التالية...")
                     } else {
                         PrimaryButton("فتح الإعدادات", onOpenEnableSettings)
+                        Spacer(Modifier.height(14.dp))
+                        Hint("بعد التفعيل ارجع لهون وبتنتقل الخطوة تلقائيًا. لو انسألت عن «مخاطر لوحات المفاتيح» اضغط موافق، هيدا تنبيه عام من النظام.")
                     }
                 }
                 OnboardingStep.SELECT -> {
@@ -110,11 +123,13 @@ fun OnboardingScreen(
                     StatusPill(status.isSelected, "هي اللوحة النشطة ✓", "لسا مش مختارة")
                     Spacer(Modifier.height(18.dp))
                     if (status.isSelected) {
-                        Hint("تمام! جاري الانتقال...")
+                        Hint(if (selectedAtEntry) "هي اللوحة النشطة مسبقًا. اضغط «التالي» للمتابعة." else "تمام! جاري الانتقال...")
                     } else {
                         PrimaryButton("اختيار اللوحة", onOpenKeyboardPicker)
                         Spacer(Modifier.height(14.dp))
-                        Hint("لو اخترتها وبعدك شايف «لسا»، كمّل بالتالي — بتنعرف تلقائيًا أول ما تكتب فيها.")
+                        Hint("لو اخترتها وبعدك شايف «لسا»، اضغط الحقل تحت واكتب فيه — بتنعرف تلقائيًا أول ما تظهر اللوحة.")
+                        Spacer(Modifier.height(14.dp))
+                        TestField()
                     }
                 }
                 OnboardingStep.DONE -> {
@@ -126,6 +141,8 @@ fun OnboardingScreen(
                     StatusPill(status.isEnabled, "مفعّلة ✓", "اللوحة غير مفعّلة بعد")
                     Spacer(Modifier.height(8.dp))
                     StatusPill(status.isSelected, "هي اللوحة النشطة ✓", "مش مختارة كلوحة نشطة بعد")
+                    Spacer(Modifier.height(18.dp))
+                    TestField()
                 }
             }
         }
@@ -149,10 +166,40 @@ fun OnboardingScreen(
             if (step == OnboardingStep.DONE) {
                 PrimaryButton("ابدأ", onFinish)
             } else {
-                PrimaryButton("التالي", onNext)
+                val stepDone = when (step) {
+                    OnboardingStep.ENABLE -> status.isEnabled
+                    OnboardingStep.SELECT -> status.isSelected
+                    else -> true
+                }
+                // لو الخطوة ما اكتملت نوضّح أن الضغط هون يتجاوزها (ممكن الفحص ما اشتغل على بعض الأجهزة)
+                PrimaryButton(if (stepDone) "التالي" else "تخطّي الخطوة", onNext)
             }
         }
     }
+}
+
+/** حقل تجربة: أول ما يضغط فيه المستخدم تظهر اللوحة ويتأكد التطبيق أنها تعمل */
+@Composable
+private fun TestField() {
+    var text by remember { mutableStateOf("") }
+    val shape = RoundedCornerShape(14.dp)
+    BasicTextField(
+        value = text,
+        onValueChange = { text = it },
+        textStyle = TextStyle(color = SemoPalette.TextPrimary, fontSize = 16.sp),
+        cursorBrush = SolidColor(SemoPalette.Accent),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SemoPalette.Field, shape)
+            .border(1.dp, SemoPalette.Stroke, shape)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        decorationBox = { inner ->
+            Box {
+                if (text.isEmpty()) Text("جرّب الكتابة هون…", color = SemoPalette.TextHint, fontSize = 15.sp)
+                inner()
+            }
+        }
+    )
 }
 
 @Composable

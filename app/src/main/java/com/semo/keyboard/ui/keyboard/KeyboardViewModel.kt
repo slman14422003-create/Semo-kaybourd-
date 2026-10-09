@@ -104,6 +104,7 @@ class KeyboardViewModel(
                 swipeTyping = s.swipeTyping,
                 autoCorrect = s.autoCorrect,
                 mathResults = s.mathResults,
+                globeOffsetDp = s.globeOffsetDp,
                 suggestions = t.suggestions,
                 literal = t.literal,
                 mathResult = t.mathResult,

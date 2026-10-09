@@ -56,6 +56,7 @@ class SettingsRepository(context: Context) {
         val SWIPE_TYPING = booleanPreferencesKey("swipe_typing")
         val AUTO_CORRECT = booleanPreferencesKey("auto_correct")
         val MATH_RESULTS = booleanPreferencesKey("math_results")
+        val GLOBE_OFFSET = floatPreferencesKey("globe_offset_dp")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -82,7 +83,8 @@ class SettingsRepository(context: Context) {
                 arabicDigits = p[Keys.ARABIC_DIGITS] ?: false,
                 swipeTyping = p[Keys.SWIPE_TYPING] ?: true,
                 autoCorrect = p[Keys.AUTO_CORRECT] ?: true,
-                mathResults = p[Keys.MATH_RESULTS] ?: true
+                mathResults = p[Keys.MATH_RESULTS] ?: true,
+                globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f)
             )
         }
 
@@ -107,4 +109,5 @@ class SettingsRepository(context: Context) {
     suspend fun setSwipeTyping(v: Boolean) { store.edit { it[Keys.SWIPE_TYPING] = v } }
     suspend fun setAutoCorrect(v: Boolean) { store.edit { it[Keys.AUTO_CORRECT] = v } }
     suspend fun setMathResults(v: Boolean) { store.edit { it[Keys.MATH_RESULTS] = v } }
+    suspend fun setGlobeOffset(v: Float) { store.edit { it[Keys.GLOBE_OFFSET] = v.coerceIn(-16f, 16f) } }
 }

@@ -3,7 +3,9 @@ package com.semo.keyboard.ui
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
@@ -173,15 +175,36 @@ private fun Root(repo: SettingsRepository, clipboardRepo: ClipboardRepository, l
     }
 }
 
+/** يفتح إعدادات لوحات المفاتيح، وعند فشلها (بعض الأجهزة) يجرّب شاشات بديلة قبل الاستسلام */
 private fun openInputMethodSettings(context: Context) {
-    runCatching {
-        context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    val attempts = listOf(
+        Settings.ACTION_INPUT_METHOD_SETTINGS,
+        Settings.ACTION_SETTINGS
+    )
+    for (action in attempts) {
+        val ok = runCatching {
+            context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.isSuccess
+        if (ok) return
     }
+    Toast.makeText(context, "ما قدرت أفتح الإعدادات. افتحها يدويًا: اللغة والإدخال ← لوحة المفاتيح", Toast.LENGTH_LONG).show()
 }
 
+/**
+ * يعرض نافذة اختيار اللوحة. لو اللوحة غير مفعّلة ما رح تظهر بالنافذة أصلًا، فنودّي المستخدم
+ * للتفعيل أولًا بدل ما يشوف قائمة ما فيها سيمو.
+ */
 private fun openKeyboardPicker(context: Context) {
-    runCatching {
+    if (!KeyboardStatusHelper.isKeyboardEnabled(context)) {
+        Toast.makeText(context, "فعّل «سيمو كيبورد» أولًا ثم اخترها", Toast.LENGTH_SHORT).show()
+        openInputMethodSettings(context)
+        return
+    }
+    val shown = runCatching {
         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.showInputMethodPicker()
+    }.isSuccess
+    if (!shown) {
+        Toast.makeText(context, "ما انفتحت نافذة الاختيار. اختر اللوحة من زر تبديل الكيبورد بشريط التنقل", Toast.LENGTH_LONG).show()
     }
 }
 
@@ -316,6 +339,43 @@ private fun SettingsScreen(
             }
             Divider()
             SwitchRow("معاينة الحرف فوق المفتاح", R.drawable.ic_ios_emoji, IconBlue, settings.keyPreview) { scope.launch { repo.setKeyPreview(it) } }
+            if (Build.VERSION.SDK_INT >= 35) {
+                Divider()
+                // ضبط دقيق لارتفاع أيقونة الكرة الأرضية كي تتوازى مع أزرار شريط التنقل بجهازك
+                var globeOffset by remember(settings.globeOffsetDp) { mutableFloatStateOf(settings.globeOffsetDp) }
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("ارتفاع زر الكرة الأرضية", color = SemoPalette.TextPrimary, fontSize = 15.sp)
+                        Text(
+                            if (globeOffset.roundToInt() == 0) "تلقائي" else "${globeOffset.roundToInt()}",
+                            color = SemoPalette.TextSecondary,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Slider(
+                        value = globeOffset,
+                        onValueChange = { globeOffset = it },
+                        onValueChangeFinished = { scope.launch { repo.setGlobeOffset(globeOffset.roundToInt().toFloat()) } },
+                        valueRange = -16f..16f,
+                        steps = 31,
+                        colors = SliderDefaults.colors(
+                            thumbColor = SemoPalette.Accent,
+                            activeTrackColor = SemoPalette.Accent,
+                            inactiveTrackColor = SemoPalette.Stroke
+                        )
+                    )
+                    Text(
+                        "حرّكه لفوق أو لتحت حتى تصير الأيقونة بمحاذاة زر إخفاء الكيبورد تمامًا. الوضع التلقائي مضبوط على منتصف شريط التنقل.",
+                        color = SemoPalette.TextHint,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
         }
 
         // ---- الكتابة ----
