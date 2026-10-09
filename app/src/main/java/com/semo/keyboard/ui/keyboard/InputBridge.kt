@@ -13,6 +13,8 @@ interface InputBridge {
     fun deleteSurrounding(count: Int)
     fun performEnter()
     fun switchKeyboard()
+    /** يخفي لوحة المفاتيح (نفس عمل سهم الإخفاء بشريط التنقل) */
+    fun hideKeyboard()
     fun textBeforeCursor(length: Int): String
     fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback = KeyFeedback.STANDARD, volume: Float = 1f)
     /** تحريك المؤشر: قيمة موجبة = يمين، سالبة = يسار */

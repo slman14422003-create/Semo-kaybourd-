@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
+import com.semo.keyboard.domain.model.HideButtonMode
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.KeyboardStyle
@@ -57,6 +58,7 @@ class SettingsRepository(context: Context) {
         val AUTO_CORRECT = booleanPreferencesKey("auto_correct")
         val MATH_RESULTS = booleanPreferencesKey("math_results")
         val GLOBE_OFFSET = floatPreferencesKey("globe_offset_dp")
+        val HIDE_BUTTON = stringPreferencesKey("hide_button_mode")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -84,7 +86,8 @@ class SettingsRepository(context: Context) {
                 swipeTyping = p[Keys.SWIPE_TYPING] ?: true,
                 autoCorrect = p[Keys.AUTO_CORRECT] ?: true,
                 mathResults = p[Keys.MATH_RESULTS] ?: true,
-                globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f)
+                globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f),
+                hideButtonMode = p[Keys.HIDE_BUTTON].toEnumOr(HideButtonMode.RING)
             )
         }
 
@@ -110,4 +113,5 @@ class SettingsRepository(context: Context) {
     suspend fun setAutoCorrect(v: Boolean) { store.edit { it[Keys.AUTO_CORRECT] = v } }
     suspend fun setMathResults(v: Boolean) { store.edit { it[Keys.MATH_RESULTS] = v } }
     suspend fun setGlobeOffset(v: Float) { store.edit { it[Keys.GLOBE_OFFSET] = v.coerceIn(-16f, 16f) } }
+    suspend fun setHideButtonMode(v: HideButtonMode) { store.edit { it[Keys.HIDE_BUTTON] = v.name } }
 }

@@ -4,6 +4,7 @@ import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.EnterKind
 import com.semo.keyboard.domain.model.FieldKind
+import com.semo.keyboard.domain.model.HideButtonMode
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
@@ -142,14 +143,24 @@ object KeyboardLayoutProvider {
     }
 
     /**
-     * الصف الأخير تحت صف المسافة: الكرة الأرضية فقط يسارًا تحت مفتاح 123 بالضبط، والجهة اليمنى فاضية
-     * عمدًا لأن زر إخفاء لوحة المفاتيح الخاص بالنظام (شريط تنقل One UI) يظهر هناك، فيتوازن الصف.
-     * ضغطة على الكرة = تبديل اللغة (عربي/إنكليزي)، ضغطة مطوّلة = لوحة المفاتيح التالية بالنظام.
+     * الصف الأخير تحت صف المسافة: دائرتان متناظرتان بمحاذاة أزرار شريط التنقل.
+     * يسارًا الكرة الأرضية (ضغطة = تبديل عربي/إنكليزي، ضغطة مطوّلة = لوحة النظام التالية) وعليها شارة
+     * بلغة الكتابة الحالية، ويمينًا دائرة إخفاء اللوحة: تُرسم خلف سهم الإخفاء الخاص بالنظام (One UI)
+     * فيبدو داخل دائرة تنسجم مع دائرة الكرة، أو بسهم خاص بالتطبيق حسب الإعدادات.
      */
-    fun utilityRow(): List<KeyDefinition> = listOf(
-        KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 2.8f, longPressAction = KeyAction.Globe, plain = true),
-        KeyDefinition.spacer(7.2f)
-    )
+    fun utilityRow(state: KeyboardUiState): List<KeyDefinition> {
+        val badge = if (state.language == KeyboardLanguage.ARABIC) "ع" else "EN"
+        val globe = KeyDefinition(
+            "🌐", KeyAction.SwitchLanguage, weight = 2.8f,
+            longPressAction = KeyAction.Globe, plain = true, badge = badge
+        )
+        val hide = when (state.hideButtonMode) {
+            HideButtonMode.OFF -> KeyDefinition.spacer(2.8f)
+            HideButtonMode.RING -> KeyDefinition("⌄", KeyAction.HideKeyboard, weight = 2.8f, plain = true, ringOnly = true)
+            HideButtonMode.ARROW -> KeyDefinition("⌄", KeyAction.HideKeyboard, weight = 2.8f, plain = true)
+        }
+        return listOf(globe, KeyDefinition.spacer(4.4f), hide)
+    }
 
     private fun numberRow(state: KeyboardUiState): List<List<KeyDefinition>> =
         if (state.numberRow) listOf(digitsFor(state).map { KeyDefinition(it, KeyAction.Character(it)) }) else emptyList()
@@ -198,7 +209,7 @@ object KeyboardLayoutProvider {
             centered(mapRow(r2), 10 - r2.size),
             row3,
             bottomRow(state, letters = true)
-        ) + listOf(utilityRow())
+        ) + listOf(utilityRow(state))
     }
 
     private fun arabicRows(state: KeyboardUiState): List<List<KeyDefinition>> {
@@ -227,7 +238,7 @@ object KeyboardLayoutProvider {
             if (row2.size < letters[0].size) centered(row2, letters[0].size - row2.size) else row2,
             row3,
             bottomRow(state, letters = true)
-        ) + listOf(utilityRow())
+        ) + listOf(utilityRow(state))
     }
 
     private fun symbolRows(state: KeyboardUiState, firstPage: Boolean): List<List<KeyDefinition>> {
@@ -244,7 +255,7 @@ object KeyboardLayoutProvider {
             KeyDefinition("123", KeyAction.SwitchToSymbols, weight = edge)
         val third = listOf(switchKey, KeyDefinition.spacer(EDGE_GAP)) + mapRow(r3, 1.4f) +
             listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("⌫", KeyAction.Backspace, weight = edge))
-        return listOf(mapRow(r1), mapRow(r2), third, bottomRow(state, letters = false), utilityRow())
+        return listOf(mapRow(r1), mapRow(r2), third, bottomRow(state, letters = false), utilityRow(state))
     }
 
     /** صف آيفون: [123] [إيموجي] [مسافة] [return] بالنسب المقيسة 1.25 / 1.25 / 5 / 2.5 */

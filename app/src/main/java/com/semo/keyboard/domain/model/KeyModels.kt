@@ -17,6 +17,8 @@ sealed class KeyAction {
     data object Globe : KeyAction()
     /** الإدخال الصوتي (الميكروفون بالصف السفلي) */
     data object Mic : KeyAction()
+    /** إخفاء لوحة المفاتيح (الدائرة اليمنى بالصف السفلي، بمحاذاة زر الإخفاء الخاص بالنظام) */
+    data object HideKeyboard : KeyAction()
     data object None : KeyAction()
 }
 
@@ -35,8 +37,12 @@ data class KeyDefinition(
     val isSpacer: Boolean = false,
     /** إجراء بديل عند الضغط المطوّل (مثلًا الكرة الأرضية: ضغطة = لغة، مطوّلة = لوحة النظام التالية) */
     val longPressAction: KeyAction? = null,
-    /** مفتاح بلا خلفية (أيقونة عائمة مثل الإيموجي والكرة الأرضية بالصف السفلي) */
-    val plain: Boolean = false
+    /** مفتاح بلا خلفية مربعة: يُرسم داخل دائرة (الكرة الأرضية وزر الإخفاء بالصف السفلي) */
+    val plain: Boolean = false,
+    /** شارة صغيرة فوق الدائرة (رمز اللغة الحالية EN / ع) */
+    val badge: String = "",
+    /** دائرة بلا أيقونة: تُرسم خلف سهم الإخفاء الخاص بالنظام فيبدو داخل الدائرة */
+    val ringOnly: Boolean = false
 ) {
     companion object {
         fun spacer(weight: Float) = KeyDefinition("", KeyAction.None, weight, isSpacer = true)
@@ -65,6 +71,14 @@ enum class KeyboardSize { SMALL, MEDIUM, LARGE }
 
 /** وضع اليد الواحدة: اللوحة مزاحة لليسار أو لليمين */
 enum class OneHandMode { OFF, LEFT, RIGHT }
+
+/**
+ * دائرة إخفاء اللوحة بالصف السفلي:
+ * RING = دائرة فقط خلف سهم النظام (الافتراضي، مناسب لشريط One UI)،
+ * ARROW = دائرة مع سهم خاص بالتطبيق (للأجهزة التي لا يرسم نظامها سهمًا)،
+ * OFF = بلا دائرة.
+ */
+enum class HideButtonMode { RING, ARROW, OFF }
 
 /** أدوات التحرير في صفحة التحرير */
 enum class EditAction { SELECT_ALL, CUT, COPY, PASTE, LEFT, RIGHT, HOME, END }
@@ -106,7 +120,9 @@ data class SemoSettings(
     /** إظهار ناتج العمليات الحسابية بشريط الاقتراحات */
     val mathResults: Boolean = true,
     /** تعديل يدوي لارتفاع أيقونة الكرة الأرضية (dp، موجب = لفوق) لمحاذاتها تمامًا مع أزرار شريط التنقل */
-    val globeOffsetDp: Float = 0f
+    val globeOffsetDp: Float = 0f,
+    /** شكل دائرة إخفاء اللوحة بالصف السفلي */
+    val hideButtonMode: HideButtonMode = HideButtonMode.RING
 )
 
 data class KeyboardUiState(
@@ -138,6 +154,7 @@ data class KeyboardUiState(
     val autoCorrect: Boolean = true,
     val mathResults: Boolean = true,
     val globeOffsetDp: Float = 0f,
+    val hideButtonMode: HideButtonMode = HideButtonMode.RING,
     /** اقتراحات الإكمال (بدون الكلمة المكتوبة نفسها) */
     val suggestions: List<String> = emptyList(),
     /** الكلمة الجارية كما كُتبت: تظهر بين علامتي اقتباس بأول خانة (مثل iOS) */

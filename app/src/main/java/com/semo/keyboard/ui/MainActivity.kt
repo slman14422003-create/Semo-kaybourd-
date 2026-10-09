@@ -77,6 +77,7 @@ import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
+import com.semo.keyboard.domain.model.HideButtonMode
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.OneHandMode
@@ -339,6 +340,25 @@ private fun SettingsScreen(
             }
             Divider()
             SwitchRow("معاينة الحرف فوق المفتاح", R.drawable.ic_ios_emoji, IconBlue, settings.keyPreview) { scope.launch { repo.setKeyPreview(it) } }
+            Divider()
+            // دائرة إخفاء اللوحة بالصف السفلي (يمين) بمقابل دائرة الكرة الأرضية (يسار)
+            Block("دائرة إخفاء الكيبورد", R.drawable.ic_ios_hide_keyboard, IconTeal) {
+                Segmented(
+                    options = listOf(
+                        HideButtonMode.RING to "دائرة",
+                        HideButtonMode.ARROW to "دائرة + سهم",
+                        HideButtonMode.OFF to "بدون"
+                    ),
+                    selected = settings.hideButtonMode,
+                    onSelect = { scope.launch { repo.setHideButtonMode(it) } }
+                )
+                Text(
+                    "«دائرة» تُرسم خلف سهم الإخفاء الخاص بالنظام فيبدو داخلها (مناسب لشريط One UI). اختر «دائرة + سهم» لو جهازك ما يعرض سهمًا بشريط التنقل.",
+                    color = SemoPalette.TextHint,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+            }
             if (Build.VERSION.SDK_INT >= 35) {
                 Divider()
                 // ضبط دقيق لارتفاع أيقونة الكرة الأرضية كي تتوازى مع أزرار شريط التنقل بجهازك

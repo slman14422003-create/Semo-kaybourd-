@@ -369,6 +369,10 @@ class SemoKeyboardService :
             }
         }
 
+        override fun hideKeyboard() {
+            runCatching { requestHideSelf(0) }
+        }
+
         override fun textBeforeCursor(length: Int): String =
             runCatching { currentInputConnection?.getTextBeforeCursor(length, 0)?.toString() }.getOrNull().orEmpty()
 

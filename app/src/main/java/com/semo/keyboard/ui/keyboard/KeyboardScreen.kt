@@ -1,8 +1,11 @@
 package com.semo.keyboard.ui.keyboard
 
 import android.os.Build
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -36,6 +39,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -56,6 +60,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -153,7 +160,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     }
     val rows = remember(
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
-        state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind
+        state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind,
+        state.hideButtonMode
     ) { KeyboardLayoutProvider.rows(state) }
     // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل. فبدل ما نترك مساحة فارغة تحت الصف الأخير،
     // نجعل صف الكرة الأرضية والميكروفون بنفس ارتفاع شريط التنقل ونوسّط أيقوناته فيه (مثل آيفون
@@ -661,8 +669,8 @@ private fun RowScope.KeyButton(
 
     val shiftOn = def.action == KeyAction.Shift && def.isAccent
     val bg = when {
-        // الكرة الأرضية: أيقونة عائمة بدون حاوية (مثل آيفون)؛ تظهر خلفية خفيفة فقط لحظة الضغط
-        def.plain -> if (pressed) colors.keySpecial else Color.Transparent
+        // مفاتيح الصف السفلي (الكرة وزر الإخفاء) تُرسم كدوائر مستقلة داخل CircleKeyVisual
+        def.plain -> Color.Transparent
         shiftOn -> colors.shiftActive
         def.isAccent -> colors.keyAccent
         pressed && special -> colors.key
@@ -733,6 +741,8 @@ private fun RowScope.KeyButton(
 
     // منطقة اللمس تشمل الفراغات بين المفاتيح (تقلّل الضغطات الضائعة)، والشكل المرئي أصغر منها
     val verticalPadding = if (def.plain) 0.dp else metrics.rowSpacing / 2
+    // دائرة الإخفاء تلتصق بالحافة اليمنى بنفس بعد دائرة الكرة عن الحافة اليسرى (تناظر تام)
+    val endSide = def.action == KeyAction.HideKeyboard
     Box(
         modifier = Modifier
             .weight(def.weight)
@@ -742,14 +752,14 @@ private fun RowScope.KeyButton(
             .padding(
                 // منطقة الكرة (96dp) تبدأ عند الحافة بنفس موضع زر النظام المقابل، فيقع مركز الأيقونة
                 // على بعد ~51dp من الحافة اليسرى تمامًا كما يقع مركز سهم الإخفاء من الحافة اليمنى
-                start = if (def.plain) 0.dp else metrics.keySpacing / 2,
-                end = metrics.keySpacing / 2,
+                start = if (def.plain && !endSide) 0.dp else metrics.keySpacing / 2,
+                end = if (def.plain && endSide) 0.dp else metrics.keySpacing / 2,
                 top = if (def.plain) 0.dp else verticalPadding,
                 // منطقة الكرة (ارتفاعها 42dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
                 // على بعد plainCenterFromBottom من أسفل الشاشة = نفس مستوى أزرار شريط التنقل
                 bottom = if (def.plain) (plainCenterFromBottom - 21.dp).coerceAtLeast(0.dp) else verticalPadding
             ),
-        contentAlignment = if (def.plain) Alignment.BottomStart else Alignment.TopStart
+        contentAlignment = if (def.plain) (if (endSide) Alignment.BottomEnd else Alignment.BottomStart) else Alignment.TopStart
     ) {
         Box(
             modifier = (if (def.plain) Modifier.widthIn(max = 96.dp).fillMaxWidth().height(42.dp).offset(y = (21.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
@@ -767,7 +777,11 @@ private fun RowScope.KeyButton(
             contentAlignment = Alignment.Center
         ) {
             if (!hideLabels) {
-                KeyContent(def, textColor, iconSize = if (def.plain) 24.dp else 23.dp)
+                if (def.plain) {
+                    CircleKeyVisual(def, colors, pressed)
+                } else {
+                    KeyContent(def, textColor, iconSize = 23.dp)
+                }
             }
         }
 
@@ -953,6 +967,71 @@ private suspend fun PointerInputScope.spaceGestures(
     }
 }
 
+/**
+ * دائرة الصف السفلي (الكرة الأرضية / إخفاء اللوحة). تدرّج خفيف من لون المفاتيح الخاصة مع إطار رفيع
+ * وظل سفلي مثل باقي المفاتيح، فتنسجم مع اللوحة وشريط التنقل تحتها، وتنكمش قليلًا عند الضغط.
+ * على دائرة الكرة شارة صغيرة بلغة الكتابة الحالية (EN / ع).
+ * دائرة الإخفاء بوضع [KeyDefinition.ringOnly] بلا أيقونة لأن سهم النظام يظهر فوقها.
+ */
+@Composable
+private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pressed: Boolean) {
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.88f else 1f,
+        animationSpec = tween(durationMillis = 90),
+        label = "circleKeyScale"
+    )
+    val top = if (pressed) colors.key else lerp(colors.keySpecial, colors.key, 0.38f)
+    val bottom = if (pressed) lerp(colors.keySpecial, colors.key, 0.7f) else colors.keySpecial
+    val shadow = colors.keyShadow.copy(alpha = 0.6f)
+    val ring = colors.divider.copy(alpha = 0.85f)
+    Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .drawBehind {
+                    drawCircle(
+                        color = shadow,
+                        radius = size.minDimension / 2f,
+                        center = Offset(size.width / 2f, size.height / 2f + 1.dp.toPx())
+                    )
+                }
+                .background(Brush.verticalGradient(listOf(top, bottom)), CircleShape)
+                .border(0.75.dp, ring, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!def.ringOnly) {
+                KeyContent(def, colors.text, iconSize = 20.dp)
+            }
+        }
+        if (def.badge.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 7.dp, y = (-3).dp)
+                    .height(14.dp)
+                    .widthIn(min = 14.dp)
+                    .background(colors.keyAccent, RoundedCornerShape(50))
+                    .border(1.dp, colors.panel, RoundedCornerShape(50))
+                    .padding(horizontal = 3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = def.badge,
+                    color = colors.textOnAccent,
+                    fontSize = 8.5.sp,
+                    lineHeight = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
     val iconRes = if (def.textOnly) null else when (def.action) {
@@ -965,6 +1044,7 @@ private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
         KeyAction.Globe, KeyAction.SwitchLanguage -> R.drawable.ic_ios_globe
         KeyAction.Emoji -> R.drawable.ic_ios_emoji
         KeyAction.Mic -> R.drawable.ic_ios_mic
+        KeyAction.HideKeyboard -> R.drawable.ic_ios_hide_keyboard
         KeyAction.Enter -> R.drawable.ic_ios_return
         else -> null
     }

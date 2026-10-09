@@ -105,6 +105,7 @@ class KeyboardViewModel(
                 autoCorrect = s.autoCorrect,
                 mathResults = s.mathResults,
                 globeOffsetDp = s.globeOffsetDp,
+                hideButtonMode = s.hideButtonMode,
                 suggestions = t.suggestions,
                 literal = t.literal,
                 mathResult = t.mathResult,
@@ -212,6 +213,7 @@ class KeyboardViewModel(
             }
             KeyAction.Globe -> bridge.switchKeyboard()
             KeyAction.Mic -> bridge.startVoiceInput()
+            KeyAction.HideKeyboard -> bridge.hideKeyboard()
             KeyAction.None -> Unit
         }
     }
