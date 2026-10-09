@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -20,8 +21,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -56,7 +59,16 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.semo.keyboard.data.ClipboardRepository
+import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
+import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
+import com.semo.keyboard.domain.model.ArabicLayout
+import com.semo.keyboard.domain.model.EnglishLayout
+import com.semo.keyboard.domain.model.KeyboardLanguage
+import com.semo.keyboard.domain.model.KeyboardSize
+import com.semo.keyboard.domain.model.KeyboardStyle
+import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
 import com.semo.keyboard.ui.onboarding.OnboardingKeyboardStatus
@@ -71,6 +83,8 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private lateinit var settingsRepository: SettingsRepository
+    private lateinit var clipboardRepository: ClipboardRepository
+    private lateinit var learnedWordsRepository: LearnedWordsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // أندرويد 16: العرض من حافة لحافة إلزامي، فنتعامل مع الـ insets بأنفسنا
@@ -80,12 +94,14 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         settingsRepository = SettingsRepository(applicationContext)
+        clipboardRepository = ClipboardRepository(applicationContext)
+        learnedWordsRepository = LearnedWordsRepository(applicationContext)
 
         setContent {
             SemoAppTheme {
                 // نص التطبيق عربي، فنثبّت الاتجاه RTL حتى لو لغة الجهاز غير ذلك
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Root(settingsRepository)
+                    Root(settingsRepository, clipboardRepository, learnedWordsRepository)
                 }
             }
         }
@@ -93,7 +109,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Root(repo: SettingsRepository) {
+private fun Root(repo: SettingsRepository, clipboardRepo: ClipboardRepository, learnedRepo: LearnedWordsRepository) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by repo.settings.collectAsState(initial = null)
@@ -134,6 +150,8 @@ private fun Root(repo: SettingsRepository) {
     } else {
         SettingsScreen(
             repo = repo,
+            clipboardRepo = clipboardRepo,
+            learnedRepo = learnedRepo,
             settings = current,
             isEnabled = isEnabled,
             isSelected = isSelected,
@@ -159,6 +177,8 @@ private fun openKeyboardPicker(context: Context) {
 @Composable
 private fun SettingsScreen(
     repo: SettingsRepository,
+    clipboardRepo: ClipboardRepository,
+    learnedRepo: LearnedWordsRepository,
     settings: SemoSettings,
     isEnabled: Boolean,
     isSelected: Boolean,
@@ -214,34 +234,101 @@ private fun SettingsScreen(
         }
 
         SemoCard {
+            Text("ترتيب المفاتيح", color = SemoPalette.TextSecondary, fontSize = 13.sp)
+            Text("الإنكليزي", color = SemoPalette.TextPrimary, fontSize = 15.sp)
+            ChipGroup(
+                options = listOf(
+                    EnglishLayout.QWERTY to "QWERTY",
+                    EnglishLayout.AZERTY to "AZERTY",
+                    EnglishLayout.QWERTZ to "QWERTZ"
+                ),
+                selected = settings.englishLayout,
+                onSelect = { scope.launch { repo.setEnglishLayout(it) } }
+            )
+            LayoutPreview(KeyboardLayoutProvider.previewRows(KeyboardLanguage.ENGLISH, settings.englishLayout, settings.arabicLayout))
+            Text("العربي", color = SemoPalette.TextPrimary, fontSize = 15.sp)
+            ChipGroup(
+                options = listOf(
+                    ArabicLayout.STANDARD to "قياسي",
+                    ArabicLayout.ALPHABETIC to "أبجدي"
+                ),
+                selected = settings.arabicLayout,
+                onSelect = { scope.launch { repo.setArabicLayout(it) } }
+            )
+            LayoutPreview(KeyboardLayoutProvider.previewRows(KeyboardLanguage.ARABIC, settings.englishLayout, settings.arabicLayout))
+            SwitchRow("أرقام عربية هندية (١٢٣) باللوحة العربية", settings.arabicDigits) { scope.launch { repo.setArabicDigits(it) } }
+            SwitchRow("صف الأرقام فوق الحروف", settings.numberRow) { scope.launch { repo.setNumberRow(it) } }
+        }
+
+        SemoCard {
             Text("المظهر", color = SemoPalette.TextSecondary, fontSize = 13.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
+            Text("شكل اللوحة", color = SemoPalette.TextPrimary, fontSize = 15.sp)
+            ChipGroup(
+                options = listOf(KeyboardStyle.IOS26 to "iOS 26", KeyboardStyle.IOS18 to "iOS 18"),
+                selected = settings.style,
+                onSelect = { scope.launch { repo.setStyle(it) } }
+            )
+            Text("الثيم", color = SemoPalette.TextPrimary, fontSize = 15.sp)
+            ChipGroup(
+                options = listOf(
                     ThemeMode.SYSTEM to "حسب النظام",
                     ThemeMode.LIGHT to "فاتح",
                     ThemeMode.DARK to "داكن"
-                ).forEach { (mode, label) ->
-                    FilterChip(
-                        selected = settings.themeMode == mode,
-                        onClick = { scope.launch { repo.setThemeMode(mode) } },
-                        label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = SemoPalette.AccentSoft,
-                            selectedLabelColor = SemoPalette.AccentText,
-                            labelColor = SemoPalette.TextSecondary
-                        )
-                    )
-                }
-            }
-            SwitchRow("صف الأرقام فوق الحروف", settings.numberRow) { scope.launch { repo.setNumberRow(it) } }
+                ),
+                selected = settings.themeMode,
+                onSelect = { scope.launch { repo.setThemeMode(it) } }
+            )
+            Text("ارتفاع المفاتيح", color = SemoPalette.TextPrimary, fontSize = 15.sp)
+            ChipGroup(
+                options = listOf(
+                    KeyboardSize.SMALL to "صغير",
+                    KeyboardSize.MEDIUM to "متوسط",
+                    KeyboardSize.LARGE to "كبير"
+                ),
+                selected = settings.size,
+                onSelect = { scope.launch { repo.setSize(it) } }
+            )
+            Text("وضع اليد الواحدة", color = SemoPalette.TextPrimary, fontSize = 15.sp)
+            ChipGroup(
+                options = listOf(
+                    OneHandMode.OFF to "معطّل",
+                    OneHandMode.LEFT to "يسار",
+                    OneHandMode.RIGHT to "يمين"
+                ),
+                selected = settings.oneHand,
+                onSelect = { scope.launch { repo.setOneHand(it) } }
+            )
+            SwitchRow("معاينة الحرف فوق المفتاح", settings.keyPreview) { scope.launch { repo.setKeyPreview(it) } }
+        }
+
+        SemoCard {
+            Text("الكتابة", color = SemoPalette.TextSecondary, fontSize = 13.sp)
+            SwitchRow("اقتراحات الكلمات", settings.suggestionsEnabled) { scope.launch { repo.setSuggestionsEnabled(it) } }
+            SwitchRow("حرف كبير تلقائي بأول الجملة", settings.autoCapitalize) { scope.launch { repo.setAutoCapitalize(it) } }
+            SwitchRow("مسافتان = نقطة ومسافة", settings.doubleSpacePeriod) { scope.launch { repo.setDoubleSpacePeriod(it) } }
             SwitchRow("صوت الضغط على المفاتيح", settings.soundEnabled) { scope.launch { repo.setSoundEnabled(it) } }
             SwitchRow("الاهتزاز عند الضغط", settings.hapticEnabled) { scope.launch { repo.setHapticEnabled(it) } }
         }
 
         SemoCard {
+            Text("الحافظة والبيانات", color = SemoPalette.TextSecondary, fontSize = 13.sp)
+            SwitchRow("حفظ سجل الحافظة", settings.clipboardEnabled) { scope.launch { repo.setClipboardEnabled(it) } }
+            OutlinedButton(
+                onClick = { scope.launch { clipboardRepo.clearAll() } },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) { Text("مسح سجل الحافظة (مع المثبّت)", color = SemoPalette.TextSecondary) }
+            OutlinedButton(
+                onClick = { scope.launch { learnedRepo.clear() } },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) { Text("مسح الكلمات المتعلَّمة", color = SemoPalette.TextSecondary) }
+        }
+
+        SemoCard {
             Text("الخصوصية والأذونات", color = SemoPalette.TextSecondary, fontSize = 13.sp)
             Text(
-                "سيمو كيبورد ما بتتصل بالإنترنت وما بتجمع أي نص بتكتبه. الإذن الوحيد المستخدم هو الاهتزاز عند الضغط، وهو إذن عادي ما بيحتاج موافقتك.",
+                "سيمو كيبورد ما بتتصل بالإنترنت. سجل الحافظة والكلمات المتعلَّمة بيتخزنوا على جهازك فقط، وما بيتسجلوا بحقول كلمات المرور. الإذن الوحيد المستخدم هو الاهتزاز عند الضغط، وهو إذن عادي ما بيحتاج موافقتك.",
                 color = SemoPalette.TextPrimary, fontSize = 14.sp, lineHeight = 22.sp
             )
         }
@@ -271,11 +358,63 @@ private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Un
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, color = SemoPalette.TextPrimary, fontSize = 15.sp)
+        Text(title, color = SemoPalette.TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f).padding(end = 12.dp))
         Switch(
             checked = checked,
             onCheckedChange = onChange,
             colors = SwitchDefaults.colors(checkedTrackColor = SemoPalette.Accent, checkedThumbColor = Color.White)
         )
+    }
+}
+
+@Composable
+private fun <T> ChipGroup(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        options.forEach { (value, label) ->
+            FilterChip(
+                selected = selected == value,
+                onClick = { onSelect(value) },
+                label = { Text(label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = SemoPalette.AccentSoft,
+                    selectedLabelColor = SemoPalette.AccentText,
+                    labelColor = SemoPalette.TextSecondary
+                )
+            )
+        }
+    }
+}
+
+/** معاينة مصغّرة لحروف الترتيب المختار (ثلاثة صفوف) */
+@Composable
+private fun LayoutPreview(rows: List<List<String>>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SemoPalette.Field, RoundedCornerShape(12.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // مواضع المفاتيح تُعرض LTR دائمًا كما بلوحة المفاتيح الفعلية
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            rows.forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    row.forEach { key ->
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 1.5.dp)
+                                .size(width = 20.dp, height = 28.dp)
+                                .background(SemoPalette.SurfaceHigh, RoundedCornerShape(6.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(key, color = SemoPalette.TextPrimary, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

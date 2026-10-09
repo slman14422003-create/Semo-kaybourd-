@@ -1,6 +1,9 @@
 package com.semo.keyboard.ime
 
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
@@ -25,13 +28,23 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.semo.keyboard.data.ClipboardRepository
+import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
+import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
 import com.semo.keyboard.domain.model.KeyboardPage
 import com.semo.keyboard.ui.keyboard.InputBridge
 import com.semo.keyboard.ui.keyboard.KeyboardScreen
 import com.semo.keyboard.ui.keyboard.KeyboardViewModel
 import com.semo.keyboard.ui.keyboard.KeyboardViewModelFactory
+import com.semo.keyboard.ui.MainActivity
+import kotlin.math.abs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * خدمة لوحة المفاتيح. تستضيف واجهة Compose داخل نافذة الـ IME.
@@ -56,14 +69,48 @@ class SemoKeyboardService :
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
 
     private lateinit var viewModel: KeyboardViewModel
+    private lateinit var clipboardRepository: ClipboardRepository
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** حقل كلمة مرور: لا نسجّل الحافظة ولا نتعلّم كلمات */
+    private var passwordField = false
+    private var lastCapturedClip: String? = null
+
+    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
 
     override fun onCreate() {
         savedStateController.performRestore(null)
         super.onCreate()
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
-        val repository = SettingsRepository(applicationContext)
-        viewModel = ViewModelProvider(this, KeyboardViewModelFactory(repository, bridge))[KeyboardViewModel::class.java]
+        val settingsRepository = SettingsRepository(applicationContext)
+        clipboardRepository = ClipboardRepository(applicationContext)
+        val learnedRepository = LearnedWordsRepository(applicationContext)
+        viewModel = ViewModelProvider(
+            this,
+            KeyboardViewModelFactory(settingsRepository, clipboardRepository, learnedRepository, bridge)
+        )[KeyboardViewModel::class.java]
+
+        (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.addPrimaryClipChangedListener(clipListener)
+    }
+
+    /** يحفظ آخر نص منسوخ بسجل الحافظة (إلا بحقول كلمات المرور أو لو علّم التطبيق النص كحساس) */
+    private fun captureClipboard() {
+        if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
+        runCatching {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            val clip = cm.primaryClip ?: return
+            if (clip.itemCount == 0) return
+            if (Build.VERSION.SDK_INT >= 33) {
+                val sensitive = clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true
+                if (sensitive) return
+            }
+            val text = clip.getItemAt(0).coerceToText(this)?.toString().orEmpty()
+            if (text.isBlank() || text == lastCapturedClip) return
+            lastCapturedClip = text
+            serviceScope.launch { clipboardRepository.add(text) }
+        }
     }
 
     override fun onCreateInputView(): View {
@@ -73,6 +120,8 @@ class SemoKeyboardService :
         }
         installViewTreeOwners(composeView)
         window?.window?.decorView?.let { installViewTreeOwners(it) }
+        // نافذة شفافة كي تظهر زوايا اللوحة المدورة بنمط iOS 26
+        window?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         return composeView
     }
@@ -96,7 +145,25 @@ class SemoKeyboardService :
             InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> KeyboardPage.SYMBOLS_1
             else -> KeyboardPage.LETTERS
         }
-        viewModel.onStartInput(page, shouldCapitalize(inputType), enterKindFor(info))
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+        val isTextClass = inputClass == InputType.TYPE_CLASS_TEXT
+        passwordField = (isTextClass && (
+            variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD
+            )) ||
+            (inputClass == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+        val noSuggestions = passwordField ||
+            inputClass != InputType.TYPE_CLASS_TEXT ||
+            (isTextClass && (
+                variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                    variation == InputType.TYPE_TEXT_VARIATION_URI ||
+                    variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
+                )) ||
+            ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+
+        viewModel.onStartInput(page, shouldCapitalize(inputType), enterKindFor(info), !noSuggestions)
+        captureClipboard()
     }
 
     override fun onUpdateSelection(
@@ -118,6 +185,10 @@ class SemoKeyboardService :
     }
 
     override fun onDestroy() {
+        runCatching {
+            (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipListener)
+        }
+        serviceScope.cancel()
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         store.clear()
@@ -154,6 +225,40 @@ class SemoKeyboardService :
                 // لو في نص محدد نحذفه كله، وإلا نرسل DEL حقيقي (يتعامل صح مع الإيموجي وأزواج الـ surrogate)
                 if (!ic.getSelectedText(0).isNullOrEmpty()) ic.commitText("", 1)
                 else sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DEL)
+            }
+        }
+
+        override fun deleteSurrounding(count: Int) {
+            if (count <= 0) return
+            runCatching { currentInputConnection?.deleteSurroundingText(count, 0) }
+        }
+
+        override fun moveCursor(delta: Int) {
+            if (delta == 0) return
+            val code = if (delta > 0) android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT
+            runCatching { repeat(abs(delta)) { sendDownUpKeyEvents(code) } }
+        }
+
+        override fun performEdit(action: EditAction) {
+            val ic = currentInputConnection ?: return
+            runCatching {
+                when (action) {
+                    EditAction.SELECT_ALL -> ic.performContextMenuAction(android.R.id.selectAll)
+                    EditAction.CUT -> ic.performContextMenuAction(android.R.id.cut)
+                    EditAction.COPY -> ic.performContextMenuAction(android.R.id.copy)
+                    EditAction.PASTE -> ic.performContextMenuAction(android.R.id.paste)
+                    EditAction.LEFT -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_LEFT)
+                    EditAction.RIGHT -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+                    EditAction.HOME -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_MOVE_HOME)
+                    EditAction.END -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_MOVE_END)
+                }
+            }
+        }
+
+        override fun openSettings() {
+            runCatching {
+                startActivity(Intent(this@SemoKeyboardService, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                requestHideSelf(0)
             }
         }
 

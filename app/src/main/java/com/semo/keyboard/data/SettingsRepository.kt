@@ -7,14 +7,23 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.semo.keyboard.domain.model.ArabicLayout
+import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.KeyboardLanguage
+import com.semo.keyboard.domain.model.KeyboardSize
+import com.semo.keyboard.domain.model.KeyboardStyle
+import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
-private val Context.semoDataStore by preferencesDataStore(name = "semo_keyboard_settings")
+/** مخزن واحد مشترك بين الإعدادات والحافظة والكلمات المتعلَّمة (لا يجوز إنشاء مخزنين بنفس الاسم) */
+internal val Context.semoDataStore by preferencesDataStore(name = "semo_keyboard_settings")
+
+private inline fun <reified T : Enum<T>> String?.toEnumOr(default: T): T =
+    this?.let { s -> runCatching { enumValueOf<T>(s) }.getOrNull() } ?: default
 
 /**
  * مصدر الحقيقة الوحيد للتفضيلات. التطبيق واللوحة (خدمة الـ IME) يشتركان بنفس الـ DataStore،
@@ -31,18 +40,40 @@ class SettingsRepository(context: Context) {
         val NUMBER_ROW = booleanPreferencesKey("number_row")
         val LANGUAGE = stringPreferencesKey("language")
         val ONBOARDING = booleanPreferencesKey("onboarding_completed")
+        val ENGLISH_LAYOUT = stringPreferencesKey("english_layout")
+        val ARABIC_LAYOUT = stringPreferencesKey("arabic_layout")
+        val STYLE = stringPreferencesKey("key_style")
+        val SIZE = stringPreferencesKey("key_size")
+        val ONE_HAND = stringPreferencesKey("one_hand")
+        val SUGGESTIONS = booleanPreferencesKey("suggestions")
+        val KEY_PREVIEW = booleanPreferencesKey("key_preview")
+        val AUTO_CAPITALIZE = booleanPreferencesKey("auto_capitalize")
+        val DOUBLE_SPACE = booleanPreferencesKey("double_space_period")
+        val CLIPBOARD = booleanPreferencesKey("clipboard_enabled")
+        val ARABIC_DIGITS = booleanPreferencesKey("arabic_digits")
     }
 
     val settings: Flow<SemoSettings> = store.data
         .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
         .map { p ->
             SemoSettings(
-                themeMode = p[Keys.THEME_MODE]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
+                themeMode = p[Keys.THEME_MODE].toEnumOr(ThemeMode.SYSTEM),
                 soundEnabled = p[Keys.SOUND] ?: true,
                 hapticEnabled = p[Keys.HAPTIC] ?: true,
                 numberRow = p[Keys.NUMBER_ROW] ?: false,
-                language = p[Keys.LANGUAGE]?.let { runCatching { KeyboardLanguage.valueOf(it) }.getOrNull() } ?: KeyboardLanguage.ENGLISH,
-                onboardingCompleted = p[Keys.ONBOARDING] ?: false
+                language = p[Keys.LANGUAGE].toEnumOr(KeyboardLanguage.ENGLISH),
+                onboardingCompleted = p[Keys.ONBOARDING] ?: false,
+                englishLayout = p[Keys.ENGLISH_LAYOUT].toEnumOr(EnglishLayout.QWERTY),
+                arabicLayout = p[Keys.ARABIC_LAYOUT].toEnumOr(ArabicLayout.STANDARD),
+                style = p[Keys.STYLE].toEnumOr(KeyboardStyle.IOS26),
+                size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
+                oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
+                suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,
+                keyPreview = p[Keys.KEY_PREVIEW] ?: true,
+                autoCapitalize = p[Keys.AUTO_CAPITALIZE] ?: true,
+                doubleSpacePeriod = p[Keys.DOUBLE_SPACE] ?: true,
+                clipboardEnabled = p[Keys.CLIPBOARD] ?: true,
+                arabicDigits = p[Keys.ARABIC_DIGITS] ?: false
             )
         }
 
@@ -52,4 +83,15 @@ class SettingsRepository(context: Context) {
     suspend fun setNumberRow(v: Boolean) { store.edit { it[Keys.NUMBER_ROW] = v } }
     suspend fun setLanguage(l: KeyboardLanguage) { store.edit { it[Keys.LANGUAGE] = l.name } }
     suspend fun setOnboardingCompleted(v: Boolean) { store.edit { it[Keys.ONBOARDING] = v } }
+    suspend fun setEnglishLayout(v: EnglishLayout) { store.edit { it[Keys.ENGLISH_LAYOUT] = v.name } }
+    suspend fun setArabicLayout(v: ArabicLayout) { store.edit { it[Keys.ARABIC_LAYOUT] = v.name } }
+    suspend fun setStyle(v: KeyboardStyle) { store.edit { it[Keys.STYLE] = v.name } }
+    suspend fun setSize(v: KeyboardSize) { store.edit { it[Keys.SIZE] = v.name } }
+    suspend fun setOneHand(v: OneHandMode) { store.edit { it[Keys.ONE_HAND] = v.name } }
+    suspend fun setSuggestionsEnabled(v: Boolean) { store.edit { it[Keys.SUGGESTIONS] = v } }
+    suspend fun setKeyPreview(v: Boolean) { store.edit { it[Keys.KEY_PREVIEW] = v } }
+    suspend fun setAutoCapitalize(v: Boolean) { store.edit { it[Keys.AUTO_CAPITALIZE] = v } }
+    suspend fun setDoubleSpacePeriod(v: Boolean) { store.edit { it[Keys.DOUBLE_SPACE] = v } }
+    suspend fun setClipboardEnabled(v: Boolean) { store.edit { it[Keys.CLIPBOARD] = v } }
+    suspend fun setArabicDigits(v: Boolean) { store.edit { it[Keys.ARABIC_DIGITS] = v } }
 }

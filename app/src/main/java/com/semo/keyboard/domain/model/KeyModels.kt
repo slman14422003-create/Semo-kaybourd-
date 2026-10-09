@@ -30,7 +30,9 @@ data class KeyDefinition(
     /** فراغ غير قابل للضغط لتوسيط الصفوف الأقصر */
     val isSpacer: Boolean = false,
     /** إجراء بديل عند الضغط المطوّل (مثلًا الكرة الأرضية: ضغطة = لغة، مطوّلة = لوحة النظام التالية) */
-    val longPressAction: KeyAction? = null
+    val longPressAction: KeyAction? = null,
+    /** مفتاح بلا خلفية (أيقونة عائمة مثل الإيموجي والكرة الأرضية بالصف السفلي) */
+    val plain: Boolean = false
 ) {
     companion object {
         fun spacer(weight: Float) = KeyDefinition("", KeyAction.None, weight, isSpacer = true)
@@ -38,12 +40,33 @@ data class KeyDefinition(
 }
 
 enum class ShiftState { OFF, ON, LOCKED }
-enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, EMOJI }
+enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, EMOJI, CLIPBOARD, EDIT }
 enum class KeyboardLanguage { ENGLISH, ARABIC }
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** ترتيبات المفاتيح الإنكليزية */
+enum class EnglishLayout { QWERTY, AZERTY, QWERTZ }
+
+/** ترتيبات المفاتيح العربية */
+enum class ArabicLayout { STANDARD, ALPHABETIC }
+
+/** شكل اللوحة: iOS 26 (الجديد) أو iOS 18 (الكلاسيكي) */
+enum class KeyboardStyle { IOS26, IOS18 }
+
+/** ارتفاع المفاتيح */
+enum class KeyboardSize { SMALL, MEDIUM, LARGE }
+
+/** وضع اليد الواحدة: اللوحة مزاحة لليسار أو لليمين */
+enum class OneHandMode { OFF, LEFT, RIGHT }
+
+/** أدوات التحرير في صفحة التحرير */
+enum class EditAction { SELECT_ALL, CUT, COPY, PASTE, LEFT, RIGHT, HOME, END }
+
 /** شكل زر الإدخال حسب نوع الحقل (إدخال عادي، بحث، إرسال ...) */
 enum class EnterKind { RETURN, SEARCH, SEND, GO, DONE, NEXT }
+
+/** عنصر من سجل الحافظة */
+data class ClipItem(val text: String, val pinned: Boolean)
 
 /** تفضيلات المستخدم المحفوظة */
 data class SemoSettings(
@@ -52,7 +75,18 @@ data class SemoSettings(
     val hapticEnabled: Boolean = true,
     val numberRow: Boolean = false,
     val language: KeyboardLanguage = KeyboardLanguage.ENGLISH,
-    val onboardingCompleted: Boolean = false
+    val onboardingCompleted: Boolean = false,
+    val englishLayout: EnglishLayout = EnglishLayout.QWERTY,
+    val arabicLayout: ArabicLayout = ArabicLayout.STANDARD,
+    val style: KeyboardStyle = KeyboardStyle.IOS26,
+    val size: KeyboardSize = KeyboardSize.MEDIUM,
+    val oneHand: OneHandMode = OneHandMode.OFF,
+    val suggestionsEnabled: Boolean = true,
+    val keyPreview: Boolean = true,
+    val autoCapitalize: Boolean = true,
+    val doubleSpacePeriod: Boolean = true,
+    val clipboardEnabled: Boolean = true,
+    val arabicDigits: Boolean = false
 )
 
 data class KeyboardUiState(
@@ -65,5 +99,20 @@ data class KeyboardUiState(
     val numberRow: Boolean = false,
     val enterKind: EnterKind = EnterKind.RETURN,
     /** بدائل الحرف المضغوط مطوّلًا؛ تُعرض بشريط الاقتراحات أعلى اللوحة */
-    val alternates: List<String> = emptyList()
+    val alternates: List<String> = emptyList(),
+    val englishLayout: EnglishLayout = EnglishLayout.QWERTY,
+    val arabicLayout: ArabicLayout = ArabicLayout.STANDARD,
+    val style: KeyboardStyle = KeyboardStyle.IOS26,
+    val size: KeyboardSize = KeyboardSize.MEDIUM,
+    val oneHand: OneHandMode = OneHandMode.OFF,
+    val suggestionsEnabled: Boolean = true,
+    val keyPreview: Boolean = true,
+    val autoCapitalize: Boolean = true,
+    val doubleSpacePeriod: Boolean = true,
+    val clipboardEnabled: Boolean = true,
+    val arabicDigits: Boolean = false,
+    val suggestions: List<String> = emptyList(),
+    val toolbarOpen: Boolean = false,
+    val clipItems: List<ClipItem> = emptyList(),
+    val recentEmojis: List<String> = emptyList()
 )
