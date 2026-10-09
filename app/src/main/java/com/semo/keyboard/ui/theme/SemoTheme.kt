@@ -103,22 +103,23 @@ private val Ios26Light = SemoKeyboardColors(
     suggestion = Color(0xFF3A3A3C)
 )
 
+/** ألوان مقيسة بالبكسل من صورة كيبورد آيفون (iOS 18 داكن) */
 private val Ios18Dark = SemoKeyboardColors(
-    panel = Color(0xFF1E1E21),
-    key = Color(0xFF5B5B60),
-    keyPressed = Color(0xFF3F3F44),
-    keySpecial = Color(0xFF3F3F44),
+    panel = Color(0xFF222325),
+    key = Color(0xFF646567),
+    keyPressed = Color(0xFF7B7C7E),
+    keySpecial = Color(0xFF3F4042),
     keyAccent = Color(0xFF0A84FF),
     text = Color(0xFFFFFFFF),
-    textMuted = Color(0xFF8E8E96),
+    textMuted = Color(0xFF9B9C9F),
     textOnAccent = Color.White,
-    keyShadow = Color(0xFF0A0A0B),
-    chip = Color(0xFF5B5B60),
-    shiftActive = Color(0xFFF2F2F7),
+    keyShadow = Color(0xFF0C0C0D),
+    chip = Color(0xFF646567),
+    shiftActive = Color(0xFFD2D3D5),
     onShiftActive = Color(0xFF000000),
-    bubble = Color(0xFF6C6C72),
-    divider = Color(0xFF3F3F44),
-    suggestion = Color(0xFFE0E0E5)
+    bubble = Color(0xFF6F7072),
+    divider = Color(0xFF48494B),
+    suggestion = Color(0xFFE9EAEC)
 )
 
 private val Ios18Light = SemoKeyboardColors(
@@ -160,14 +161,16 @@ data class KeyMetrics(
 }
 
 fun keyMetrics(style: KeyboardStyle, size: KeyboardSize): KeyMetrics {
+    // نسب آيفون: ارتفاع المفتاح ≈ 43، المسافة بين الصفوف ≈ 12، وبين المفاتيح ≈ 6
     val height = when (size) {
-        KeyboardSize.SMALL -> 42.dp
-        KeyboardSize.MEDIUM -> 48.dp
-        KeyboardSize.LARGE -> 54.dp
+        KeyboardSize.SMALL -> 40.dp
+        KeyboardSize.MEDIUM -> 43.dp
+        KeyboardSize.LARGE -> 47.dp
     }
     return if (style == KeyboardStyle.IOS26) {
-        KeyMetrics(height, 6.dp, 11.dp, 6.dp, 10.dp, 24.dp, 44.dp, 44.dp)
+        KeyMetrics(height, 6.dp, 12.dp, 3.dp, 11.dp, 24.dp, 42.dp, 44.dp)
     } else {
-        KeyMetrics(height, 6.dp, 11.dp, 3.dp, 8.dp, 0.dp, 44.dp, 44.dp)
+        // هامش جانبي إجمالي 3dp (نصف المسافة بين المفاتيح) كما بالصورة المرجعية، وزوايا مفتاح صغيرة
+        KeyMetrics(height, 6.dp, 12.dp, 0.dp, 5.5.dp, 0.dp, 42.dp, 44.dp)
     }
 }

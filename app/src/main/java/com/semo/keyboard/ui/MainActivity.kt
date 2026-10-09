@@ -306,6 +306,9 @@ private fun SettingsScreen(
             SwitchRow("اقتراحات الكلمات", settings.suggestionsEnabled) { scope.launch { repo.setSuggestionsEnabled(it) } }
             SwitchRow("حرف كبير تلقائي بأول الجملة", settings.autoCapitalize) { scope.launch { repo.setAutoCapitalize(it) } }
             SwitchRow("مسافتان = نقطة ومسافة", settings.doubleSpacePeriod) { scope.launch { repo.setDoubleSpacePeriod(it) } }
+            SwitchRow("الكتابة بالسحب على الحروف (Swipe)", settings.swipeTyping) { scope.launch { repo.setSwipeTyping(it) } }
+            SwitchRow("تصحيح تلقائي (dont ← don't، الى ← إلى)", settings.autoCorrect) { scope.launch { repo.setAutoCorrect(it) } }
+            SwitchRow("ناتج العمليات الحسابية (مثل 60*30+20)", settings.mathResults) { scope.launch { repo.setMathResults(it) } }
             SwitchRow("صوت الضغط على المفاتيح", settings.soundEnabled) { scope.launch { repo.setSoundEnabled(it) } }
             SwitchRow("الاهتزاز عند الضغط", settings.hapticEnabled) { scope.launch { repo.setHapticEnabled(it) } }
         }

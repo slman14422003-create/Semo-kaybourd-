@@ -158,12 +158,14 @@ object KeyboardLayoutProvider {
         KeyboardPage.EMOJI, KeyboardPage.CLIPBOARD, KeyboardPage.EDIT -> emptyList()
     }
 
-    /** الصف السفلي الإضافي (نمط iOS): إيموجي يسارًا وكرة أرضية يمينًا، بلا خلفية */
+    /**
+     * الصف الأخير تحت صف المسافة (مثل آيفون): كرة أرضية يسارًا وميكروفون يمينًا، بلا خلفية.
+     * ضغطة على الكرة = تبديل اللغة (عربي/إنكليزي)، ضغطة مطوّلة = لوحة المفاتيح التالية بالنظام.
+     */
     fun utilityRow(): List<KeyDefinition> = listOf(
-        KeyDefinition("😊", KeyAction.Emoji, weight = 1.3f, plain = true),
-        KeyDefinition.spacer(7.4f),
-        // ضغطة = تبديل اللغة (عربي/إنكليزي)، ضغطة مطوّلة = لوحة المفاتيح التالية بالنظام
-        KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 1.3f, longPressAction = KeyAction.Globe, plain = true)
+        KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 1.6f, longPressAction = KeyAction.Globe, plain = true),
+        KeyDefinition.spacer(6.8f),
+        KeyDefinition("🎤", KeyAction.Mic, weight = 1.6f, plain = true)
     )
 
     private fun numberRow(state: KeyboardUiState): List<List<KeyDefinition>> =
@@ -172,6 +174,12 @@ object KeyboardLayoutProvider {
     /** يوسّط صفًا أقصر من العرض الكامل بفراغات متساوية على الطرفين */
     private fun centered(row: List<KeyDefinition>, gap: Int): List<KeyDefinition> =
         if (gap <= 0) row else listOf(KeyDefinition.spacer(gap / 2f)) + row + listOf(KeyDefinition.spacer(gap / 2f))
+
+    /**
+     * أبعاد آيفون المقيسة: مفتاحا Shift والحذف بعرض 1.22 من عرض الحرف، وبينهما وبين الحروف فراغ 0.28
+     * (مجموع كل جانب = 1.5 عندما يكون بالصف 7 حروف).
+     */
+    private const val EDGE_GAP = 0.28f
 
     private fun englishRows(state: KeyboardUiState): List<List<KeyDefinition>> {
         val upper = state.shiftState != ShiftState.OFF
@@ -185,15 +193,23 @@ object KeyboardLayoutProvider {
         val r2 = letters[1]
         val r3 = letters[2]
 
-        // عرض الصف الكامل = 10 وحدات؛ مفتاحا Shift والحذف يأخذان ما تبقى من الصف الثالث
-        val side = maxOf(1.5f, (10 - r3.size) / 2f)
+        // عرض الصف الكامل = 10 وحدات؛ Shift والحذف يأخذان ما تبقى من الصف الثالث (نصف لكل جانب)
+        val side = (10 - r3.size) / 2f
+        val gap = if (side >= 1.5f) EDGE_GAP else 0f
+        val edge = side - gap
         val shiftKey = KeyDefinition(
             label = if (state.shiftState == ShiftState.LOCKED) "⇪" else "⇧",
             action = KeyAction.Shift,
-            weight = side,
+            weight = edge,
             isAccent = state.shiftState != ShiftState.OFF
         )
-        val row3 = listOf(shiftKey) + mapRow(r3) + listOf(KeyDefinition("⌫", KeyAction.Backspace, weight = side))
+        val row3 = buildList {
+            add(shiftKey)
+            if (gap > 0f) add(KeyDefinition.spacer(gap))
+            addAll(mapRow(r3))
+            if (gap > 0f) add(KeyDefinition.spacer(gap))
+            add(KeyDefinition("⌫", KeyAction.Backspace, weight = edge))
+        }
         return numberRow(state) + listOf(
             mapRow(r1),
             centered(mapRow(r2), 10 - r2.size),
@@ -207,8 +223,9 @@ object KeyboardLayoutProvider {
             KeyDefinition(c, KeyAction.Character(c), longPressChars = arAlternates[c].orEmpty())
         }
         val letters = arabicLetterRows(state.arabicLayout)
+        // 11 وحدة: فراغ 0.5 + تسعة حروف + فراغ 0.28 + حذف 1.22
         val row3 = listOf(KeyDefinition.spacer(0.5f)) + mapRow(letters[2]) +
-            listOf(KeyDefinition("⌫", KeyAction.Backspace, weight = 1.5f))
+            listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("⌫", KeyAction.Backspace, weight = 1.22f))
         return numberRow(state) + listOf(
             mapRow(letters[0]),
             mapRow(letters[1]),
@@ -224,27 +241,31 @@ object KeyboardLayoutProvider {
         val r1 = if (firstPage) digitsFor(state) else sym2Row1
         val r2 = if (firstPage) sym1Row2 else sym2Row2
         val r3 = if (state.language == KeyboardLanguage.ARABIC) sym1Row3Ar else sym1Row3En
+        val edge = 1.5f - EDGE_GAP
         val switchKey = if (firstPage)
-            KeyDefinition("#+=", KeyAction.SwitchToSymbols2, weight = 1.5f)
+            KeyDefinition("#+=", KeyAction.SwitchToSymbols2, weight = edge)
         else
-            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = 1.5f)
-        val third = listOf(switchKey) + mapRow(r3, 1.4f) + listOf(KeyDefinition("⌫", KeyAction.Backspace, weight = 1.5f))
+            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = edge)
+        val third = listOf(switchKey, KeyDefinition.spacer(EDGE_GAP)) + mapRow(r3, 1.4f) +
+            listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("⌫", KeyAction.Backspace, weight = edge))
         return listOf(mapRow(r1), mapRow(r2), third, bottomRow(state, letters = false), utilityRow())
     }
 
+    /** صف آيفون: [123] [إيموجي] [مسافة] [return] بالنسب المقيسة 1.25 / 1.25 / 5 / 2.5 */
     private fun bottomRow(state: KeyboardUiState, letters: Boolean): List<KeyDefinition> {
         val arabic = state.language == KeyboardLanguage.ARABIC
         val ios26 = state.style == KeyboardStyle.IOS26
         val left = if (letters)
-            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = 1.6f)
+            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = 1.25f)
         else
-            KeyDefinition(if (arabic) "أبج" else "ABC", KeyAction.SwitchToLetters, weight = 1.6f)
+            KeyDefinition(if (arabic) "أبج" else "ABC", KeyAction.SwitchToLetters, weight = 1.25f)
 
         // iOS 26: شريط المسافة بلا نص. iOS 18: عليه كلمة space / مسافة
         val spaceLabel = if (ios26) "" else if (arabic) "مسافة" else "space"
         return listOf(
             left,
-            KeyDefinition(spaceLabel, KeyAction.Space, weight = 6.6f),
+            KeyDefinition("😊", KeyAction.Emoji, weight = 1.25f),
+            KeyDefinition(spaceLabel, KeyAction.Space, weight = 5f),
             enterKey(state.enterKind, arabic, ios26)
         )
     }
@@ -263,7 +284,7 @@ object KeyboardLayoutProvider {
         return KeyDefinition(
             label = text,
             action = KeyAction.Enter,
-            weight = 1.8f,
+            weight = 2.5f,
             isAccent = kind != EnterKind.RETURN,
             textOnly = !(kind == EnterKind.RETURN && ios26)
         )

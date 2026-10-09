@@ -14,6 +14,9 @@ import android.text.InputType
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.InputMethodSubtype
+import android.widget.Toast
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
@@ -116,7 +119,7 @@ class SemoKeyboardService :
     override fun onCreateInputView(): View {
         val composeView = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnLifecycleDestroyed(lifecycle))
-            setContent { KeyboardScreen(viewModel = viewModel) }
+            setContent { KeyboardScreen(viewModel = viewModel, onChrome = ::applyChrome) }
         }
         installViewTreeOwners(composeView)
         window?.window?.decorView?.let { installViewTreeOwners(it) }
@@ -124,6 +127,26 @@ class SemoKeyboardService :
         window?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         return composeView
+    }
+
+    private var chromeColor = 0
+    private var chromeDark: Boolean? = null
+
+    /**
+     * يلوّن شريط التنقل بلون اللوحة ويضبط تباين أيقوناته (زر إخفاء اللوحة ومؤشر الإيماءات).
+     * بدون هذا كانت أيقونات النظام تختلط بلون اللوحة خصوصًا بين الثيم الفاتح والداكن.
+     */
+    @Suppress("DEPRECATION")
+    private fun applyChrome(panelColor: Int, dark: Boolean) {
+        if (panelColor == chromeColor && dark == chromeDark) return
+        val w = window?.window ?: return
+        chromeColor = panelColor
+        chromeDark = dark
+        runCatching {
+            w.navigationBarColor = panelColor
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) w.isNavigationBarContrastEnforced = false
+            WindowCompat.getInsetsController(w, w.decorView).isAppearanceLightNavigationBars = !dark
+        }
     }
 
     private fun installViewTreeOwners(view: View) {
@@ -239,6 +262,16 @@ class SemoKeyboardService :
             runCatching { repeat(abs(delta)) { sendDownUpKeyEvents(code) } }
         }
 
+        override fun moveCursorVertical(lines: Int) {
+            if (lines == 0) return
+            val code = if (lines > 0) android.view.KeyEvent.KEYCODE_DPAD_DOWN else android.view.KeyEvent.KEYCODE_DPAD_UP
+            runCatching { repeat(abs(lines)) { sendDownUpKeyEvents(code) } }
+        }
+
+        override fun startVoiceInput() {
+            this@SemoKeyboardService.switchToVoiceInput()
+        }
+
         override fun performEdit(action: EditAction) {
             val ic = currentInputConnection ?: return
             runCatching {
@@ -299,6 +332,39 @@ class SemoKeyboardService :
                     ?.playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, -1f)
             }
             if (haptic) runCatching { vibrateTick() }
+        }
+    }
+
+    /** ينتقل للوحة صوتية مفعّلة بالجهاز (نوع فرعي voice)، وإلا يعرض تنبيهًا */
+    @Suppress("DEPRECATION")
+    private fun switchToVoiceInput() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        var targetId: String? = null
+        var targetSubtype: InputMethodSubtype? = null
+        runCatching {
+            for (info in imm?.enabledInputMethodList.orEmpty()) {
+                for (i in 0 until info.subtypeCount) {
+                    val subtype = info.getSubtypeAt(i)
+                    if (subtype.mode.equals("voice", ignoreCase = true)) {
+                        targetId = info.id
+                        targetSubtype = subtype
+                        break
+                    }
+                }
+                if (targetId != null) break
+            }
+        }
+        val id = targetId
+        val switched = id != null && runCatching {
+            val subtype = targetSubtype
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && subtype != null) {
+                switchInputMethod(id, subtype)
+            } else {
+                switchInputMethod(id)
+            }
+        }.isSuccess
+        if (!switched) {
+            Toast.makeText(this, "ما في إدخال صوتي مفعّل بالجهاز", Toast.LENGTH_SHORT).show()
         }
     }
 

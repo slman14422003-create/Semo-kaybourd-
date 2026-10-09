@@ -6,7 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.semo.keyboard.data.ClipboardRepository
 import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
+import com.semo.keyboard.domain.logic.AutoCorrect
+import com.semo.keyboard.domain.logic.MathEvaluator
 import com.semo.keyboard.domain.logic.SuggestionEngine
+import com.semo.keyboard.domain.logic.SwipeDecoder
+import com.semo.keyboard.domain.logic.WordLists
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
@@ -15,6 +19,7 @@ import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardPage
 import com.semo.keyboard.domain.model.KeyboardUiState
+import com.semo.keyboard.domain.model.MathResult
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ShiftState
@@ -43,8 +48,20 @@ class KeyboardViewModel(
         val toolbarOpen: Boolean = false,
         /** false بحقول كلمات المرور والبريد والروابط: لا اقتراحات ولا تعلّم كلمات */
         val suggestionsAllowed: Boolean = true,
-        val recentEmojis: List<String> = emptyList()
+        val recentEmojis: List<String> = emptyList(),
+        /** الكلمة الجارية كما كُتبت (تظهر بين علامتي اقتباس) */
+        val literal: String = "",
+        val mathResult: MathResult? = null,
+        /** آخر كلمة كُتبت بالسحب وبدائلها، لاستبدالها باختيار بديل من الشريط */
+        val swipeWord: String? = null,
+        val swipeAlternates: List<String> = emptyList()
     )
+
+    /** تصحيح تلقائي حصل للتو: الرجوع (Backspace) مباشرة بعده يعيد الكلمة الأصلية */
+    private data class Correction(val original: String, val fixed: String)
+
+    private var undo: Correction? = null
+    private var lastShiftTap = 0L
 
     private val transient = MutableStateFlow(LocalState())
 
@@ -78,7 +95,12 @@ class KeyboardViewModel(
                 doubleSpacePeriod = s.doubleSpacePeriod,
                 clipboardEnabled = s.clipboardEnabled,
                 arabicDigits = s.arabicDigits,
+                swipeTyping = s.swipeTyping,
+                autoCorrect = s.autoCorrect,
+                mathResults = s.mathResults,
                 suggestions = t.suggestions,
+                literal = t.literal,
+                mathResult = t.mathResult,
                 toolbarOpen = t.toolbarOpen,
                 clipItems = clips,
                 recentEmojis = t.recentEmojis
@@ -97,10 +119,15 @@ class KeyboardViewModel(
                 enterKind = enterKind,
                 alternates = emptyList(),
                 suggestions = emptyList(),
+                literal = "",
+                mathResult = null,
+                swipeWord = null,
+                swipeAlternates = emptyList(),
                 toolbarOpen = false,
                 suggestionsAllowed = suggestionsAllowed
             )
         }
+        undo = null
         refreshSuggestions()
     }
 
@@ -119,27 +146,39 @@ class KeyboardViewModel(
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled)
         if (transient.value.alternates.isNotEmpty()) dismissAlternates()
 
+        // أي مفتاح غير الحذف يلغي إمكانية التراجع عن التصحيح التلقائي
+        val pendingUndo = undo
+        undo = null
+        val swipeWord = transient.value.swipeWord
+        if (swipeWord != null && action != KeyAction.Shift) clearSwipe()
+
         when (action) {
             is KeyAction.Character -> {
-                // أي رمز غير حرف (نقطة، فاصلة...) يُنهي الكلمة فنتعلّمها
-                if (!action.char.first().isLetter()) learnCurrentWord()
+                val ch = action.char.first()
+                if (!ch.isLetter() && ch != '\'' && ch != '’') {
+                    // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة
+                    if (!(ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect() != null)) learnCurrentWord()
+                }
                 bridge.commitText(action.char)
                 consumeOneShotShift()
                 refreshSuggestions()
             }
             KeyAction.Space -> {
-                learnCurrentWord()
+                val corrected = applyAutoCorrect()
+                if (corrected == null) learnCurrentWord() else learnWord(corrected.fixed)
                 handleSpace(state.language, state.doubleSpacePeriod)
+                undo = corrected
                 refreshSuggestions()
             }
             KeyAction.Enter -> {
-                learnCurrentWord()
+                val corrected = applyAutoCorrect()
+                if (corrected == null) learnCurrentWord() else learnWord(corrected.fixed)
                 bridge.performEnter()
                 autoCapitalize(state.language)
                 refreshSuggestions()
             }
             KeyAction.Backspace -> {
-                bridge.deleteBackward()
+                handleBackspace(pendingUndo, swipeWord)
                 refreshSuggestions()
             }
             KeyAction.Shift -> toggleShift()
@@ -153,9 +192,76 @@ class KeyboardViewModel(
                 viewModelScope.launch { settingsRepository.setLanguage(next) }
             }
             KeyAction.Globe -> bridge.switchKeyboard()
+            KeyAction.Mic -> bridge.startVoiceInput()
             KeyAction.Hide -> bridge.hideKeyboard()
             KeyAction.None -> Unit
         }
+    }
+
+    /**
+     * Backspace بنمط iOS: بعد تصحيح تلقائي يعيد الكلمة الأصلية، وبعد كلمة مكتوبة بالسحب يحذفها كاملة،
+     * وغير ذلك حذف عادي.
+     */
+    private fun handleBackspace(pendingUndo: Correction?, swipeWord: String?) {
+        if (pendingUndo != null &&
+            bridge.textBeforeCursor(pendingUndo.fixed.length + 1) == pendingUndo.fixed + " "
+        ) {
+            bridge.deleteSurrounding(pendingUndo.fixed.length + 1)
+            bridge.commitText(pendingUndo.original)
+            return
+        }
+        if (swipeWord != null && bridge.textBeforeCursor(swipeWord.length + 1) == "$swipeWord ") {
+            bridge.deleteSurrounding(swipeWord.length + 1)
+            return
+        }
+        bridge.deleteBackward()
+    }
+
+    /** يصحّح الكلمة الجارية لو كانت بجدول التصحيح، ويرجع التصحيح أو null */
+    private fun applyAutoCorrect(): Correction? {
+        if (!uiState.value.autoCorrect || !transient.value.suggestionsAllowed) return null
+        val word = SuggestionEngine.currentWord(bridge.textBeforeCursor(40))
+        if (word.isEmpty()) return null
+        val fixed = AutoCorrect.fix(word) ?: return null
+        bridge.deleteSurrounding(word.length)
+        bridge.commitText(fixed)
+        return Correction(word, fixed)
+    }
+
+    // ---------- الكتابة بالسحب ----------
+
+    /** يُستدعى عند رفع الإصبع بعد سحب على الحروف: [path] الحروف التي مرّ عليها الإصبع بالترتيب */
+    fun onSwipeWord(path: List<String>) {
+        val state = uiState.value
+        val lang = state.language
+        val dictionary = if (lang == KeyboardLanguage.ARABIC) WordLists.arabic else WordLists.english
+        val learned = learnedWords.value.filter { SuggestionEngine.languageOf(it, lang) == lang }
+        val candidates = SwipeDecoder.decode(path, dictionary, learned, limit = 3)
+        if (candidates.isEmpty()) return
+
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled)
+        undo = null
+        val shift = if (lang == KeyboardLanguage.ENGLISH) state.shiftState else ShiftState.OFF
+        fun styled(w: String): String = when (shift) {
+            ShiftState.OFF -> w
+            ShiftState.ON -> w.replaceFirstChar { it.uppercase() }
+            ShiftState.LOCKED -> w.uppercase()
+        }
+        val styledList = candidates.map { styled(it) }
+        val word = styledList.first()
+
+        // مسافة قبل الكلمة لو التي قبلها حرف أو رقم
+        val last = bridge.textBeforeCursor(1).lastOrNull()
+        if (last != null && last.isLetterOrDigit()) bridge.commitText(" ")
+        bridge.commitText("$word ")
+        consumeOneShotShift()
+        learnWord(word)
+        transient.update { it.copy(swipeWord = word, swipeAlternates = styledList) }
+        refreshSuggestions()
+    }
+
+    private fun clearSwipe() {
+        transient.update { it.copy(swipeWord = null, swipeAlternates = emptyList()) }
     }
 
     fun onKeyLongPressed(key: KeyDefinition) {
@@ -176,15 +282,33 @@ class KeyboardViewModel(
         transient.update { it.copy(alternates = emptyList()) }
     }
 
-    /** اختيار اقتراح: يستبدل الكلمة الجارية ويضيف مسافة */
+    /** اختيار اقتراح: يستبدل الكلمة الجارية (أو آخر كلمة كُتبت بالسحب) ويضيف مسافة */
     fun onSuggestionChosen(suggestion: String) {
         val state = uiState.value
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled)
-        val word = SuggestionEngine.currentWord(bridge.textBeforeCursor(40))
-        if (word.isNotEmpty()) bridge.deleteSurrounding(word.length)
+        undo = null
+        val swipeWord = transient.value.swipeWord
+        if (swipeWord != null && bridge.textBeforeCursor(swipeWord.length + 1) == "$swipeWord ") {
+            bridge.deleteSurrounding(swipeWord.length + 1)
+            clearSwipe()
+        } else {
+            val word = SuggestionEngine.currentWord(bridge.textBeforeCursor(40))
+            if (word.isNotEmpty()) bridge.deleteSurrounding(word.length)
+        }
         bridge.commitText("$suggestion ")
         learnWord(suggestion)
         consumeOneShotShift()
+        refreshSuggestions()
+    }
+
+    /** اختيار ناتج العملية الحسابية: يكتب = والناتج (أو الناتج فقط لو المستخدم كتب = بنفسه) */
+    fun onMathChosen() {
+        val result = transient.value.mathResult ?: return
+        val state = uiState.value
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled)
+        undo = null
+        val before = bridge.textBeforeCursor(3).trimEnd(' ')
+        bridge.commitText(if (before.endsWith("=")) result.value else "=" + result.value)
         refreshSuggestions()
     }
 
@@ -247,10 +371,16 @@ class KeyboardViewModel(
         bridge.performEdit(action)
     }
 
-    /** سحب أفقي على شريط المسافة */
-    fun onCursorMove(delta: Int) {
-        if (delta == 0) return
-        bridge.moveCursor(delta)
+    /** لوحة اللمس (ضغطة مطوّلة على المسافة ثم سحب): dx يمين/يسار، dy أسطر لأعلى/لأسفل */
+    fun onCursorMove(dx: Int, dy: Int) {
+        if (dx != 0) bridge.moveCursor(dx)
+        if (dy != 0) bridge.moveCursorVertical(dy)
+    }
+
+    /** بداية وضع لوحة اللمس: اهتزاز خفيف كما بآيفون */
+    fun onTrackpadStart() {
+        val state = uiState.value
+        bridge.keyFeedback(false, state.hapticEnabled)
     }
 
     // ---------- داخلي ----------
@@ -276,12 +406,16 @@ class KeyboardViewModel(
         transient.update { if (it.shift == ShiftState.OFF) it.copy(shift = ShiftState.ON) else it }
     }
 
+    /** ضغطة = تشغيل/إيقاف، ضغطتان سريعتان = قفل الأحرف الكبيرة (مثل آيفون) */
     private fun toggleShift() {
+        val now = System.currentTimeMillis()
+        val quick = now - lastShiftTap < DOUBLE_TAP_MS
+        lastShiftTap = now
         transient.update {
             it.copy(
                 shift = when (it.shift) {
                     ShiftState.OFF -> ShiftState.ON
-                    ShiftState.ON -> ShiftState.LOCKED
+                    ShiftState.ON -> if (quick) ShiftState.LOCKED else ShiftState.OFF
                     ShiftState.LOCKED -> ShiftState.OFF
                 }
             )
@@ -305,27 +439,64 @@ class KeyboardViewModel(
         viewModelScope.launch { learnedWordsRepository.learn(normalized) }
     }
 
+    private fun setSuggestions(list: List<String>, literal: String, math: MathResult?) {
+        transient.update {
+            if (it.suggestions == list && it.literal == literal && it.mathResult == math) it
+            else it.copy(suggestions = list, literal = literal, mathResult = math)
+        }
+    }
+
     private fun refreshSuggestions() {
         val state = uiState.value
-        if (!state.suggestionsEnabled || !transient.value.suggestionsAllowed) {
-            if (transient.value.suggestions.isNotEmpty()) transient.update { it.copy(suggestions = emptyList()) }
+        val t = transient.value
+        if (!t.suggestionsAllowed || (!state.suggestionsEnabled && !state.mathResults)) {
+            setSuggestions(emptyList(), "", null)
             return
         }
-        val before = bridge.textBeforeCursor(40)
+        val before = bridge.textBeforeCursor(80)
+
+        // ناتج العملية الحسابية له الأولوية بالشريط
+        if (state.mathResults) {
+            val math = MathEvaluator.detect(before)
+            if (math != null) {
+                setSuggestions(emptyList(), "", math)
+                return
+            }
+        }
+        if (!state.suggestionsEnabled) {
+            setSuggestions(emptyList(), "", null)
+            return
+        }
+
+        // بدائل آخر كلمة كُتبت بالسحب تبقى ظاهرة طالما المؤشر بعدها مباشرة
+        val swipe = t.swipeWord
+        if (swipe != null) {
+            if (before.endsWith("$swipe ")) {
+                setSuggestions(t.swipeAlternates, "", null)
+                return
+            }
+            clearSwipe()
+        }
+
         val word = SuggestionEngine.currentWord(before)
-        val list = if (word.isEmpty()) {
+        if (word.isEmpty()) {
             val trimmed = before.trimEnd()
             val atStart = trimmed.isEmpty() || trimmed.last() in SENTENCE_END
-            if (atStart) SuggestionEngine.starters(state.language) else emptyList()
+            setSuggestions(if (atStart) SuggestionEngine.starters(state.language) else emptyList(), "", null)
         } else {
-            SuggestionEngine.suggest(word, SuggestionEngine.languageOf(word, state.language), learnedWords.value)
+            val language = SuggestionEngine.languageOf(word, state.language)
+            val completions = SuggestionEngine.suggest(word, language, learnedWords.value, limit = 2)
+                .filter { !it.equals(word, ignoreCase = true) }
+            setSuggestions(completions, word, null)
         }
-        transient.update { if (it.suggestions == list) it else it.copy(suggestions = list) }
     }
 
     private companion object {
         val SENTENCE_END = setOf('.', '!', '?', '؟')
+        /** علامات الترقيم التي تُنهي الكلمة وتشغّل التصحيح التلقائي */
+        const val AUTOCORRECT_TRIGGERS = ".,!?;:)\"؟،"
         const val MAX_RECENT_EMOJIS = 24
+        const val DOUBLE_TAP_MS = 350L
     }
 }
 

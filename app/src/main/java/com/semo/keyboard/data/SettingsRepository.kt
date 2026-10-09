@@ -51,6 +51,9 @@ class SettingsRepository(context: Context) {
         val DOUBLE_SPACE = booleanPreferencesKey("double_space_period")
         val CLIPBOARD = booleanPreferencesKey("clipboard_enabled")
         val ARABIC_DIGITS = booleanPreferencesKey("arabic_digits")
+        val SWIPE_TYPING = booleanPreferencesKey("swipe_typing")
+        val AUTO_CORRECT = booleanPreferencesKey("auto_correct")
+        val MATH_RESULTS = booleanPreferencesKey("math_results")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -65,7 +68,7 @@ class SettingsRepository(context: Context) {
                 onboardingCompleted = p[Keys.ONBOARDING] ?: false,
                 englishLayout = p[Keys.ENGLISH_LAYOUT].toEnumOr(EnglishLayout.QWERTY),
                 arabicLayout = p[Keys.ARABIC_LAYOUT].toEnumOr(ArabicLayout.STANDARD),
-                style = p[Keys.STYLE].toEnumOr(KeyboardStyle.IOS26),
+                style = p[Keys.STYLE].toEnumOr(KeyboardStyle.IOS18),
                 size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
                 oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
                 suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,
@@ -73,7 +76,10 @@ class SettingsRepository(context: Context) {
                 autoCapitalize = p[Keys.AUTO_CAPITALIZE] ?: true,
                 doubleSpacePeriod = p[Keys.DOUBLE_SPACE] ?: true,
                 clipboardEnabled = p[Keys.CLIPBOARD] ?: true,
-                arabicDigits = p[Keys.ARABIC_DIGITS] ?: false
+                arabicDigits = p[Keys.ARABIC_DIGITS] ?: false,
+                swipeTyping = p[Keys.SWIPE_TYPING] ?: true,
+                autoCorrect = p[Keys.AUTO_CORRECT] ?: true,
+                mathResults = p[Keys.MATH_RESULTS] ?: true
             )
         }
 
@@ -94,4 +100,7 @@ class SettingsRepository(context: Context) {
     suspend fun setDoubleSpacePeriod(v: Boolean) { store.edit { it[Keys.DOUBLE_SPACE] = v } }
     suspend fun setClipboardEnabled(v: Boolean) { store.edit { it[Keys.CLIPBOARD] = v } }
     suspend fun setArabicDigits(v: Boolean) { store.edit { it[Keys.ARABIC_DIGITS] = v } }
+    suspend fun setSwipeTyping(v: Boolean) { store.edit { it[Keys.SWIPE_TYPING] = v } }
+    suspend fun setAutoCorrect(v: Boolean) { store.edit { it[Keys.AUTO_CORRECT] = v } }
+    suspend fun setMathResults(v: Boolean) { store.edit { it[Keys.MATH_RESULTS] = v } }
 }

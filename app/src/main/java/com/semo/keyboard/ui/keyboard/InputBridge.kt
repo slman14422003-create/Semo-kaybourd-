@@ -15,6 +15,10 @@ interface InputBridge {
     fun keyFeedback(sound: Boolean, haptic: Boolean)
     /** تحريك المؤشر: قيمة موجبة = يمين، سالبة = يسار */
     fun moveCursor(delta: Int)
+    /** تحريك المؤشر سطرًا لأعلى/لأسفل: قيمة موجبة = لأسفل، سالبة = لأعلى */
+    fun moveCursorVertical(lines: Int)
     fun performEdit(action: EditAction)
+    /** الانتقال للإدخال الصوتي بالنظام (لوحة صوتية مفعّلة بالجهاز) */
+    fun startVoiceInput()
     fun openSettings()
 }

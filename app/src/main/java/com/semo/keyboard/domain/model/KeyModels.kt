@@ -13,6 +13,8 @@ sealed class KeyAction {
     data object SwitchLanguage : KeyAction()
     data object Emoji : KeyAction()
     data object Globe : KeyAction()
+    /** الإدخال الصوتي (الميكروفون بالصف السفلي) */
+    data object Mic : KeyAction()
     data object Hide : KeyAction()
     data object None : KeyAction()
 }
@@ -68,6 +70,9 @@ enum class EnterKind { RETURN, SEARCH, SEND, GO, DONE, NEXT }
 /** عنصر من سجل الحافظة */
 data class ClipItem(val text: String, val pinned: Boolean)
 
+/** ناتج عملية حسابية مكتوبة قبل المؤشر (مثل 60*30+20 → 1820) */
+data class MathResult(val expression: String, val value: String)
+
 /** تفضيلات المستخدم المحفوظة */
 data class SemoSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -78,7 +83,7 @@ data class SemoSettings(
     val onboardingCompleted: Boolean = false,
     val englishLayout: EnglishLayout = EnglishLayout.QWERTY,
     val arabicLayout: ArabicLayout = ArabicLayout.STANDARD,
-    val style: KeyboardStyle = KeyboardStyle.IOS26,
+    val style: KeyboardStyle = KeyboardStyle.IOS18,
     val size: KeyboardSize = KeyboardSize.MEDIUM,
     val oneHand: OneHandMode = OneHandMode.OFF,
     val suggestionsEnabled: Boolean = true,
@@ -86,7 +91,13 @@ data class SemoSettings(
     val autoCapitalize: Boolean = true,
     val doubleSpacePeriod: Boolean = true,
     val clipboardEnabled: Boolean = true,
-    val arabicDigits: Boolean = false
+    val arabicDigits: Boolean = false,
+    /** الكتابة بالسحب على الحروف (QuickPath) */
+    val swipeTyping: Boolean = true,
+    /** تصحيح الاختصارات والأخطاء الشائعة (dont → don't) */
+    val autoCorrect: Boolean = true,
+    /** إظهار ناتج العمليات الحسابية بشريط الاقتراحات */
+    val mathResults: Boolean = true
 )
 
 data class KeyboardUiState(
@@ -102,7 +113,7 @@ data class KeyboardUiState(
     val alternates: List<String> = emptyList(),
     val englishLayout: EnglishLayout = EnglishLayout.QWERTY,
     val arabicLayout: ArabicLayout = ArabicLayout.STANDARD,
-    val style: KeyboardStyle = KeyboardStyle.IOS26,
+    val style: KeyboardStyle = KeyboardStyle.IOS18,
     val size: KeyboardSize = KeyboardSize.MEDIUM,
     val oneHand: OneHandMode = OneHandMode.OFF,
     val suggestionsEnabled: Boolean = true,
@@ -111,7 +122,14 @@ data class KeyboardUiState(
     val doubleSpacePeriod: Boolean = true,
     val clipboardEnabled: Boolean = true,
     val arabicDigits: Boolean = false,
+    val swipeTyping: Boolean = true,
+    val autoCorrect: Boolean = true,
+    val mathResults: Boolean = true,
+    /** اقتراحات الإكمال (بدون الكلمة المكتوبة نفسها) */
     val suggestions: List<String> = emptyList(),
+    /** الكلمة الجارية كما كُتبت: تظهر بين علامتي اقتباس بأول خانة (مثل iOS) */
+    val literal: String = "",
+    val mathResult: MathResult? = null,
     val toolbarOpen: Boolean = false,
     val clipItems: List<ClipItem> = emptyList(),
     val recentEmojis: List<String> = emptyList()
