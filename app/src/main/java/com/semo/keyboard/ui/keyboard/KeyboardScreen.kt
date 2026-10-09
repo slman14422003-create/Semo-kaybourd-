@@ -706,9 +706,9 @@ private fun RowScope.KeyButton(
             .padding(
                 start = metrics.keySpacing / 2,
                 end = metrics.keySpacing / 2,
-                top = if (def.plain) 0.dp else verticalPadding,
-                // الأيقونات العائمة ترتفع 7dp (حشوة سفلية 14dp مع التوسيط) لتصير بمحاذاة سهم الإخفاء بشريط التنقل
-                bottom = if (def.plain) 14.dp else verticalPadding
+                top = if (def.plain) 9.dp else verticalPadding,
+                // الأيقونات العائمة تنزل حوالي 4.5dp عن المنتصف (حشوة علوية 9dp) لتصير بمحاذاة سهم الإخفاء بشريط التنقل
+                bottom = if (def.plain) 0.dp else verticalPadding
             ),
         contentAlignment = if (def.plain) Alignment.Center else Alignment.TopStart
     ) {
