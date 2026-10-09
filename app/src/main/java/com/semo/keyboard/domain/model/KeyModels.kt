@@ -50,7 +50,10 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 enum class EnglishLayout { QWERTY, AZERTY, QWERTZ }
 
 /** ترتيبات المفاتيح العربية */
-enum class ArabicLayout { STANDARD, ALPHABETIC }
+enum class ArabicLayout { STANDARD, ALPHABETIC, QWERTY }
+
+/** نوع حقل الإدخال: يغيّر الصف السفلي (بريد: @ و . ، رابط: / و .com) */
+enum class FieldKind { TEXT, EMAIL, URL }
 
 /** شكل اللوحة: iOS 26 (الجديد) أو iOS 18 (الكلاسيكي) */
 enum class KeyboardStyle { IOS26, IOS18 }
@@ -109,6 +112,7 @@ data class KeyboardUiState(
     val hapticEnabled: Boolean = true,
     val numberRow: Boolean = false,
     val enterKind: EnterKind = EnterKind.RETURN,
+    val fieldKind: FieldKind = FieldKind.TEXT,
     /** بدائل الحرف المضغوط مطوّلًا؛ تُعرض بشريط الاقتراحات أعلى اللوحة */
     val alternates: List<String> = emptyList(),
     val englishLayout: EnglishLayout = EnglishLayout.QWERTY,

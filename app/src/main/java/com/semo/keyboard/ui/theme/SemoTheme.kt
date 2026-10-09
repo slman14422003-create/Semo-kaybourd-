@@ -168,9 +168,9 @@ fun keyMetrics(style: KeyboardStyle, size: KeyboardSize): KeyMetrics {
         KeyboardSize.LARGE -> 47.dp
     }
     return if (style == KeyboardStyle.IOS26) {
-        KeyMetrics(height, 6.dp, 12.dp, 3.dp, 11.dp, 24.dp, 42.dp, 44.dp)
+        KeyMetrics(height, 6.dp, 12.dp, 3.dp, 11.dp, 24.dp, 54.dp, 44.dp)
     } else {
         // هامش جانبي إجمالي 3dp (نصف المسافة بين المفاتيح) كما بالصورة المرجعية، وزوايا مفتاح صغيرة
-        KeyMetrics(height, 6.dp, 12.dp, 0.dp, 5.5.dp, 0.dp, 42.dp, 44.dp)
+        KeyMetrics(height, 6.dp, 12.dp, 3.dp, 5.5.dp, 0.dp, 54.dp, 44.dp)
     }
 }

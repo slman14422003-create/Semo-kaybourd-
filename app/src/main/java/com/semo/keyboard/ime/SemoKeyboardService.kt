@@ -36,8 +36,11 @@ import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
+import com.semo.keyboard.domain.model.FieldKind
 import com.semo.keyboard.domain.model.KeyboardPage
 import com.semo.keyboard.ui.keyboard.InputBridge
+import com.semo.keyboard.ui.keyboard.KeyFeedback
+import com.semo.keyboard.util.KeyboardStatusHelper
 import com.semo.keyboard.ui.keyboard.KeyboardScreen
 import com.semo.keyboard.ui.keyboard.KeyboardViewModel
 import com.semo.keyboard.ui.keyboard.KeyboardViewModelFactory
@@ -76,6 +79,9 @@ class SemoKeyboardService :
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** صوت ضغط شبيه بآيفون (مُولَّد برمجيًا) */
+    private var clickPlayer: KeyClickPlayer? = null
+
     /** حقل كلمة مرور: لا نسجّل الحافظة ولا نتعلّم كلمات */
     private var passwordField = false
     private var lastCapturedClip: String? = null
@@ -87,6 +93,7 @@ class SemoKeyboardService :
         super.onCreate()
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
+        clickPlayer = KeyClickPlayer()
         val settingsRepository = SettingsRepository(applicationContext)
         clipboardRepository = ClipboardRepository(applicationContext)
         val learnedRepository = LearnedWordsRepository(applicationContext)
@@ -185,7 +192,14 @@ class SemoKeyboardService :
                 )) ||
             ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
 
-        viewModel.onStartInput(page, shouldCapitalize(inputType), enterKindFor(info), !noSuggestions)
+        val fieldKind = when {
+            isTextClass && (variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS) -> FieldKind.EMAIL
+            isTextClass && variation == InputType.TYPE_TEXT_VARIATION_URI -> FieldKind.URL
+            else -> FieldKind.TEXT
+        }
+        KeyboardStatusHelper.markImeSeen(this)
+        viewModel.onStartInput(page, shouldCapitalize(inputType), enterKindFor(info), !noSuggestions, fieldKind)
         captureClipboard()
     }
 
@@ -200,11 +214,13 @@ class SemoKeyboardService :
     override fun onWindowShown() {
         super.onWindowShown()
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+        KeyboardStatusHelper.setImeVisible(this, true)
     }
 
     override fun onWindowHidden() {
         super.onWindowHidden()
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        KeyboardStatusHelper.setImeVisible(this, false)
     }
 
     override fun onDestroy() {
@@ -212,6 +228,9 @@ class SemoKeyboardService :
             (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipListener)
         }
         serviceScope.cancel()
+        clickPlayer?.release()
+        clickPlayer = null
+        KeyboardStatusHelper.setImeVisible(this, false)
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         store.clear()
@@ -326,11 +345,8 @@ class SemoKeyboardService :
         override fun textBeforeCursor(length: Int): String =
             runCatching { currentInputConnection?.getTextBeforeCursor(length, 0)?.toString() }.getOrNull().orEmpty()
 
-        override fun keyFeedback(sound: Boolean, haptic: Boolean) {
-            if (sound) runCatching {
-                (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
-                    ?.playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD, -1f)
-            }
+        override fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback) {
+            if (sound) runCatching { clickPlayer?.play(kind) }
             if (haptic) runCatching { vibrateTick() }
         }
     }

@@ -14,6 +14,7 @@ import com.semo.keyboard.domain.logic.WordLists
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
+import com.semo.keyboard.domain.model.FieldKind
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
@@ -43,6 +44,7 @@ class KeyboardViewModel(
         val page: KeyboardPage = KeyboardPage.LETTERS,
         val shift: ShiftState = ShiftState.OFF,
         val enterKind: EnterKind = EnterKind.RETURN,
+        val fieldKind: FieldKind = FieldKind.TEXT,
         val alternates: List<String> = emptyList(),
         val suggestions: List<String> = emptyList(),
         val toolbarOpen: Boolean = false,
@@ -83,6 +85,7 @@ class KeyboardViewModel(
                 hapticEnabled = s.hapticEnabled,
                 numberRow = s.numberRow,
                 enterKind = t.enterKind,
+                fieldKind = t.fieldKind,
                 alternates = t.alternates,
                 englishLayout = s.englishLayout,
                 arabicLayout = s.arabicLayout,
@@ -110,13 +113,20 @@ class KeyboardViewModel(
     // ---------- أحداث من الخدمة ----------
 
     /** يُستدعى عند بدء الكتابة بحقل جديد */
-    fun onStartInput(page: KeyboardPage, capitalize: Boolean, enterKind: EnterKind, suggestionsAllowed: Boolean) {
+    fun onStartInput(
+        page: KeyboardPage,
+        capitalize: Boolean,
+        enterKind: EnterKind,
+        suggestionsAllowed: Boolean,
+        fieldKind: FieldKind = FieldKind.TEXT
+    ) {
         val autoCap = uiState.value.autoCapitalize
         transient.update {
             it.copy(
                 page = page,
                 shift = if (capitalize && autoCap) ShiftState.ON else ShiftState.OFF,
                 enterKind = enterKind,
+                fieldKind = fieldKind,
                 alternates = emptyList(),
                 suggestions = emptyList(),
                 literal = "",
@@ -143,7 +153,12 @@ class KeyboardViewModel(
 
     fun onKeyPressed(action: KeyAction) {
         val state = uiState.value
-        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled)
+        val kind = when (action) {
+            is KeyAction.Character -> KeyFeedback.STANDARD
+            KeyAction.Backspace -> KeyFeedback.DELETE
+            else -> KeyFeedback.MODIFIER
+        }
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, kind)
         if (transient.value.alternates.isNotEmpty()) dismissAlternates()
 
         // أي مفتاح غير الحذف يلغي إمكانية التراجع عن التصحيح التلقائي

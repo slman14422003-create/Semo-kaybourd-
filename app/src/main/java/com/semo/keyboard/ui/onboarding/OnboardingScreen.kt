@@ -20,11 +20,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.semo.keyboard.R
 import com.semo.keyboard.ui.theme.SemoPalette
+import kotlinx.coroutines.delay
 
 enum class OnboardingStep { WELCOME, ENABLE, SELECT, DONE }
 
@@ -51,18 +53,35 @@ fun OnboardingScreen(
     onSkip: () -> Unit,
     onFinish: () -> Unit
 ) {
+    // ننتقل تلقائيًا للخطوة التالية أول ما تكتمل الخطوة الحالية (فقط لو كانت غير مكتملة عند دخولها،
+    // كي لا نقفز للأمام لما يرجع المستخدم للخلف عمدًا)
+    val enabledAtEntry = remember(step) { status.isEnabled }
+    val selectedAtEntry = remember(step) { status.isSelected }
+    LaunchedEffect(step, status.isEnabled, status.isSelected) {
+        val advance = (step == OnboardingStep.ENABLE && status.isEnabled && !enabledAtEntry) ||
+            (step == OnboardingStep.SELECT && status.isSelected && !selectedAtEntry)
+        if (advance) {
+            delay(700)
+            onNext()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(SemoPalette.Bg)
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(24.dp),
+            .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         StepDots(current = step.ordinal, total = OnboardingStep.entries.size)
 
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                // نرفع المحتوى قليلًا عن المنتصف تمامًا كي يبدو متوازنًا بصريًا
+                .padding(bottom = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -72,26 +91,42 @@ fun OnboardingScreen(
             when (step) {
                 OnboardingStep.WELCOME -> StepText(
                     "أهلًا فيك بسيمو كيبورد",
-                    "لوحة مفاتيح عربي وإنكليزي بتصميم أنيق وسريعة. خلّينا نجهّزها بـ ٣ خطوات بسيطة."
+                    "لوحة مفاتيح عربي وإنكليزي بتصميم أنيق وسريعة. خلّينا نجهّزها بخطوتين بسيطتين."
                 )
                 OnboardingStep.ENABLE -> {
-                    StepText("١. فعّل اللوحة", "افتح إعدادات لوحات المفاتيح وفعّل «Semo Keyboard» من القائمة.")
-                    Spacer(Modifier.height(16.dp))
-                    StatusPill(status.isEnabled, "مفعّلة", "لسا ما انفعلت")
-                    Spacer(Modifier.height(16.dp))
-                    PrimaryButton("فتح الإعدادات", onOpenEnableSettings)
+                    StepText("١. فعّل اللوحة", "افتح إعدادات لوحات المفاتيح وفعّل «سيمو كيبورد» من القائمة، وبعدين ارجع هون.")
+                    Spacer(Modifier.height(18.dp))
+                    StatusPill(status.isEnabled, "مفعّلة ✓", "لسا ما انفعلت")
+                    Spacer(Modifier.height(18.dp))
+                    if (status.isEnabled) {
+                        Hint("تمام! جاري الانتقال للخطوة التالية...")
+                    } else {
+                        PrimaryButton("فتح الإعدادات", onOpenEnableSettings)
+                    }
                 }
                 OnboardingStep.SELECT -> {
-                    StepText("٢. اخترها كلوحة نشطة", "اختار «Semo Keyboard» من القائمة اللي رح تظهر لتبدأ تكتب فيها.")
-                    Spacer(Modifier.height(16.dp))
-                    StatusPill(status.isSelected, "هي اللوحة النشطة", "لسا مش مختارة")
-                    Spacer(Modifier.height(16.dp))
-                    PrimaryButton("اختيار اللوحة", onOpenKeyboardPicker)
+                    StepText("٢. اخترها كلوحة نشطة", "اختار «سيمو كيبورد» من القائمة اللي رح تظهر لتبدأ تكتب فيها.")
+                    Spacer(Modifier.height(18.dp))
+                    StatusPill(status.isSelected, "هي اللوحة النشطة ✓", "لسا مش مختارة")
+                    Spacer(Modifier.height(18.dp))
+                    if (status.isSelected) {
+                        Hint("تمام! جاري الانتقال...")
+                    } else {
+                        PrimaryButton("اختيار اللوحة", onOpenKeyboardPicker)
+                        Spacer(Modifier.height(14.dp))
+                        Hint("لو اخترتها وبعدك شايف «لسا»، كمّل بالتالي — بتنعرف تلقائيًا أول ما تكتب فيها.")
+                    }
                 }
-                OnboardingStep.DONE -> StepText(
-                    "جاهز! 🎉",
-                    "افتح أي تطبيق فيه حقل كتابة وبتلاقي سيمو كيبورد جاهزة. وتقدر تغيّر الثيم والاهتزاز من إعدادات التطبيق."
-                )
+                OnboardingStep.DONE -> {
+                    StepText(
+                        "جاهز! 🎉",
+                        "افتح أي تطبيق فيه حقل كتابة وبتلاقي سيمو كيبورد جاهزة. وتقدر تغيّر الشكل والترتيب والصوت من إعدادات التطبيق."
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    StatusPill(status.isEnabled, "مفعّلة ✓", "اللوحة غير مفعّلة بعد")
+                    Spacer(Modifier.height(8.dp))
+                    StatusPill(status.isSelected, "هي اللوحة النشطة ✓", "مش مختارة كلوحة نشطة بعد")
+                }
             }
         }
 
@@ -125,6 +160,18 @@ private fun StepText(title: String, body: String) {
     Text(title, color = SemoPalette.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
     Spacer(Modifier.height(10.dp))
     Text(body, color = SemoPalette.TextSecondary, fontSize = 15.sp, textAlign = TextAlign.Center, lineHeight = 23.sp)
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(
+        text,
+        color = SemoPalette.TextHint,
+        fontSize = 12.sp,
+        textAlign = TextAlign.Center,
+        lineHeight = 18.sp,
+        modifier = Modifier.padding(horizontal = 12.dp)
+    )
 }
 
 @Composable

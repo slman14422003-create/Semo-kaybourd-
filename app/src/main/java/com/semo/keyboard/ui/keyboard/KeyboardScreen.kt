@@ -82,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.semo.keyboard.R
+import com.semo.keyboard.domain.logic.EmojiCategory
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
@@ -125,7 +126,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val metrics = remember(state.style, state.size) { keyMetrics(state.style, state.size) }
     val rows = remember(
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
-        state.englishLayout, state.arabicLayout, state.style, state.arabicDigits
+        state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind
     ) { KeyboardLayoutProvider.rows(state) }
     val rowHeights = remember(rows, metrics) {
         rows.map { if (isUtilityRow(it)) metrics.utilHeight else metrics.rowHeight }
@@ -138,7 +139,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // لون اللوحة يمتد خلف الشريط (الخلفية قبل الحشوة)، فيبدو الشريط جزءًا من اللوحة مثل آيفون.
     val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
     val bottomInsets = if (edgeToEdgeIme) WindowInsets.navigationBars else WindowInsets(0, 0, 0, 0)
-    val extraBottom = if (edgeToEdgeIme) 2.dp else 6.dp
+    val extraBottom = if (edgeToEdgeIme) 6.dp else 8.dp
 
     val panelShape = if (state.style == KeyboardStyle.IOS26) {
         RoundedCornerShape(topStart = metrics.panelRadius, topEnd = metrics.panelRadius)
@@ -678,18 +679,22 @@ private fun RowScope.KeyButton(
     }
 
     // منطقة اللمس تشمل الفراغات بين المفاتيح (تقلّل الضغطات الضائعة)، والشكل المرئي أصغر منها
-    val verticalPadding = if (def.plain) 2.dp else metrics.rowSpacing / 2
+    val verticalPadding = if (def.plain) 0.dp else metrics.rowSpacing / 2
     Box(
         modifier = Modifier
             .weight(def.weight)
             .height(rowHeight)
             .zIndex(if (pressed) 1f else 0f)
             .then(gestureModifier)
-            .padding(horizontal = metrics.keySpacing / 2, vertical = verticalPadding)
+            .padding(
+                start = metrics.keySpacing / 2,
+                end = metrics.keySpacing / 2,
+                top = if (def.plain) 4.dp else verticalPadding,
+                bottom = if (def.plain) 0.dp else verticalPadding
+            )
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = (if (def.plain) Modifier.fillMaxWidth().height(34.dp) else Modifier.fillMaxSize())
                 .drawBehind {
                     if (!def.plain) {
                         drawRoundRect(
@@ -820,6 +825,7 @@ private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
             text = def.label,
             color = textColor,
             fontSize = when {
+                isLetter && def.label.length > 1 -> 16.sp
                 isLetter -> 25.sp
                 def.action == KeyAction.Space -> 16.sp
                 def.action == KeyAction.Enter -> 16.sp
@@ -871,6 +877,16 @@ private fun PanelBottomBar(
     }
 }
 
+/** يخفي الإيموجي التي لا يملك خط الجهاز رمزًا لها (كي لا تظهر مربعات فارغة) */
+private fun supportedEmojiCategories(): List<EmojiCategory> {
+    val paint = android.graphics.Paint()
+    return KeyboardLayoutProvider.emojiCategories.map { cat ->
+        val ok = cat.emojis.filter { runCatching { paint.hasGlyph(it) }.getOrDefault(true) }
+        // لو الفحص رفض معظم القائمة فهو غير موثوق على هذا الجهاز: نعرض القائمة كاملة
+        cat.copy(emojis = if (ok.size * 2 >= cat.emojis.size) ok else cat.emojis)
+    }.filter { it.emojis.isNotEmpty() }
+}
+
 @Composable
 private fun EmojiPanel(
     state: KeyboardUiState,
@@ -879,7 +895,7 @@ private fun EmojiPanel(
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language == KeyboardLanguage.ARABIC
-    val categories = KeyboardLayoutProvider.emojiCategories
+    val categories = remember { supportedEmojiCategories() }
     // التبويب 0 = الأخيرة، والباقي = فئات الإيموجي
     var tab by remember { mutableIntStateOf(if (state.recentEmojis.isEmpty()) 1 else 0) }
     val list = if (tab == 0) state.recentEmojis else categories[tab - 1].emojis
@@ -902,18 +918,34 @@ private fun EmojiPanel(
                     modifier = Modifier.align(Alignment.Center)
                 )
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(8),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(list) { emoji ->
-                        Box(
-                            modifier = Modifier
-                                .height(44.dp)
-                                .pointerInput(emoji) { detectTapGestures(onTap = { viewModel.onEmojiPressed(emoji) }) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(text = emoji, fontSize = 24.sp, color = colors.text)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    val title = when {
+                        tab == 0 -> tr(arabic, "المستخدمة مؤخرًا", "Frequently Used")
+                        arabic -> categories[tab - 1].titleAr
+                        else -> categories[tab - 1].titleEn
+                    }
+                    Text(
+                        text = title,
+                        color = colors.textMuted,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(8),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        items(list) { emoji ->
+                            Box(
+                                modifier = Modifier
+                                    .height(44.dp)
+                                    .pointerInput(emoji) { detectTapGestures(onTap = { viewModel.onEmojiPressed(emoji) }) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = emoji, fontSize = 26.sp, color = colors.text, maxLines = 1)
+                            }
                         }
                     }
                 }

@@ -3,6 +3,7 @@ package com.semo.keyboard.domain.logic
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.EnterKind
+import com.semo.keyboard.domain.model.FieldKind
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
@@ -12,7 +13,12 @@ import com.semo.keyboard.domain.model.KeyboardUiState
 import com.semo.keyboard.domain.model.ShiftState
 
 /** فئة إيموجي: أيقونة التبويب + القائمة */
-data class EmojiCategory(val icon: String, val emojis: List<String>)
+data class EmojiCategory(
+    val icon: String,
+    val emojis: List<String>,
+    val titleAr: String = "",
+    val titleEn: String = ""
+)
 
 /** يبني صفوف المفاتيح لكل صفحة ولغة وترتيب. منطق بحت بلا أي اعتماد على Android. */
 object KeyboardLayoutProvider {
@@ -60,12 +66,25 @@ object KeyboardLayoutProvider {
         listOf("ل", "م", "ن", "ه", "ة", "و", "ي", "ى", "ء")
     )
 
+    /**
+     * عربي QWERTY (صوتي): كل حرف عربي بمكان الحرف الإنكليزي الأقرب لصوته،
+     * ق=Q و=W ع=E ر=R ت=T ي=Y ... س=S د=D ف=F غ=G ه=H ج=J ك=K ل=L ز=Z خ=X ث=C ط=V ب=B ن=N م=M.
+     * الباقي (ة ى ء أ إ آ ؤ ئ) بالضغط المطوّل على أقرب حرف.
+     */
+    private val arQwerty = listOf(
+        listOf("ق", "و", "ع", "ر", "ت", "ي", "ص", "ح", "ض", "ظ"),
+        listOf("ا", "س", "د", "ف", "غ", "ه", "ج", "ك", "ل", "ش"),
+        listOf("ز", "خ", "ث", "ط", "ب", "ن", "م", "ذ")
+    )
+
     private val arAlternates: Map<String, List<String>> = mapOf(
         "ا" to listOf("أ", "إ", "آ", "ء"),
         "و" to listOf("ؤ"),
         "ي" to listOf("ئ", "ى"),
         "ى" to listOf("ي", "ئ"),
         "ه" to listOf("ة"),
+        "ل" to listOf("لا", "لأ", "لإ", "لآ"),
+        "ت" to listOf("ة"),
         "ء" to listOf("َ", "ُ", "ِ", "ّ", "ْ", "ً", "ٌ", "ٍ")
     )
 
@@ -78,54 +97,7 @@ object KeyboardLayoutProvider {
     private val sym2Row1 = listOf("[", "]", "{", "}", "#", "%", "^", "*", "+", "=")
     private val sym2Row2 = listOf("_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•")
 
-    val emojiCategories: List<EmojiCategory> = listOf(
-        EmojiCategory(
-            "😀", listOf(
-                "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "😉",
-                "😍", "🥰", "😘", "😗", "😋", "😛", "😜", "🤪", "🤗", "🤔", "🤨", "😐",
-                "😑", "😶", "🙄", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "😣", "😖",
-                "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵",
-                "🥶", "😱", "😨", "😰", "😥", "😓", "🤤", "😴", "😎", "🤓", "🥳", "🤩"
-            )
-        ),
-        EmojiCategory(
-            "👍", listOf(
-                "👍", "👎", "👌", "✌️", "🤞", "🤝", "👏", "🙌", "🙏", "💪", "👋", "🤚",
-                "✋", "🖐️", "🤙", "👈", "👉", "👆", "👇", "☝️", "✊", "👊", "🤛", "🤜",
-                "🤟", "🤘", "🫶", "🫡", "👀", "👁️", "👂", "👃", "👄", "🧠", "🦷", "🦴"
-            )
-        ),
-        EmojiCategory(
-            "❤️", listOf(
-                "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕",
-                "💞", "💓", "💗", "💖", "💘", "💝", "💯", "💢", "💥", "💫", "💦", "💨",
-                "🔥", "✨", "⭐", "🌟", "🎉", "🎊", "🎁", "🏆"
-            )
-        ),
-        EmojiCategory(
-            "🍔", listOf(
-                "🍕", "🍔", "🍟", "🌭", "🍿", "🥗", "🍝", "🍜", "🍣", "🍤", "🍙", "🍚",
-                "🍞", "🥐", "🧀", "🥚", "🥓", "🍗", "🍖", "🌮", "🌯", "🥙", "🍎", "🍌",
-                "🍇", "🍉", "🍓", "🍒", "🍑", "🥭", "🍍", "🥥", "☕", "🍵", "🥤", "🍰",
-                "🎂", "🍩", "🍪", "🍫", "🍬", "🍭"
-            )
-        ),
-        EmojiCategory(
-            "🌹", listOf(
-                "🌹", "🌸", "🌼", "🌻", "🌷", "🌳", "🌴", "🌵", "🍀", "🍁", "🌙", "☀️",
-                "☁️", "🌧️", "⚡", "❄️", "🌈", "🌊", "🐶", "🐱", "🐭", "🐰", "🦊", "🐻",
-                "🐼", "🦁", "🐯", "🐴", "🦄", "🐔", "🐧", "🐦", "🦋", "🐢", "🐟", "🐬"
-            )
-        ),
-        EmojiCategory(
-            "⚽", listOf(
-                "⚽", "🏀", "🏈", "⚾", "🎾", "🏐", "🎱", "🏓", "🥊", "🎮", "🎯", "🎲",
-                "🎵", "🎶", "🎤", "🎧", "🎸", "🎹", "🎬", "📷", "🚗", "🚕", "🚌", "✈️",
-                "🚀", "🏠", "🏢", "📱", "💻", "⌚", "💡", "🔑", "🔒", "📚", "✏️", "📌",
-                "✅", "❌", "⚠️", "❓", "❗", "➕", "➖", "🔔"
-            )
-        )
-    )
+    val emojiCategories: List<EmojiCategory> get() = EmojiData.categories
 
     /** الأرقام المعروضة حسب لغة اللوحة وخيار الأرقام الهندية */
     private fun digitsFor(state: KeyboardUiState): List<String> =
@@ -148,6 +120,7 @@ object KeyboardLayoutProvider {
     private fun arabicLetterRows(layout: ArabicLayout): List<List<String>> = when (layout) {
         ArabicLayout.STANDARD -> arStandard
         ArabicLayout.ALPHABETIC -> arAlphabetic
+        ArabicLayout.QWERTY -> arQwerty
     }
 
     fun rows(state: KeyboardUiState): List<List<KeyDefinition>> = when (state.page) {
@@ -223,12 +196,17 @@ object KeyboardLayoutProvider {
             KeyDefinition(c, KeyAction.Character(c), longPressChars = arAlternates[c].orEmpty())
         }
         val letters = arabicLetterRows(state.arabicLayout)
-        // 11 وحدة: فراغ 0.5 + تسعة حروف + فراغ 0.28 + حذف 1.22
-        val row3 = listOf(KeyDefinition.spacer(0.5f)) + mapRow(letters[2]) +
-            listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("⌫", KeyAction.Backspace, weight = 1.22f))
+        // عرض الصف = عدد حروف أطول صف (11 للقياسي والأبجدي، 10 للـ QWERTY).
+        // الصف الثالث: فراغ + حروف + فراغ 0.28 + حذف 1.22 بنفس العرض الكامل.
+        val width = letters[0].size.toFloat()
+        val backspaceWeight = 1.22f
+        val lead = (width - letters[2].size - backspaceWeight - EDGE_GAP).coerceAtLeast(0f)
+        val row3 = listOf(KeyDefinition.spacer(lead)) + mapRow(letters[2]) +
+            listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("⌫", KeyAction.Backspace, weight = backspaceWeight))
+        val row2 = mapRow(letters[1])
         return numberRow(state) + listOf(
             mapRow(letters[0]),
-            mapRow(letters[1]),
+            if (row2.size < letters[0].size) centered(row2, letters[0].size - row2.size) else row2,
             row3,
             bottomRow(state, letters = true)
         ) + listOf(utilityRow())
@@ -262,12 +240,34 @@ object KeyboardLayoutProvider {
 
         // iOS 26: شريط المسافة بلا نص. iOS 18: عليه كلمة space / مسافة
         val spaceLabel = if (ios26) "" else if (arabic) "مسافة" else "space"
-        return listOf(
-            left,
-            KeyDefinition("😊", KeyAction.Emoji, weight = 1.25f),
-            KeyDefinition(spaceLabel, KeyAction.Space, weight = 5f),
-            enterKey(state.enterKind, arabic, ios26)
-        )
+        val emoji = KeyDefinition("😊", KeyAction.Emoji, weight = 1.25f)
+
+        // مثل آيفون: حقول البريد والروابط تعرض مفاتيح @ . / .com بجانب المسافة
+        return when (if (letters) state.fieldKind else FieldKind.TEXT) {
+            FieldKind.EMAIL -> listOf(
+                left.copy(weight = 1.25f),
+                emoji.copy(weight = 1.1f),
+                KeyDefinition("@", KeyAction.Character("@"), weight = 1.1f),
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 3.3f),
+                KeyDefinition(".", KeyAction.Character("."), weight = 1.1f),
+                enterKey(state.enterKind, arabic, ios26).copy(weight = 2.15f)
+            )
+            FieldKind.URL -> listOf(
+                left.copy(weight = 1.2f),
+                emoji.copy(weight = 1.0f),
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 2.2f),
+                KeyDefinition(".", KeyAction.Character("."), weight = 0.9f),
+                KeyDefinition("/", KeyAction.Character("/"), weight = 0.9f),
+                KeyDefinition(".com", KeyAction.Character(".com"), weight = 1.5f),
+                enterKey(state.enterKind, arabic, ios26).copy(weight = 2.3f)
+            )
+            FieldKind.TEXT -> listOf(
+                left,
+                emoji,
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 5f),
+                enterKey(state.enterKind, arabic, ios26)
+            )
+        }
     }
 
     private fun enterKey(kind: EnterKind, arabic: Boolean, ios26: Boolean): KeyDefinition {
