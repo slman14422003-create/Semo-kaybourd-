@@ -142,7 +142,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
     val density = LocalDensity.current
     val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).toDp() } else 0.dp
-    val utilHeight = if (edgeToEdgeIme) navInset.coerceIn(40.dp, 56.dp) else metrics.utilHeight
+    val utilHeight = if (edgeToEdgeIme) navInset.coerceIn(34.dp, 56.dp) else metrics.utilHeight
     val rowHeights = remember(rows, metrics, utilHeight) {
         rows.map { if (isUtilityRow(it)) utilHeight else metrics.rowHeight }
     }
@@ -637,12 +637,6 @@ private fun RowScope.KeyButton(
     }
     val shadowColor = colors.keyShadow
 
-    val longPressHandler: ((Offset) -> Unit)? = when {
-        hasAlternates -> ({ _: Offset -> currentOnLong(def) })
-        def.longPressAction != null -> ({ _: Offset -> currentOnKey(def.longPressAction) })
-        else -> null
-    }
-
     // شريط المسافة: ضغطة = مسافة، وضغطة مطوّلة ثم سحب = لوحة لمس لتحريك المؤشر (مثل آيفون).
     // باقي المفاتيح: ضغط/ضغط مطوّل.
     val gestureModifier = if (isSpace) {
@@ -654,32 +648,41 @@ private fun RowScope.KeyButton(
                 onMove = { dx, dy -> currentOnCursor(dx, dy) }
             )
         }
-    } else {
+    } else if (isBackspace) {
+        // الحذف: فوري ثم تكرار تلقائي عند الاستمرار بالضغط
         Modifier.pointerInput(def) {
             detectTapGestures(
                 onPress = {
                     pressed = true
-                    if (isBackspace) {
-                        // حذف فوري ثم تكرار تلقائي عند الاستمرار بالضغط
-                        currentOnKey(KeyAction.Backspace)
-                        coroutineScope {
-                            val repeat = launch {
-                                delay(400)
-                                while (true) {
-                                    currentOnKey(KeyAction.Backspace)
-                                    delay(50)
-                                }
+                    currentOnKey(KeyAction.Backspace)
+                    coroutineScope {
+                        val repeat = launch {
+                            delay(400)
+                            while (true) {
+                                currentOnKey(KeyAction.Backspace)
+                                delay(50)
                             }
-                            tryAwaitRelease()
-                            repeat.cancel()
                         }
-                    } else {
                         tryAwaitRelease()
+                        repeat.cancel()
                     }
                     pressed = false
-                },
-                onTap = { if (!isBackspace) currentOnKey(def.action) },
-                onLongPress = longPressHandler
+                }
+            )
+        }
+    } else {
+        // باقي المفاتيح: ضغطة تُسجَّل عند رفع الإصبع حتى لو تحرّك قليلًا (بدون حدّ الانزلاق)،
+        // لأن detectTapGestures كان يُلغي الضغطة بالكتابة السريعة فتبدو اللوحة "ما بتلحق".
+        val longPress: (() -> Unit)? = when {
+            hasAlternates -> ({ currentOnLong(def) })
+            def.longPressAction != null -> ({ currentOnKey(def.longPressAction) })
+            else -> null
+        }
+        Modifier.pointerInput(def) {
+            keyGestures(
+                onPressedChange = { pressed = it },
+                onTap = { currentOnKey(def.action) },
+                onLongPress = longPress
             )
         }
     }
@@ -786,6 +789,53 @@ private class BalloonShape(
         }
         val joined = Path.combine(PathOperation.Union, Path.combine(PathOperation.Union, head, neck), base)
         return Outline.Generic(joined)
+    }
+}
+
+/**
+ * إيماءة المفتاح العادي: الضغطة تُسجَّل عند رفع الإصبع بدون إلغاء بسبب حركة صغيرة،
+ * وتُلغى فقط لو استهلكها حدث آخر (كالكتابة بالسحب). الضغطة المطوّلة (إن وُجدت) تُنفَّذ بعد المهلة.
+ */
+private suspend fun PointerInputScope.keyGestures(
+    onPressedChange: (Boolean) -> Unit,
+    onTap: () -> Unit,
+    onLongPress: (() -> Unit)?
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        onPressedChange(true)
+        try {
+            // 1 = رُفع الإصبع (ضغطة)، 2 = أُلغيت، null = انتهت مهلة الضغط المطوّل
+            val timeout = if (onLongPress != null) viewConfiguration.longPressTimeoutMillis else Long.MAX_VALUE
+            val outcome: Int? = withTimeoutOrNull(timeout) {
+                var result = 0
+                while (result == 0) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    result = when {
+                        change == null -> 2
+                        change.isConsumed -> 2
+                        change.changedToUpIgnoreConsumed() -> 1
+                        else -> 0
+                    }
+                }
+                result
+            }
+            when (outcome) {
+                1 -> onTap()
+                null -> {
+                    onLongPress?.invoke()
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) break
+                    }
+                }
+                else -> Unit
+            }
+        } finally {
+            onPressedChange(false)
+        }
     }
 }
 

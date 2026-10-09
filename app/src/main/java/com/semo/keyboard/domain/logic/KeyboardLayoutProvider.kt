@@ -146,9 +146,10 @@ object KeyboardLayoutProvider {
      * ضغطة على الكرة = تبديل اللغة (عربي/إنكليزي)، ضغطة مطوّلة = لوحة المفاتيح التالية بالنظام.
      */
     fun utilityRow(): List<KeyDefinition> = listOf(
-        KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 1.6f, longPressAction = KeyAction.Globe, plain = true),
-        KeyDefinition.spacer(6.8f),
-        KeyDefinition("🎤", KeyAction.Mic, weight = 1.6f, plain = true)
+        // نفس عرض مفتاح 123 ومفتاح return كي تقع الأيقونتان تحتهما بالضبط (مثل آيفون)
+        KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 1.25f, longPressAction = KeyAction.Globe, plain = true),
+        KeyDefinition.spacer(6.25f),
+        KeyDefinition("🎤", KeyAction.Mic, weight = 2.5f, plain = true)
     )
 
     private fun numberRow(state: KeyboardUiState): List<List<KeyDefinition>> =
