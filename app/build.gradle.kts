@@ -12,8 +12,8 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 36          // Android 16
-        versionCode = 9
-        versionName = "2.4.3"
+        versionCode = 10
+        versionName = "2.4.4"
     }
 
     buildFeatures {

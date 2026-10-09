@@ -142,14 +142,13 @@ object KeyboardLayoutProvider {
     }
 
     /**
-     * الصف الأخير تحت صف المسافة (مثل آيفون): كرة أرضية يسارًا وميكروفون يمينًا، بلا خلفية.
+     * الصف الأخير تحت صف المسافة: الكرة الأرضية فقط يسارًا تحت مفتاح 123 بالضبط، والجهة اليمنى فاضية
+     * عمدًا لأن زر إخفاء لوحة المفاتيح الخاص بالنظام (شريط تنقل One UI) يظهر هناك، فيتوازن الصف.
      * ضغطة على الكرة = تبديل اللغة (عربي/إنكليزي)، ضغطة مطوّلة = لوحة المفاتيح التالية بالنظام.
      */
     fun utilityRow(): List<KeyDefinition> = listOf(
-        // نفس عرض مفتاح 123 ومفتاح return كي تقع الأيقونتان تحتهما بالضبط (مثل آيفون)
         KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 1.25f, longPressAction = KeyAction.Globe, plain = true),
-        KeyDefinition.spacer(6.25f),
-        KeyDefinition("🎤", KeyAction.Mic, weight = 2.5f, plain = true)
+        KeyDefinition.spacer(8.75f)
     )
 
     private fun numberRow(state: KeyboardUiState): List<List<KeyDefinition>> =
