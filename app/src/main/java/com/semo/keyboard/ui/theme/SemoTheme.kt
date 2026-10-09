@@ -123,12 +123,22 @@ data class KeyMetrics(
     val keyShape: RoundedCornerShape get() = RoundedCornerShape(keyRadius)
 }
 
-fun keyMetrics(style: KeyboardStyle, size: KeyboardSize): KeyMetrics {
-    // نسب آيفون: ارتفاع المفتاح ≈ 43، المسافة بين الصفوف ≈ 12، وبين المفاتيح ≈ 6
-    val height = when (size) {
-        KeyboardSize.SMALL -> 40.dp
-        KeyboardSize.MEDIUM -> 43.dp
-        KeyboardSize.LARGE -> 47.dp
+/**
+ * قياسات المفاتيح تُحسب من عرض الشاشة بنسب مقيسة بالبكسل من صورة مرجعية لكيبورد آيفون:
+ * عرض المفتاح = 0.82 من خانة الحرف (الفراغ الأفقي 0.18)، ارتفاعه = 1.27 × عرضه،
+ * والمسافة بين الصفوف = 0.41 × عرض المفتاح. [widthDp] عرض اللوحة الفعلي (أقل مع اليد الواحدة).
+ */
+fun keyMetrics(style: KeyboardStyle, size: KeyboardSize, widthDp: Float = 411f): KeyMetrics {
+    val pitch = (widthDp - 6f) / 10f
+    val keyWidth = pitch * 0.82f
+    val factor = when (size) {
+        KeyboardSize.SMALL -> 0.93f
+        KeyboardSize.MEDIUM -> 1f
+        KeyboardSize.LARGE -> 1.09f
     }
-    return KeyMetrics(height, 6.dp, 12.dp, 3.dp, 5.5.dp, 0.dp, 54.dp, 44.dp)
+    val height = (keyWidth * 1.27f * factor).coerceIn(37f, 52f)
+    val rowSpacing = (keyWidth * 0.41f).coerceIn(10f, 16f)
+    val keySpacing = (pitch * 0.18f).coerceIn(5f, 9f)
+    val radius = (keyWidth * 0.17f).coerceIn(5f, 8f)
+    return KeyMetrics(height.dp, keySpacing.dp, rowSpacing.dp, 3.dp, radius.dp, 0.dp, 54.dp, 44.dp)
 }

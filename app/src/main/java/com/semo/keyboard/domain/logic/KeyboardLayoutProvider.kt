@@ -159,10 +159,10 @@ object KeyboardLayoutProvider {
         if (gap <= 0) row else listOf(KeyDefinition.spacer(gap / 2f)) + row + listOf(KeyDefinition.spacer(gap / 2f))
 
     /**
-     * أبعاد آيفون المقيسة: مفتاحا Shift والحذف بعرض 1.22 من عرض الحرف، وبينهما وبين الحروف فراغ 0.28
+     * أبعاد آيفون المقيسة: مفتاحا Shift والحذف بعرض 1.3 من خانة الحرف، وبينهما وبين الحروف فراغ 0.2 (مقيسة من صورة مرجعية لآيفون)
      * (مجموع كل جانب = 1.5 عندما يكون بالصف 7 حروف).
      */
-    private const val EDGE_GAP = 0.28f
+    private const val EDGE_GAP = 0.2f
 
     private fun englishRows(state: KeyboardUiState): List<List<KeyDefinition>> {
         val upper = state.shiftState != ShiftState.OFF
@@ -211,8 +211,8 @@ object KeyboardLayoutProvider {
         val width = letters[0].size.toFloat()
         // المساحة المتبقية بعد حروف الصف الثالث تتوزع بين الفراغ والحذف؛ لو ضاقت (10 حروف) يصير الحذف بعرض حرف
         val remaining = width - letters[2].size
-        val fits = remaining >= 1.22f + EDGE_GAP
-        val backspaceWeight = if (fits) 1.22f else remaining.coerceAtLeast(1f)
+        val fits = remaining >= 1.3f + EDGE_GAP
+        val backspaceWeight = if (fits) 1.3f else remaining.coerceAtLeast(1f)
         val edgeGap = if (fits) EDGE_GAP else 0f
         val lead = (remaining - backspaceWeight - edgeGap).coerceAtLeast(0f)
         val row3 = buildList {

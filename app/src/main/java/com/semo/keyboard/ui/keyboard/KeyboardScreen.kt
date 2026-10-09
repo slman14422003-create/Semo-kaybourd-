@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -131,7 +132,12 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         ThemeMode.DARK -> true
     }
     val colors = remember(state.style, isDark) { semoColors(state.style, isDark) }
-    val metrics = remember(state.style, state.size) { keyMetrics(state.style, state.size) }
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val metrics = remember(state.style, state.size, screenWidthDp, state.oneHand) {
+        // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
+        val width = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
+        keyMetrics(state.style, state.size, width)
+    }
     val rows = remember(
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
         state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind
@@ -142,7 +148,9 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
     val density = LocalDensity.current
     val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).toDp() } else 0.dp
-    val utilHeight = if (edgeToEdgeIme) navInset.coerceIn(34.dp, 56.dp) else metrics.utilHeight
+    // ارتفاع 56dp: مركز الأيقونة على نحو 28dp من أسفل الشاشة، أي بمحاذاة زر إخفاء الكيبورد بشريط One UI
+    // وفوق مؤشر الرجوع للرئيسية بمسافة مشابهة لآيفون (الأيقونات فوق المؤشر مو بمستواه)
+    val utilHeight = if (edgeToEdgeIme) maxOf(navInset, 56.dp) else metrics.utilHeight
     val rowHeights = remember(rows, metrics, utilHeight) {
         rows.map { if (isUtilityRow(it)) utilHeight else metrics.rowHeight }
     }
