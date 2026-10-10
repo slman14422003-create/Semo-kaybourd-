@@ -12,6 +12,9 @@ import com.semo.keyboard.domain.logic.MathEvaluator
 import com.semo.keyboard.domain.logic.SuggestionEngine
 import com.semo.keyboard.domain.logic.SwipeDecoder
 import com.semo.keyboard.domain.logic.WordLists
+import com.semo.keyboard.domain.model.clipImageMime
+import com.semo.keyboard.domain.model.clipImageName
+import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
@@ -25,6 +28,7 @@ import com.semo.keyboard.domain.model.MathResult
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ShiftState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +38,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** منطق الحالة فقط؛ الكتابة الفعلية بالحقل تتم عبر [InputBridge]. */
 class KeyboardViewModel(
@@ -207,23 +212,28 @@ class KeyboardViewModel(
                 if (transient.value.freshClip != null) transient.update { it.copy(freshClip = null) }
                 val ch = action.char.first()
                 if (!ch.isLetter() && ch != '\'' && ch != '’') {
-                    // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة
-                    if (!(ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect() != null)) learnCurrentWord()
+                    // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
+                    val before = bridge.textBeforeCursor(40)
+                    if (!(ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null)) learnWord(SuggestionEngine.currentWord(before))
                 }
                 bridge.commitText(action.char)
                 consumeOneShotShift()
                 refreshSuggestions()
             }
             KeyAction.Space -> {
-                val corrected = applyAutoCorrect()
-                if (corrected == null) learnCurrentWord() else learnWord(corrected.fixed)
-                handleSpace(state.language, state.doubleSpacePeriod)
+                // قراءة واحدة من التطبيق بدل ثلاث (كل قراءة استدعاء بين عمليتين قد يتأخر)
+                val before = bridge.textBeforeCursor(40)
+                val corrected = applyAutoCorrect(before)
+                if (corrected == null) learnWord(SuggestionEngine.currentWord(before)) else learnWord(corrected.fixed)
+                val tail = if (corrected == null) before else before.dropLast(corrected.original.length) + corrected.fixed
+                handleSpace(state.language, state.doubleSpacePeriod, tail.takeLast(2))
                 undo = corrected
                 refreshSuggestions()
             }
             KeyAction.Enter -> {
-                val corrected = applyAutoCorrect()
-                if (corrected == null) learnCurrentWord() else learnWord(corrected.fixed)
+                val before = bridge.textBeforeCursor(40)
+                val corrected = applyAutoCorrect(before)
+                if (corrected == null) learnWord(SuggestionEngine.currentWord(before)) else learnWord(corrected.fixed)
                 bridge.performEnter()
                 autoCapitalize(state.language)
                 refreshSuggestions()
@@ -269,9 +279,9 @@ class KeyboardViewModel(
     }
 
     /** يصحّح الكلمة الجارية لو كانت بجدول التصحيح، ويرجع التصحيح أو null */
-    private fun applyAutoCorrect(): Correction? {
+    private fun applyAutoCorrect(before: String): Correction? {
         if (!uiState.value.autoCorrect || !transient.value.suggestionsAllowed) return null
-        val word = SuggestionEngine.currentWord(bridge.textBeforeCursor(40))
+        val word = SuggestionEngine.currentWord(before)
         if (word.isEmpty()) return null
         val fixed = AutoCorrect.fix(word) ?: return null
         bridge.deleteSurrounding(word.length)
@@ -287,9 +297,18 @@ class KeyboardViewModel(
         val lang = state.language
         val dictionary = if (lang == KeyboardLanguage.ARABIC) WordLists.arabic else WordLists.english
         val learned = learnedWords.value.filter { SuggestionEngine.languageOf(it, lang) == lang }
-        val candidates = SwipeDecoder.decode(path, dictionary, learned, limit = 3)
-        if (candidates.isEmpty()) return
+        // فك المسار على خيط خلفي: مع القاموس الكبير قد يأخذ عشرات الميلي ثانية
+        viewModelScope.launch {
+            val candidates = withContext(Dispatchers.Default) {
+                SwipeDecoder.decode(path, dictionary, learned, limit = 3, language = lang)
+            }
+            if (candidates.isNotEmpty()) commitSwipe(candidates)
+        }
+    }
 
+    private fun commitSwipe(candidates: List<String>) {
+        val state = uiState.value
+        val lang = state.language
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
         undo = null
         val shift = if (lang == KeyboardLanguage.ENGLISH) state.shiftState else ShiftState.OFF
@@ -394,8 +413,7 @@ class KeyboardViewModel(
         transient.update { it.copy(freshClip = null) }
         // نلصق النص الكامل من سجل الحافظة (المعاينة قد تكون مقصوصة)
         val full = state.clipItems.firstOrNull { it.text.startsWith(text) }?.text ?: text
-        bridge.commitText(full)
-        refreshSuggestions()
+        onClipPaste(full)
     }
 
     fun dismissFreshClip() {
@@ -430,6 +448,10 @@ class KeyboardViewModel(
     // ---------- الحافظة والتحرير ----------
 
     fun onClipPaste(text: String) {
+        if (text.isClipImage()) {
+            bridge.commitImage(text.clipImageName(), text.clipImageMime())
+            return
+        }
         bridge.commitText(text)
         refreshSuggestions()
     }
@@ -469,8 +491,7 @@ class KeyboardViewModel(
     private fun setPage(page: KeyboardPage) = transient.update { it.copy(page = page) }
 
     /** مسافتان متتاليتان بعد حرف/رقم = نقطة + مسافة (نمط iOS) */
-    private fun handleSpace(language: KeyboardLanguage, doubleSpacePeriod: Boolean) {
-        val before = bridge.textBeforeCursor(2)
+    private fun handleSpace(language: KeyboardLanguage, doubleSpacePeriod: Boolean, before: String) {
         if (doubleSpacePeriod && before.length == 2 && before[1] == ' ' && before[0].isLetterOrDigit()) {
             bridge.deleteBackward()
             bridge.commitText(". ")
@@ -509,11 +530,6 @@ class KeyboardViewModel(
 
     private fun canLearn(): Boolean = uiState.value.suggestionsEnabled && transient.value.suggestionsAllowed
 
-    private fun learnCurrentWord() {
-        if (!canLearn()) return
-        learnWord(SuggestionEngine.currentWord(bridge.textBeforeCursor(40)))
-    }
-
     private fun learnWord(word: String) {
         if (!canLearn() || word.length < 3) return
         val normalized = if (word.firstOrNull()?.code?.let { it < 0x0600 } == true) word.lowercase() else word
@@ -538,40 +554,43 @@ class KeyboardViewModel(
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             delay(30)
-            doRefreshSuggestions()
+            val state = uiState.value
+            val t = transient.value
+            if (!t.suggestionsAllowed || (!state.suggestionsEnabled && !state.mathResults)) {
+                setSuggestions(emptyList(), "", null)
+                return@launch
+            }
+            // قراءة النص من التطبيق (استدعاء بين عمليتين قد يتأخر) وحساب الاقتراحات بخيط خلفي،
+            // فلا تتجمد الواجهة حتى لو كان التطبيق ثقيلًا أو القاموس كبيرًا
+            val result = withContext(Dispatchers.Default) { computeSuggestions(state, t) }
+            if (result.clearSwipe) clearSwipe()
+            setSuggestions(result.list, result.literal, result.math)
         }
     }
 
-    private fun doRefreshSuggestions() {
-        val state = uiState.value
-        val t = transient.value
-        if (!t.suggestionsAllowed || (!state.suggestionsEnabled && !state.mathResults)) {
-            setSuggestions(emptyList(), "", null)
-            return
-        }
+    private class SuggestionResult(
+        val list: List<String>,
+        val literal: String,
+        val math: MathResult?,
+        val clearSwipe: Boolean
+    )
+
+    private fun computeSuggestions(state: KeyboardUiState, t: LocalState): SuggestionResult {
         val before = bridge.textBeforeCursor(80)
 
         // ناتج العملية الحسابية له الأولوية بالشريط
         if (state.mathResults) {
             val math = MathEvaluator.detect(before)
-            if (math != null) {
-                setSuggestions(emptyList(), "", math)
-                return
-            }
+            if (math != null) return SuggestionResult(emptyList(), "", math, false)
         }
-        if (!state.suggestionsEnabled) {
-            setSuggestions(emptyList(), "", null)
-            return
-        }
+        if (!state.suggestionsEnabled) return SuggestionResult(emptyList(), "", null, false)
 
         // بدائل آخر كلمة كُتبت بالسحب تبقى ظاهرة طالما المؤشر بعدها مباشرة
+        var clear = false
         val swipe = t.swipeWord
         if (swipe != null) {
-            if (before.endsWith("$swipe ")) {
-                setSuggestions(t.swipeAlternates, "", null)
-                return
-            }
-            clearSwipe()
+            if (before.endsWith("$swipe ")) return SuggestionResult(t.swipeAlternates, "", null, false)
+            clear = true
         }
 
         val word = SuggestionEngine.currentWord(before)
@@ -583,14 +602,13 @@ class KeyboardViewModel(
                 EmojiSuggestions.forWord(SuggestionEngine.currentWord(trimmed))
             } else null
             val base = if (atStart) SuggestionEngine.starters(state.language) else emptyList()
-            setSuggestions(if (emoji != null) listOf(emoji) + base.take(2) else base, "", null)
-        } else {
-            val language = SuggestionEngine.languageOf(word, state.language)
-            val completions = SuggestionEngine.suggest(word, language, learnedWords.value, limit = 2)
-                .filter { !it.equals(word, ignoreCase = true) }
-            val emoji = EmojiSuggestions.forWord(word)
-            setSuggestions(if (emoji != null) completions.take(1) + emoji else completions, word, null)
+            return SuggestionResult(if (emoji != null) listOf(emoji) + base.take(2) else base, "", null, clear)
         }
+        val language = SuggestionEngine.languageOf(word, state.language)
+        val completions = SuggestionEngine.suggest(word, language, learnedWords.value, limit = 2)
+            .filter { !it.equals(word, ignoreCase = true) }
+        val emoji = EmojiSuggestions.forWord(word)
+        return SuggestionResult(if (emoji != null) completions.take(1) + emoji else completions, word, null, clear)
     }
 
     private companion object {

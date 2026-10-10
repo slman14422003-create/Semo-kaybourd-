@@ -1,5 +1,6 @@
 package com.semo.keyboard.ime
 
+import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
@@ -20,6 +21,9 @@ import android.view.inputmethod.InputMethodManager
 import android.view.inputmethod.InputMethodSubtype
 import android.widget.Toast
 import androidx.core.view.WindowCompat
+import androidx.core.view.inputmethod.EditorInfoCompat
+import androidx.core.view.inputmethod.InputConnectionCompat
+import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
@@ -34,10 +38,13 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.semo.keyboard.data.ClipImageStore
 import com.semo.keyboard.data.ClipboardRepository
+import com.semo.keyboard.data.DictionaryManager
 import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.EditAction
+import com.semo.keyboard.domain.model.clipImageKey
 import com.semo.keyboard.domain.model.EnterKind
 import com.semo.keyboard.domain.model.FieldKind
 import com.semo.keyboard.domain.model.KeyboardPage
@@ -54,6 +61,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * خدمة لوحة المفاتيح. تستضيف واجهة Compose داخل نافذة الـ IME.
@@ -88,6 +96,22 @@ class SemoKeyboardService :
     /** الصوت والاهتزاز على خيط خلفي كي لا يؤخّرا رسم الضغطة التالية على الخيط الرئيسي */
     private val feedbackThread = HandlerThread("semo-feedback").also { it.start() }
     private val feedbackHandler = Handler(feedbackThread.looper)
+
+    /** الاهتزاز بخيط مستقل عن الصوت: توقّف أحدهما (AudioTrack) لا يؤخّر الآخر */
+    private val hapticThread = HandlerThread("semo-haptic").also { it.start() }
+    private val hapticHandler = Handler(hapticThread.looper)
+
+    /**
+     * قراءات حقل الإدخال (getCursorCapsMode...) استدعاءات بين عمليتين تتجمّد حتى يردّ التطبيق؛ كانت تُنفَّذ
+     * على الخيط الرئيسي مع كل ضغطة فتتقطّع الكتابة بالتطبيقات الثقيلة. هلأ تُنفَّذ هنا.
+     */
+    private val ioThread = HandlerThread("semo-io").also { it.start() }
+    private val ioHandler = Handler(ioThread.looper)
+
+    /** هل يوجد نص محدد؟ نحدّثه من onUpdateSelection بدل سؤال التطبيق (getSelectedText) عند كل حذف */
+    @Volatile private var hasSelection = false
+
+    private val imageStore by lazy { ClipImageStore(applicationContext) }
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
@@ -132,7 +156,13 @@ class SemoKeyboardService :
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cursorMovedTask = Runnable {
         if (::viewModel.isInitialized) {
-            viewModel.onCursorMoved(shouldCapitalize(currentInputEditorInfo?.inputType ?: 0))
+            val inputType = currentInputEditorInfo?.inputType ?: 0
+            ioHandler.post {
+                val capitalize = shouldCapitalize(inputType)
+                mainHandler.post {
+                    if (::viewModel.isInitialized) viewModel.onCursorMoved(capitalize)
+                }
+            }
         }
     }
 
@@ -157,6 +187,9 @@ class SemoKeyboardService :
         )[KeyboardViewModel::class.java]
 
         (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.addPrimaryClipChangedListener(clipListener)
+
+        // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
+        ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
     }
 
     /** يحفظ آخر نص منسوخ بسجل الحافظة (إلا بحقول كلمات المرور أو لو علّم التطبيق النص كحساس) */
@@ -170,7 +203,24 @@ class SemoKeyboardService :
                 val sensitive = clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true
                 if (sensitive) return
             }
-            val text = clip.getItemAt(0).coerceToText(this)?.toString().orEmpty()
+            val item = clip.getItemAt(0)
+            val desc = clip.description
+            val imageMime = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }.firstOrNull { it.startsWith("image/") }
+            val imageUri = item.uri
+            if (imageMime != null && imageUri != null) {
+                // صورة (لقطة شاشة مثلًا): ننسخها لتخزين التطبيق لأن رابط الحافظة مؤقت
+                val id = imageUri.toString()
+                if (id == lastCapturedClip) return
+                lastCapturedClip = id
+                serviceScope.launch {
+                    val name = withContext(Dispatchers.IO) { imageStore.saveFromUri(imageUri, imageMime) } ?: return@launch
+                    val key = clipImageKey(name, imageMime)
+                    clipboardRepository.add(key)
+                    viewModel.onClipboardCopied(key)
+                }
+                return
+            }
+            val text = item.coerceToText(this)?.toString().orEmpty()
             if (text.isBlank() || text == lastCapturedClip) return
             lastCapturedClip = text
             serviceScope.launch { clipboardRepository.add(text) }
@@ -254,6 +304,7 @@ class SemoKeyboardService :
             else -> FieldKind.TEXT
         }
         KeyboardStatusHelper.markImeSeen(this)
+        hasSelection = (info?.initialSelStart ?: 0) != (info?.initialSelEnd ?: 0)
         viewModel.onStartInput(page, shouldCapitalize(inputType), enterKindFor(info), !noSuggestions, fieldKind)
         captureClipboard()
     }
@@ -263,6 +314,7 @@ class SemoKeyboardService :
         candidatesStart: Int, candidatesEnd: Int
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        hasSelection = newSelStart != newSelEnd
         // نجمع تحديثات المؤشر المتتالية (تصل مع كل حرف) بمهمة واحدة، لأن كل واحدة تكلّف استدعاءات للتطبيق
         mainHandler.removeCallbacks(cursorMovedTask)
         mainHandler.postDelayed(cursorMovedTask, 40)
@@ -291,6 +343,8 @@ class SemoKeyboardService :
             clickPlayer = null
         }
         feedbackThread.quitSafely()
+        hapticThread.quitSafely()
+        ioThread.quitSafely()
         KeyboardStatusHelper.setImeVisible(this, false)
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
@@ -325,9 +379,14 @@ class SemoKeyboardService :
         override fun deleteBackward() {
             val ic = currentInputConnection ?: return
             runCatching {
-                // لو في نص محدد نحذفه كله، وإلا نرسل DEL حقيقي (يتعامل صح مع الإيموجي وأزواج الـ surrogate)
-                if (!ic.getSelectedText(0).isNullOrEmpty()) ic.commitText("", 1)
-                else sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DEL)
+                // لو في نص محدد نحذفه كله، وإلا نرسل DEL حقيقي (يتعامل صح مع الإيموجي وأزواج الـ surrogate).
+                // حالة التحديد تأتينا من onUpdateSelection؛ سؤال التطبيق (getSelectedText) بكل حذف كان يجمّد الواجهة.
+                if (hasSelection) {
+                    ic.commitText("", 1)
+                    hasSelection = false
+                } else {
+                    sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DEL)
+                }
             }
         }
 
@@ -410,12 +469,40 @@ class SemoKeyboardService :
         override fun textBeforeCursor(length: Int): String =
             runCatching { currentInputConnection?.getTextBeforeCursor(length, 0)?.toString() }.getOrNull().orEmpty()
 
+        override fun commitImage(fileName: String, mime: String): Boolean {
+            val uri = runCatching { imageStore.contentUri(fileName) }.getOrNull() ?: return false
+            val ic = currentInputConnection
+            val info = currentInputEditorInfo
+            if (ic != null && info != null) {
+                val supported = EditorInfoCompat.getContentMimeTypes(info)
+                if (supported.any { ClipDescription.compareMimeTypes(mime, it) }) {
+                    val content = InputContentInfoCompat(uri, ClipDescription("image", arrayOf(mime)), null)
+                    val ok = runCatching {
+                        InputConnectionCompat.commitContent(
+                            ic, info, content, InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null
+                        )
+                    }.getOrDefault(false)
+                    if (ok) return true
+                }
+            }
+            // الحقل لا يقبل الصور مباشرة: ننسخها للحافظة ليلصقها المستخدم بتطبيق يدعم ذلك
+            runCatching {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                lastCapturedClip = uri.toString()
+                cm.setPrimaryClip(ClipData.newUri(contentResolver, "image", uri))
+                Toast.makeText(
+                    this@SemoKeyboardService,
+                    "هذا الحقل لا يقبل الصور مباشرة، نُسخت الصورة للحافظة ويمكنك لصقها بتطبيق يدعم الصور",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            return false
+        }
+
         override fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback, volume: Float) {
             if (!sound && !haptic) return
-            feedbackHandler.post {
-                if (sound) runCatching { clickPlayer?.play(kind, volume) }
-                if (haptic) runCatching { vibrateTick(kind) }
-            }
+            if (haptic) hapticHandler.post { runCatching { vibrateTick(kind) } }
+            if (sound) feedbackHandler.post { runCatching { clickPlayer?.play(kind, volume) } }
         }
     }
 

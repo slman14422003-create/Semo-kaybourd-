@@ -46,6 +46,13 @@ object SuggestionEngine {
             if (out.size >= limit) break
             if (w.length > p.length && w.lowercase().startsWith(p)) out.add(w)
         }
+        // القاموس الكبير (إن نُزِّل من الإعدادات) يكمّل ما لم تغطّه القائمة المدمجة
+        if (out.size < limit) {
+            for (w in BigDictionary.complete(p, language, limit)) {
+                if (out.size >= limit) break
+                out.add(w)
+            }
+        }
 
         val result = out.map { matchCase(prefix, it) }
         return if (result.isEmpty()) listOf(prefix) else result

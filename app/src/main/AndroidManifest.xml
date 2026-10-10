@@ -9,6 +9,9 @@
     <!-- الاهتزاز الخفيف عند الضغط على المفاتيح (الصلاحية الوحيدة المطلوبة، وهي عادية ولا تُسأل من المستخدم) -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- للزر اليدوي «تنزيل القاموس الكبير» بإعدادات التطبيق فقط؛ خدمة لوحة المفاتيح نفسها لا تتصل بالإنترنت -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -45,6 +48,17 @@
                 android:name="android.view.im"
                 android:resource="@xml/method" />
         </service>
+
+        <!-- مشاركة صور الحافظة المحفوظة مع التطبيق الذي نلصق فيه (commitContent) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.clipfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/clip_file_paths" />
+        </provider>
 
     </application>
 </manifest>

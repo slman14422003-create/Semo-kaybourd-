@@ -7,6 +7,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.semo.keyboard.domain.model.ClipItem
+import com.semo.keyboard.domain.model.clipImageName
+import com.semo.keyboard.domain.model.isClipImage
+import com.semo.keyboard.domain.model.isImage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -19,6 +22,7 @@ class ClipboardRepository(context: Context) {
     private val appContext = context.applicationContext
     private val store = appContext.semoDataStore
     private val key = stringPreferencesKey("clipboard_items")
+    private val images = ClipImageStore(appContext)
 
     /** قبل فك قفل الجهاز بعد التشغيل (Direct Boot) تكون القائمة فارغة ولا نكتب شيئًا */
     val items: Flow<List<ClipItem>> = appContext.credentialPrefsFlow()
@@ -34,7 +38,10 @@ class ClipboardRepository(context: Context) {
             val pinned = index >= 0 && list[index].pinned
             if (index >= 0) list.removeAt(index)
             list.add(0, ClipItem(t, pinned))
-            p[key] = encode(limit(list))
+            val kept = limit(list)
+            // الصور المحذوفة بحدّ العدد تُمسح ملفاتها أيضًا
+            list.filter { it.isImage && it !in kept }.forEach { images.delete(it.text.clipImageName()) }
+            p[key] = encode(kept)
         }
     }
 
@@ -48,24 +55,35 @@ class ClipboardRepository(context: Context) {
 
     suspend fun remove(text: String) {
         if (!appContext.isUserStorageUnlocked()) return
+        if (text.isClipImage()) images.delete(text.clipImageName())
         store.edit { p -> p[key] = encode(decode(p[key]).filterNot { it.text == text }) }
     }
 
     /** يمسح كل العناصر غير المثبّتة */
     suspend fun clearUnpinned() {
         if (!appContext.isUserStorageUnlocked()) return
-        store.edit { p -> p[key] = encode(decode(p[key]).filter { it.pinned }) }
+        store.edit { p ->
+            val all = decode(p[key])
+            all.filter { !it.pinned && it.isImage }.forEach { images.delete(it.text.clipImageName()) }
+            p[key] = encode(all.filter { it.pinned })
+        }
     }
 
     suspend fun clearAll() {
         if (!appContext.isUserStorageUnlocked()) return
+        images.deleteAll()
         store.edit { p -> p.remove(key) }
     }
 
     private fun limit(list: List<ClipItem>): List<ClipItem> {
         var unpinned = 0
+        var unpinnedImages = 0
         return list.filter { item ->
-            if (item.pinned) true else { unpinned++; unpinned <= MAX_UNPINNED }
+            when {
+                item.pinned -> true
+                item.isImage -> { unpinnedImages++; unpinnedImages <= MAX_UNPINNED_IMAGES }
+                else -> { unpinned++; unpinned <= MAX_UNPINNED }
+            }
         }
     }
 
@@ -82,6 +100,7 @@ class ClipboardRepository(context: Context) {
     private companion object {
         const val MAX_LENGTH = 5000
         const val MAX_UNPINNED = 30
+        const val MAX_UNPINNED_IMAGES = 10
     }
 }
 

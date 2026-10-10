@@ -89,6 +89,18 @@ enum class EnterKind { RETURN, SEARCH, SEND, GO, DONE, NEXT }
 /** عنصر من سجل الحافظة */
 data class ClipItem(val text: String, val pinned: Boolean)
 
+/**
+ * عنصر الحافظة الصورة يُخزَّن كنص خاص: بادئة + اسم الملف + نوع الصورة. الملف نفسه بتخزين التطبيق
+ * (ClipImageStore)، وبهذا لا يتغيّر شكل تخزين الحافظة ولا حدّ العناصر ولا التثبيت.
+ */
+const val CLIP_IMAGE_PREFIX = "\u0002img|"
+
+fun clipImageKey(fileName: String, mime: String): String = "$CLIP_IMAGE_PREFIX$fileName|$mime"
+fun String.isClipImage(): Boolean = startsWith(CLIP_IMAGE_PREFIX)
+fun String.clipImageName(): String = removePrefix(CLIP_IMAGE_PREFIX).substringBefore('|')
+fun String.clipImageMime(): String = removePrefix(CLIP_IMAGE_PREFIX).substringAfter('|', "image/png")
+val ClipItem.isImage: Boolean get() = text.isClipImage()
+
 /** ناتج عملية حسابية مكتوبة قبل المؤشر (مثل 60*30+20 → 1820) */
 data class MathResult(val expression: String, val value: String)
 

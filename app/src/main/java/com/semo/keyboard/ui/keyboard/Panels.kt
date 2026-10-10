@@ -2,6 +2,7 @@ package com.semo.keyboard.ui.keyboard
 
 import android.graphics.Paint
 import android.util.Patterns
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,12 +37,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
@@ -48,10 +52,15 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -62,18 +71,24 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.semo.keyboard.R
+import com.semo.keyboard.data.ClipImageStore
 import com.semo.keyboard.domain.logic.EmojiCategory
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.ClipItem
+import com.semo.keyboard.domain.model.clipImageName
+import com.semo.keyboard.domain.model.isClipImage
+import com.semo.keyboard.domain.model.isImage
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardPage
 import com.semo.keyboard.domain.model.KeyboardUiState
 import com.semo.keyboard.ui.theme.SemoKeyboardColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ============================ أدوات مشتركة ============================
 
@@ -458,6 +473,7 @@ private fun EmojiCellView(
         modifier = Modifier
             .fillMaxWidth()
             .height(46.dp)
+            .graphicsLayer { }
             .drawBehind {
                 if (pressed) {
                     drawRoundRect(
@@ -486,6 +502,7 @@ private val DeleteRed = Color(0xFFFF453A)
 private fun clipKindLabel(text: String, arabic: Boolean): String {
     val t = text.trim()
     return when {
+        text.isClipImage() -> tr(arabic, "صورة", "Image")
         Patterns.WEB_URL.matcher(t).matches() -> tr(arabic, "رابط", "Link")
         Patterns.EMAIL_ADDRESS.matcher(t).matches() -> tr(arabic, "بريد", "Email")
         t.length >= 5 && t.all { it.isDigit() || it == '+' || it == '-' || it == '(' || it == ')' || it == ' ' } ->
@@ -680,15 +697,19 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 .background(if (pressed) colors.keyPressed else colors.key, RoundedCornerShape(14.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            Text(
-                text = item.text,
-                color = colors.text,
-                fontSize = 14.sp,
-                lineHeight = 19.sp,
-                maxLines = 6,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(textDirection = TextDirection.Content)
-            )
+            if (item.isImage) {
+                ClipImageThumb(item.text.clipImageName(), colors)
+            } else {
+                Text(
+                    text = item.text,
+                    color = colors.text,
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(textDirection = TextDirection.Content)
+                )
+            }
             Spacer(Modifier.height(8.dp))
             if (menu) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -720,6 +741,44 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                     }
                 }
             }
+        }
+    }
+}
+
+/** مصغّرة صورة من الحافظة (تُفك بخيط خلفي وتُخزَّن مؤقتًا كي لا تتقطع القائمة) */
+@Composable
+private fun ClipImageThumb(name: String, colors: SemoKeyboardColors) {
+    val context = LocalContext.current
+    val store = remember(context) { ClipImageStore(context) }
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, name) {
+        value = withContext(Dispatchers.IO) { store.thumbnail(name)?.asImageBitmap() }
+    }
+    val image = bitmap
+    if (image != null) {
+        val ratio = (image.width.toFloat() / image.height.toFloat()).coerceIn(0.7f, 1.8f)
+        Image(
+            bitmap = image,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(ratio)
+                .clip(RoundedCornerShape(9.dp))
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp)
+                .background(colors.chip, RoundedCornerShape(9.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_tool_clipboard),
+                contentDescription = null,
+                tint = colors.textMuted,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

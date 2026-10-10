@@ -78,6 +78,8 @@ import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.HideButtonMode
+import com.semo.keyboard.data.DictionaryManager
+import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.OneHandMode
@@ -92,7 +94,9 @@ import com.semo.keyboard.ui.theme.SemoAppTheme
 import com.semo.keyboard.ui.theme.SemoPalette
 import com.semo.keyboard.util.KeyboardStatusHelper
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -440,6 +444,8 @@ private fun SettingsScreen(
             SwitchRow("تصحيح تلقائي (dont ← don't، الى ← إلى)", R.drawable.ic_ios_backspace, IconTeal, settings.autoCorrect) { scope.launch { repo.setAutoCorrect(it) } }
             Divider()
             SwitchRow("ناتج العمليات الحسابية (60*30+20)", R.drawable.ic_tool_settings, IconPink, settings.mathResults) { scope.launch { repo.setMathResults(it) } }
+            Divider()
+            DictionaryBlock()
         }
 
         // ---- الصوت والاهتزاز ----
@@ -499,7 +505,7 @@ private fun SettingsScreen(
         // ---- الخصوصية ----
         Section("الخصوصية والأذونات") {
             Text(
-                "سيمو كيبورد ما بتتصل بالإنترنت. سجل الحافظة والكلمات المتعلَّمة بيتخزنوا على جهازك فقط، وما بيتسجلوا بحقول كلمات المرور. الإذن الوحيد المستخدم هو الاهتزاز عند الضغط، وهو إذن عادي ما بيحتاج موافقتك.",
+                "خدمة لوحة المفاتيح نفسها ما بتتصل بالإنترنت أبدًا. الاتصال الوحيد هو لما تضغط بنفسك «تنزيل القاموس» بإعدادات الكتابة (ملف كلمات من GitHub). سجل الحافظة (نصوص وصور) والكلمات المتعلَّمة بيتخزنوا على جهازك فقط، وما بيتسجلوا بحقول كلمات المرور. الأذونات: الاهتزاز عند الضغط، والإنترنت لزر التنزيل فقط، وكلاهما عادي ما بيحتاج موافقتك.",
                 color = SemoPalette.TextSecondary,
                 fontSize = 13.sp,
                 lineHeight = 21.sp,
@@ -657,6 +663,83 @@ private fun SwitchRow(title: String, iconRes: Int, tint: Color, checked: Boolean
                 uncheckedBorderColor = SemoPalette.Stroke
             )
         )
+    }
+}
+
+/** تنزيل القاموس الكبير (إنكليزي + عربي) ودمجه بالإكمال التلقائي والكتابة بالسحب */
+@Composable
+private fun DictionaryBlock() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var downloaded by remember { mutableStateOf(DictionaryManager.hasDownloaded(context)) }
+    var counts by remember {
+        mutableStateOf(BigDictionary.size(KeyboardLanguage.ENGLISH) to BigDictionary.size(KeyboardLanguage.ARABIC))
+    }
+    LaunchedEffect(Unit) {
+        if (downloaded && counts.first == 0 && counts.second == 0) {
+            withContext(Dispatchers.IO) { DictionaryManager.loadAll(context) }
+            counts = BigDictionary.size(KeyboardLanguage.ENGLISH) to BigDictionary.size(KeyboardLanguage.ARABIC)
+        }
+    }
+    Block("قاموس الاقتراحات الكبير", R.drawable.ic_ios_emoji, IconBlue) {
+        Text(
+            "ينزّل قائمتين مرتبتين حسب الشيوع (50 ألف كلمة إنكليزية و50 ألف عربية، من FrequencyWords / OpenSubtitles، رخصة CC-BY-SA 4.0) ويدمجهما مع الاقتراحات والكتابة بالسحب. حجمهما نحو 1MB، ويتم التنزيل مرة واحدة بضغطتك فقط.",
+            color = SemoPalette.TextHint,
+            fontSize = 12.sp,
+            lineHeight = 18.sp
+        )
+        val summary = when {
+            status.isNotEmpty() -> status
+            downloaded -> "محمّل: ${counts.first} كلمة إنكليزية · ${counts.second} كلمة عربية"
+            else -> "غير محمّل (تعمل القوائم المدمجة الصغيرة فقط)"
+        }
+        Text(summary, color = SemoPalette.TextSecondary, fontSize = 13.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SolidButton(
+                text = if (downloaded) "تحديث القاموس" else "تنزيل القاموس",
+                enabled = !busy,
+                modifier = Modifier.weight(1f)
+            ) {
+                scope.launch {
+                    busy = true
+                    status = "جاري الاتصال..."
+                    val result = withContext(Dispatchers.IO) {
+                        DictionaryManager.download(context) { message -> status = message }
+                    }
+                    result.onSuccess { (en, ar) ->
+                        counts = en to ar
+                        downloaded = true
+                        status = "تم التنزيل: $en كلمة إنكليزية · $ar كلمة عربية"
+                    }.onFailure {
+                        status = "فشل التنزيل، تأكد من الاتصال بالإنترنت ثم أعد المحاولة"
+                    }
+                    busy = false
+                }
+            }
+            if (downloaded) {
+                SolidButton(text = "حذف", enabled = !busy, modifier = Modifier.weight(1f)) {
+                    DictionaryManager.delete(context)
+                    downloaded = false
+                    counts = 0 to 0
+                    status = "حُذف القاموس المنزّل"
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SolidButton(text: String, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .background(if (enabled) SemoPalette.Accent else SemoPalette.SurfaceHigh, RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 11.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = if (enabled) Color.White else SemoPalette.TextHint, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 

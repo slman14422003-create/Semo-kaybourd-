@@ -18,6 +18,8 @@ interface InputBridge {
     fun switchKeyboard()
     /** يخفي لوحة المفاتيح (نفس عمل سهم الإخفاء بشريط التنقل) */
     fun hideKeyboard()
+    /** يلصق صورة من سجل الحافظة (commitContent). يرجع false لو الحقل لا يقبل الصور (فتُنسخ للحافظة بدلها) */
+    fun commitImage(fileName: String, mime: String): Boolean
     fun textBeforeCursor(length: Int): String
     fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback = KeyFeedback.STANDARD, volume: Float = 1f)
     /** تحريك المؤشر: قيمة موجبة = يمين، سالبة = يسار */

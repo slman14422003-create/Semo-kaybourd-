@@ -105,6 +105,7 @@ import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.KeyAction
+import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardPage
@@ -517,7 +518,7 @@ private fun StripIconButton(
 
 /** شريحة لصق سريع بشريط الاقتراحات: تظهر لمدة قصيرة بعد نسخ نص جديد (مثل خانة "لصق" بآيفون) */
 @Composable
-private fun RowScope.FreshClipChip(text: String, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
+private fun RowScope.FreshClipChip(text: String, arabic: Boolean, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
     Box(
         modifier = Modifier
             .weight(1f)
@@ -540,7 +541,7 @@ private fun RowScope.FreshClipChip(text: String, colors: SemoKeyboardColors, vie
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = text.replace('\n', ' '),
+                text = if (text.isClipImage()) tr(arabic, "صورة منسوخة · اضغط للصق", "Copied image · tap to paste") else text.replace('\n', ' '),
                 color = colors.suggestion,
                 fontSize = 15.sp,
                 maxLines = 1,
@@ -600,7 +601,7 @@ private fun RowScope.SuggestionsRow(
 
     val fresh = state.freshClip
     if (fresh != null && state.literal.isEmpty()) {
-        FreshClipChip(fresh, colors, viewModel)
+        FreshClipChip(fresh, state.language == KeyboardLanguage.ARABIC, colors, viewModel)
         return
     }
 
@@ -852,20 +853,23 @@ private fun RowScope.KeyButton(
             }
         }
 
+        // شكل البالون يُنشأ مرة لكل مفتاح (لا عند كل ضغطة) ويحتفظ بمخططه: كان بناؤه بعمليات Path.combine
+        // عند كل لمسة يسبب تقطيعًا بلحظة الضغط.
+        val balloonDensity = LocalDensity.current
+        val balloonShape = remember(balloonDensity, metrics) {
+            BalloonShape(
+                insetPx = with(balloonDensity) { 10.dp.toPx() },
+                keyHeightPx = with(balloonDensity) { metrics.keyHeight.toPx() },
+                headRadiusPx = with(balloonDensity) { 11.dp.toPx() },
+                keyRadiusPx = with(balloonDensity) { metrics.keyRadius.toPx() }
+            )
+        }
+
         // فقاعة معاينة الحرف بشكل بالون iOS: رأس أعرض من المفتاح يتصل به برقبة، ويغطي المفتاح كله.
         // بالصف الأول نقصّر الرأس كي لا تقصّه نافذة اللوحة.
         if (showPreview && pressed && isLetterKey && !hideLabels) {
-            val density = LocalDensity.current
             val headHeight = if (isTopRow) 40.dp else 56.dp
             val inset = 10.dp
-            val balloonShape = remember(density, metrics) {
-                BalloonShape(
-                    insetPx = with(density) { inset.toPx() },
-                    keyHeightPx = with(density) { metrics.keyHeight.toPx() },
-                    headRadiusPx = with(density) { 11.dp.toPx() },
-                    keyRadiusPx = with(density) { metrics.keyRadius.toPx() }
-                )
-            }
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -903,7 +907,19 @@ private class BalloonShape(
     private val headRadiusPx: Float,
     private val keyRadiusPx: Float
 ) : Shape {
+    private var cachedSize: Size = Size.Zero
+    private var cachedOutline: Outline? = null
+
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val cached = cachedOutline
+        if (cached != null && cachedSize == size) return cached
+        val outline = build(size)
+        cachedSize = size
+        cachedOutline = outline
+        return outline
+    }
+
+    private fun build(size: Size): Outline {
         val w = size.width
         val h = size.height
         val keyTop = h - keyHeightPx
