@@ -7,6 +7,7 @@ import com.semo.keyboard.data.ClipboardRepository
 import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.logic.AutoCorrect
+import com.semo.keyboard.domain.logic.EmojiSuggestions
 import com.semo.keyboard.domain.logic.MathEvaluator
 import com.semo.keyboard.domain.logic.SuggestionEngine
 import com.semo.keyboard.domain.logic.SwipeDecoder
@@ -58,7 +59,9 @@ class KeyboardViewModel(
         val mathResult: MathResult? = null,
         /** آخر كلمة كُتبت بالسحب وبدائلها، لاستبدالها باختيار بديل من الشريط */
         val swipeWord: String? = null,
-        val swipeAlternates: List<String> = emptyList()
+        val swipeAlternates: List<String> = emptyList(),
+        /** نص نُسخ للتو (شريحة اللصق السريع بشريط الاقتراحات) */
+        val freshClip: String? = null
     )
 
     /** تصحيح تلقائي حصل للتو: الرجوع (Backspace) مباشرة بعده يعيد الكلمة الأصلية */
@@ -112,7 +115,8 @@ class KeyboardViewModel(
                 mathResult = t.mathResult,
                 toolbarOpen = t.toolbarOpen,
                 clipItems = clips,
-                recentEmojis = t.recentEmojis
+                recentEmojis = s.recentEmojis,
+                freshClip = t.freshClip
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, KeyboardUiState())
 
@@ -157,14 +161,39 @@ class KeyboardViewModel(
 
     // ---------- أحداث من الواجهة ----------
 
-    fun onKeyPressed(action: KeyAction) {
+    /** ضغطة مع صوت واهتزاز (الحذف المتكرر، الضغطات المطوّلة، وغيرها) */
+    fun onKeyPressed(action: KeyAction) = handleKey(action, feedback = true)
+
+    /** ضغطة تأكيد عند رفع الإصبع: الصوت والاهتزاز يكونان قد حصلا لحظة اللمس عبر [onKeyDown] */
+    fun onKeyTapped(action: KeyAction) = handleKey(action, feedback = false)
+
+    /**
+     * صوت واهتزاز لحظة لمس المفتاح (مثل آيفون)، لا لحظة رفع الإصبع: كان الاهتزاز يتأخر حتى الرفع
+     * فيبدو الضغط "متأخرًا ومقطّعًا"، والآن الإحساس فوري وسلس.
+     */
+    fun onKeyDown(action: KeyAction) {
         val state = uiState.value
-        val kind = when (action) {
-            is KeyAction.Character -> KeyFeedback.STANDARD
-            KeyAction.Backspace -> KeyFeedback.DELETE
-            else -> KeyFeedback.MODIFIER
+        if (!state.soundEnabled && !state.hapticEnabled) return
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, feedbackKind(action), state.soundVolume)
+    }
+
+    /** نقرة خفيفة بلا صوت (تبديل فئة، لمس عنصر بالواجهة) */
+    fun onSelectionTick() {
+        val state = uiState.value
+        if (state.hapticEnabled) bridge.keyFeedback(false, true, KeyFeedback.SELECTION)
+    }
+
+    private fun feedbackKind(action: KeyAction): KeyFeedback = when (action) {
+        is KeyAction.Character -> KeyFeedback.STANDARD
+        KeyAction.Backspace -> KeyFeedback.DELETE
+        else -> KeyFeedback.MODIFIER
+    }
+
+    private fun handleKey(action: KeyAction, feedback: Boolean) {
+        val state = uiState.value
+        if (feedback) {
+            bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, feedbackKind(action), state.soundVolume)
         }
-        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, kind, state.soundVolume)
         if (transient.value.alternates.isNotEmpty()) dismissAlternates()
 
         // أي مفتاح غير الحذف يلغي إمكانية التراجع عن التصحيح التلقائي
@@ -175,6 +204,7 @@ class KeyboardViewModel(
 
         when (action) {
             is KeyAction.Character -> {
+                if (transient.value.freshClip != null) transient.update { it.copy(freshClip = null) }
                 val ch = action.char.first()
                 if (!ch.isLetter() && ch != '\'' && ch != '’') {
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة
@@ -288,7 +318,7 @@ class KeyboardViewModel(
     fun onKeyLongPressed(key: KeyDefinition) {
         if (key.longPressChars.isEmpty()) return
         val state = uiState.value
-        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
+        bridge.keyFeedback(false, state.hapticEnabled, KeyFeedback.LONG_PRESS)
         transient.update { it.copy(alternates = key.longPressChars) }
     }
 
@@ -337,9 +367,39 @@ class KeyboardViewModel(
         val state = uiState.value
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
         bridge.commitText(emoji)
-        transient.update { t ->
-            t.copy(recentEmojis = (listOf(emoji) + t.recentEmojis.filter { it != emoji }).take(MAX_RECENT_EMOJIS))
+        val updated = (listOf(emoji) + state.recentEmojis.filter { it != emoji }).take(MAX_RECENT_EMOJIS)
+        viewModelScope.launch { settingsRepository.setRecentEmojis(updated) }
+    }
+
+    // ---------- شريحة اللصق السريع (نص نُسخ للتو) ----------
+
+    private var freshClipJob: Job? = null
+
+    /** تُستدعى من الخدمة عند نسخ نص جديد: تظهر شريحة لصق سريعة بالشريط لمدة 90 ثانية */
+    fun onClipboardCopied(text: String) {
+        val preview = text.trim().take(160)
+        if (preview.isEmpty()) return
+        transient.update { it.copy(freshClip = preview) }
+        freshClipJob?.cancel()
+        freshClipJob = viewModelScope.launch {
+            delay(FRESH_CLIP_MS)
+            transient.update { if (it.freshClip == preview) it.copy(freshClip = null) else it }
         }
+    }
+
+    fun onFreshClipPaste() {
+        val text = transient.value.freshClip ?: return
+        val state = uiState.value
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, KeyFeedback.MODIFIER, state.soundVolume)
+        transient.update { it.copy(freshClip = null) }
+        // نلصق النص الكامل من سجل الحافظة (المعاينة قد تكون مقصوصة)
+        val full = state.clipItems.firstOrNull { it.text.startsWith(text) }?.text ?: text
+        bridge.commitText(full)
+        refreshSuggestions()
+    }
+
+    fun dismissFreshClip() {
+        transient.update { it.copy(freshClip = null) }
     }
 
     // ---------- شريط الأدوات والصفحات ----------
@@ -401,7 +461,7 @@ class KeyboardViewModel(
     /** بداية وضع لوحة اللمس: اهتزاز خفيف كما بآيفون */
     fun onTrackpadStart() {
         val state = uiState.value
-        bridge.keyFeedback(false, state.hapticEnabled)
+        bridge.keyFeedback(false, state.hapticEnabled, KeyFeedback.LONG_PRESS)
     }
 
     // ---------- داخلي ----------
@@ -518,12 +578,18 @@ class KeyboardViewModel(
         if (word.isEmpty()) {
             val trimmed = before.trimEnd()
             val atStart = trimmed.isEmpty() || trimmed.last() in SENTENCE_END
-            setSuggestions(if (atStart) SuggestionEngine.starters(state.language) else emptyList(), "", null)
+            // إيموجي مقترح للكلمة التي كُتبت للتو (مثل آيفون: "love " ← ❤️)
+            val emoji = if (!atStart && before.endsWith(" ")) {
+                EmojiSuggestions.forWord(SuggestionEngine.currentWord(trimmed))
+            } else null
+            val base = if (atStart) SuggestionEngine.starters(state.language) else emptyList()
+            setSuggestions(if (emoji != null) listOf(emoji) + base.take(2) else base, "", null)
         } else {
             val language = SuggestionEngine.languageOf(word, state.language)
             val completions = SuggestionEngine.suggest(word, language, learnedWords.value, limit = 2)
                 .filter { !it.equals(word, ignoreCase = true) }
-            setSuggestions(completions, word, null)
+            val emoji = EmojiSuggestions.forWord(word)
+            setSuggestions(if (emoji != null) completions.take(1) + emoji else completions, word, null)
         }
     }
 
@@ -531,7 +597,8 @@ class KeyboardViewModel(
         val SENTENCE_END = setOf('.', '!', '?', '؟')
         /** علامات الترقيم التي تُنهي الكلمة وتشغّل التصحيح التلقائي */
         const val AUTOCORRECT_TRIGGERS = ".,!?;:)\"؟،"
-        const val MAX_RECENT_EMOJIS = 24
+        const val MAX_RECENT_EMOJIS = 32
+        const val FRESH_CLIP_MS = 90_000L
         const val DOUBLE_TAP_MS = 350L
     }
 }

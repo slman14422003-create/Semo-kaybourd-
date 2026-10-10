@@ -96,8 +96,37 @@ class SemoKeyboardService :
             getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
     }
-    private val vibrationEffect: VibrationEffect by lazy {
-        VibrationEffect.createOneShot(12, VibrationEffect.DEFAULT_AMPLITUDE)
+    private val hasVibrator: Boolean by lazy { vibrator?.hasVibrator() == true }
+
+    /**
+     * تأثيرات هابتك جاهزة: ضربة قصيرة حادّة (مثل Taptic Engine بآيفون) بدل اهتزاز عام طويل "طنّان".
+     * من أندرويد 10 نستعمل التأثيرات المعرّفة بالنظام (TICK/CLICK) لأن محرك الاهتزاز مضبوط لها بكل جهاز،
+     * وقبله نقرة قصيرة جدًا بشدة متدرجة.
+     */
+    private val hapticEffects: Map<KeyFeedback, VibrationEffect> by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val tick = VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+            val click = VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+            val heavy = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
+            mapOf(
+                KeyFeedback.STANDARD to tick,
+                KeyFeedback.MODIFIER to tick,
+                KeyFeedback.SELECTION to tick,
+                KeyFeedback.DELETE to click,
+                KeyFeedback.LONG_PRESS to heavy
+            )
+        } else {
+            val amp = vibrator?.hasAmplitudeControl() == true
+            fun shot(ms: Long, strength: Int): VibrationEffect =
+                VibrationEffect.createOneShot(ms, if (amp) strength else VibrationEffect.DEFAULT_AMPLITUDE)
+            mapOf(
+                KeyFeedback.STANDARD to shot(8, 70),
+                KeyFeedback.MODIFIER to shot(9, 90),
+                KeyFeedback.SELECTION to shot(6, 50),
+                KeyFeedback.DELETE to shot(10, 120),
+                KeyFeedback.LONG_PRESS to shot(16, 180)
+            )
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -145,6 +174,7 @@ class SemoKeyboardService :
             if (text.isBlank() || text == lastCapturedClip) return
             lastCapturedClip = text
             serviceScope.launch { clipboardRepository.add(text) }
+            viewModel.onClipboardCopied(text)
         }
     }
 
@@ -332,8 +362,12 @@ class SemoKeyboardService :
                     EditAction.PASTE -> ic.performContextMenuAction(android.R.id.paste)
                     EditAction.LEFT -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_LEFT)
                     EditAction.RIGHT -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+                    EditAction.UP -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_UP)
+                    EditAction.DOWN -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
                     EditAction.HOME -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_MOVE_HOME)
                     EditAction.END -> sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_MOVE_END)
+                    EditAction.UNDO -> ic.performContextMenuAction(android.R.id.undo)
+                    EditAction.REDO -> ic.performContextMenuAction(android.R.id.redo)
                 }
             }
         }
@@ -380,7 +414,7 @@ class SemoKeyboardService :
             if (!sound && !haptic) return
             feedbackHandler.post {
                 if (sound) runCatching { clickPlayer?.play(kind, volume) }
-                if (haptic) runCatching { vibrateTick() }
+                if (haptic) runCatching { vibrateTick(kind) }
             }
         }
     }
@@ -418,8 +452,10 @@ class SemoKeyboardService :
         }
     }
 
-    private fun vibrateTick() {
+    private fun vibrateTick(kind: KeyFeedback) {
         val v = vibrator ?: return
-        if (v.hasVibrator()) v.vibrate(vibrationEffect)
+        if (!hasVibrator) return
+        val effect = hapticEffects[kind] ?: hapticEffects[KeyFeedback.STANDARD] ?: return
+        v.vibrate(effect)
     }
 }

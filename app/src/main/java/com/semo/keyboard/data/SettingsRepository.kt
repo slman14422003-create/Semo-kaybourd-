@@ -141,6 +141,7 @@ class SettingsRepository(context: Context) {
         val GLOBE_OFFSET = floatPreferencesKey("globe_offset_dp")
         val HIDE_BUTTON = stringPreferencesKey("hide_button_mode")
         val BOTTOM_RAISE = floatPreferencesKey("bottom_raise_dp")
+        val RECENT_EMOJIS = stringPreferencesKey("recent_emojis")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -170,7 +171,8 @@ class SettingsRepository(context: Context) {
                 mathResults = p[Keys.MATH_RESULTS] ?: true,
                 globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f),
                 hideButtonMode = p[Keys.HIDE_BUTTON].toEnumOr(HideButtonMode.ARROW),
-                bottomRaiseDp = (p[Keys.BOTTOM_RAISE] ?: 14f).coerceIn(0f, 40f)
+                bottomRaiseDp = (p[Keys.BOTTOM_RAISE] ?: 14f).coerceIn(0f, 40f),
+                recentEmojis = p[Keys.RECENT_EMOJIS].orEmpty().split(' ').filter { it.isNotEmpty() }
             )
         }
 
@@ -198,4 +200,5 @@ class SettingsRepository(context: Context) {
     suspend fun setGlobeOffset(v: Float) { store.edit { it[Keys.GLOBE_OFFSET] = v.coerceIn(-16f, 16f) } }
     suspend fun setHideButtonMode(v: HideButtonMode) { store.edit { it[Keys.HIDE_BUTTON] = v.name } }
     suspend fun setBottomRaise(v: Float) { store.edit { it[Keys.BOTTOM_RAISE] = v.coerceIn(0f, 40f) } }
+    suspend fun setRecentEmojis(list: List<String>) { store.edit { it[Keys.RECENT_EMOJIS] = list.joinToString(" ") } }
 }

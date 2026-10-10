@@ -121,7 +121,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
+internal fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
 
 /** صف مفاتيح بلا خلفية (أيقونات عائمة) أو فراغات فقط = الصف الأخير تحت المسافة */
 private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
@@ -515,6 +515,51 @@ private fun StripIconButton(
     }
 }
 
+/** شريحة لصق سريع بشريط الاقتراحات: تظهر لمدة قصيرة بعد نسخ نص جديد (مثل خانة "لصق" بآيفون) */
+@Composable
+private fun RowScope.FreshClipChip(text: String, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight(),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .height(32.dp)
+                .background(colors.chip, RoundedCornerShape(16.dp))
+                .clickable { viewModel.onFreshClipPaste() }
+                .padding(start = 12.dp, end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_tool_clipboard),
+                contentDescription = null,
+                tint = colors.keyAccent,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = text.replace('\n', ' '),
+                color = colors.suggestion,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(textDirection = TextDirection.Content),
+                modifier = Modifier.widthIn(max = 230.dp)
+            )
+            Text(
+                text = "✕",
+                color = colors.textMuted,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .clickable { viewModel.dismissFreshClip() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
 private data class SuggestionSlot(val text: String, val bold: Boolean, val onClick: () -> Unit)
 
 /** اختصار التعبير الحسابي الطويل كي يتسع بالشريط */
@@ -550,6 +595,12 @@ private fun RowScope.SuggestionsRow(
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
+        return
+    }
+
+    val fresh = state.freshClip
+    if (fresh != null && state.literal.isEmpty()) {
+        FreshClipChip(fresh, colors, viewModel)
         return
     }
 
@@ -631,6 +682,8 @@ private fun KeyRow(
                 isTopRow = isTopRow,
                 plainCenterFromBottom = plainCenterFromBottom,
                 onKey = viewModel::onKeyPressed,
+                onKeyDown = viewModel::onKeyDown,
+                onKeyTap = viewModel::onKeyTapped,
                 onLongPress = viewModel::onKeyLongPressed,
                 onCursor = viewModel::onCursorMove,
                 onTrackpad = onTrackpad
@@ -650,6 +703,8 @@ private fun RowScope.KeyButton(
     isTopRow: Boolean,
     plainCenterFromBottom: Dp,
     onKey: (KeyAction) -> Unit,
+    onKeyDown: (KeyAction) -> Unit,
+    onKeyTap: (KeyAction) -> Unit,
     onLongPress: (KeyDefinition) -> Unit,
     onCursor: (Int, Int) -> Unit,
     onTrackpad: (Boolean) -> Unit
@@ -661,6 +716,8 @@ private fun RowScope.KeyButton(
 
     var pressed by remember { mutableStateOf(false) }
     val currentOnKey by rememberUpdatedState(onKey)
+    val currentOnDown by rememberUpdatedState(onKeyDown)
+    val currentOnTap by rememberUpdatedState(onKeyTap)
     val currentOnLong by rememberUpdatedState(onLongPress)
     val currentOnCursor by rememberUpdatedState(onCursor)
     val currentOnTrackpad by rememberUpdatedState(onTrackpad)
@@ -694,8 +751,11 @@ private fun RowScope.KeyButton(
     val gestureModifier = if (isSpace) {
         Modifier.pointerInput(def) {
             spaceGestures(
-                onPressedChange = { pressed = it },
-                onTap = { currentOnKey(KeyAction.Space) },
+                onPressedChange = {
+                    pressed = it
+                    if (it) currentOnDown(KeyAction.Space)
+                },
+                onTap = { currentOnTap(KeyAction.Space) },
                 onTrackpad = { currentOnTrackpad(it) },
                 onMove = { dx, dy -> currentOnCursor(dx, dy) }
             )
@@ -735,8 +795,12 @@ private fun RowScope.KeyButton(
         }
         Modifier.pointerInput(def) {
             keyGestures(
-                onPressedChange = { pressed = it },
-                onTap = { currentOnKey(def.action) },
+                // الصوت والاهتزاز لحظة اللمس (مثل آيفون)، والإدخال الفعلي عند الرفع
+                onPressedChange = {
+                    pressed = it
+                    if (it) currentOnDown(def.action)
+                },
+                onTap = { currentOnTap(def.action) },
                 onLongPress = longPress
             )
         }
@@ -861,7 +925,7 @@ private class BalloonShape(
  * إيماءة المفتاح العادي: الضغطة تُسجَّل عند رفع الإصبع بدون إلغاء بسبب حركة صغيرة،
  * وتُلغى فقط لو استهلكها حدث آخر (كالكتابة بالسحب). الضغطة المطوّلة (إن وُجدت) تُنفَّذ بعد المهلة.
  */
-private suspend fun PointerInputScope.keyGestures(
+internal suspend fun PointerInputScope.keyGestures(
     onPressedChange: (Boolean) -> Unit,
     onTap: () -> Unit,
     onLongPress: (() -> Unit)?
@@ -1083,344 +1147,4 @@ private fun isSpecial(def: KeyDefinition): Boolean = when (def.action) {
     KeyAction.SwitchLanguage -> true
     KeyAction.Enter -> !def.isAccent
     else -> false
-}
-
-
-// ============================ الصفحات الإضافية ============================
-
-/** شريط سفلي مشترك لصفحات الإيموجي/الحافظة/التحرير: زر الرجوع للحروف + محتوى إضافي */
-@Composable
-private fun PanelBottomBar(
-    arabic: Boolean,
-    colors: SemoKeyboardColors,
-    onBack: () -> Unit,
-    trailing: @Composable RowScope.() -> Unit = {}
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(vertical = 4.dp)
-                .size(width = 64.dp, height = 36.dp)
-                .background(colors.keySpecial, RoundedCornerShape(10.dp))
-                .clickable(onClick = onBack),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(text = tr(arabic, "أبج", "ABC"), color = colors.text, fontSize = 15.sp)
-        }
-        trailing()
-    }
-}
-
-/** يخفي الإيموجي التي لا يملك خط الجهاز رمزًا لها (كي لا تظهر مربعات فارغة) */
-private fun supportedEmojiCategories(): List<EmojiCategory> {
-    val paint = android.graphics.Paint()
-    return KeyboardLayoutProvider.emojiCategories.map { cat ->
-        val ok = cat.emojis.filter { runCatching { paint.hasGlyph(it) }.getOrDefault(true) }
-        // لو الفحص رفض معظم القائمة فهو غير موثوق على هذا الجهاز: نعرض القائمة كاملة
-        cat.copy(emojis = if (ok.size * 2 >= cat.emojis.size) ok else cat.emojis)
-    }.filter { it.emojis.isNotEmpty() }
-}
-
-private val supportedEmojiCache: List<EmojiCategory> by lazy { supportedEmojiCategories() }
-
-@Composable
-private fun EmojiPanel(
-    state: KeyboardUiState,
-    colors: SemoKeyboardColors,
-    panelHeight: Dp,
-    viewModel: KeyboardViewModel
-) {
-    val arabic = state.language == KeyboardLanguage.ARABIC
-    val categories = supportedEmojiCache
-    // التبويب 0 = الأخيرة، والباقي = فئات الإيموجي
-    var tab by remember { mutableIntStateOf(if (state.recentEmojis.isEmpty()) 1 else 0) }
-    val list = if (tab == 0) state.recentEmojis else categories[tab - 1].emojis
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(panelHeight)
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            if (list.isEmpty()) {
-                Text(
-                    text = tr(arabic, "ما في إيموجي أخيرة بعد", "No recent emoji yet"),
-                    color = colors.textMuted,
-                    fontSize = 14.sp,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            } else {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    val title = when {
-                        tab == 0 -> tr(arabic, "المستخدمة مؤخرًا", "Frequently Used")
-                        arabic -> categories[tab - 1].titleAr
-                        else -> categories[tab - 1].titleEn
-                    }
-                    Text(
-                        text = title,
-                        color = colors.textMuted,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(8),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        items(list) { emoji ->
-                            Box(
-                                modifier = Modifier
-                                    .height(44.dp)
-                                    .pointerInput(emoji) { detectTapGestures(onTap = { viewModel.onEmojiPressed(emoji) }) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = emoji, fontSize = 26.sp, color = colors.text, maxLines = 1)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        PanelBottomBar(arabic, colors, onBack = { viewModel.openPage(KeyboardPage.LETTERS) }) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val icons = listOf("🕘") + categories.map { it.icon }
-                icons.forEachIndexed { index, icon ->
-                    Box(
-                        modifier = Modifier
-                            .size(width = 40.dp, height = 36.dp)
-                            .background(
-                                if (index == tab) colors.chip else Color.Transparent,
-                                RoundedCornerShape(10.dp)
-                            )
-                            .clickable { tab = index },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = icon, fontSize = 18.sp, color = colors.text)
-                    }
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .size(width = 48.dp, height = 44.dp)
-                    .clickable { viewModel.onKeyPressed(KeyAction.Backspace) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_ios_backspace),
-                    contentDescription = null,
-                    tint = colors.text,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClipboardPanel(
-    state: KeyboardUiState,
-    colors: SemoKeyboardColors,
-    panelHeight: Dp,
-    viewModel: KeyboardViewModel
-) {
-    val arabic = state.language == KeyboardLanguage.ARABIC
-    // المثبّتة أولًا، مع الحفاظ على ترتيب الأحدث ضمن كل مجموعة
-    val clips = remember(state.clipItems) { state.clipItems.sortedByDescending { it.pinned } }
-    val hasUnpinned = clips.any { !it.pinned }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(panelHeight)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = tr(arabic, "الحافظة", "Clipboard"),
-                color = colors.text,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-            if (hasUnpinned) {
-                Text(
-                    text = tr(arabic, "مسح غير المثبّت", "Clear unpinned"),
-                    color = colors.keyAccent,
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .clickable { viewModel.onClipClearUnpinned() }
-                        .padding(horizontal = 6.dp, vertical = 8.dp)
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            when {
-                !state.clipboardEnabled -> Text(
-                    text = tr(arabic, "الحافظة متوقفة من إعدادات التطبيق", "Clipboard history is off in settings"),
-                    color = colors.textMuted,
-                    fontSize = 14.sp,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-                clips.isEmpty() -> Text(
-                    text = tr(arabic, "انسخ نص وبيظهر هون", "Copy some text and it will show up here"),
-                    color = colors.textMuted,
-                    fontSize = 14.sp,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
-                ) {
-                    items(clips, key = { it.text }) { item -> ClipRow(item, colors, viewModel) }
-                }
-            }
-        }
-
-        PanelBottomBar(arabic, colors, onBack = { viewModel.openPage(KeyboardPage.LETTERS) })
-    }
-}
-
-@Composable
-private fun ClipRow(item: ClipItem, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.key, RoundedCornerShape(10.dp))
-            .clickable { viewModel.onClipPaste(item.text) }
-            .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = item.text,
-            color = colors.text,
-            fontSize = 14.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = TextStyle(textDirection = TextDirection.Content),
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = if (item.pinned) "★" else "☆",
-            color = if (item.pinned) colors.keyAccent else colors.textMuted,
-            fontSize = 20.sp,
-            modifier = Modifier
-                .clickable { viewModel.onClipTogglePin(item.text) }
-                .padding(horizontal = 10.dp, vertical = 2.dp)
-        )
-        Text(
-            text = "✕",
-            color = colors.textMuted,
-            fontSize = 16.sp,
-            modifier = Modifier
-                .clickable { viewModel.onClipDelete(item.text) }
-                .padding(start = 4.dp, end = 12.dp, top = 2.dp, bottom = 2.dp)
-        )
-    }
-}
-
-@Composable
-private fun EditPanel(
-    state: KeyboardUiState,
-    colors: SemoKeyboardColors,
-    panelHeight: Dp,
-    viewModel: KeyboardViewModel
-) {
-    val arabic = state.language == KeyboardLanguage.ARABIC
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(panelHeight)
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ToolButton(tr(arabic, "تحديد الكل", "Select all"), colors) { viewModel.onEditAction(EditAction.SELECT_ALL) }
-                ToolButton(tr(arabic, "قص", "Cut"), colors) { viewModel.onEditAction(EditAction.CUT) }
-                ToolButton(tr(arabic, "نسخ", "Copy"), colors) { viewModel.onEditAction(EditAction.COPY) }
-                ToolButton(tr(arabic, "لصق", "Paste"), colors) { viewModel.onEditAction(EditAction.PASTE) }
-            }
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ToolButton("◀", colors) { viewModel.onEditAction(EditAction.LEFT) }
-                ToolButton("▶", colors) { viewModel.onEditAction(EditAction.RIGHT) }
-                ToolButton(tr(arabic, "البداية", "Start"), colors) { viewModel.onEditAction(EditAction.HOME) }
-                ToolButton(tr(arabic, "النهاية", "End"), colors) { viewModel.onEditAction(EditAction.END) }
-            }
-        }
-        PanelBottomBar(arabic, colors, onBack = { viewModel.openPage(KeyboardPage.LETTERS) }) {
-            Text(
-                text = tr(arabic, "اسحب على المسافة لتحريك المؤشر", "Swipe the space bar to move the cursor"),
-                color = colors.textMuted,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 10.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun RowScope.ToolButton(label: String, colors: SemoKeyboardColors, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxHeight()
-            .background(colors.key, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            color = colors.text,
-            fontSize = 15.sp,
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
-    }
 }

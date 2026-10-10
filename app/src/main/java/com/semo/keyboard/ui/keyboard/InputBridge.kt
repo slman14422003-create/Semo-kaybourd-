@@ -2,8 +2,11 @@ package com.semo.keyboard.ui.keyboard
 
 import com.semo.keyboard.domain.model.EditAction
 
-/** نوع صوت/اهتزاز الضغطة: عادي، حذف، أو مفاتيح وظيفية (مسافة/Shift/Return...) مثل آيفون */
-enum class KeyFeedback { STANDARD, DELETE, MODIFIER }
+/**
+ * نوع صوت/اهتزاز الضغطة: عادي، حذف، أو مفاتيح وظيفية (مسافة/Shift/Return...) مثل آيفون.
+ * SELECTION = نقرة خفيفة جدًا بلا صوت (تبديل الفئات/تحريك المؤشر)، LONG_PRESS = نقرة أقوى (فتح لوحة اللمس/البدائل).
+ */
+enum class KeyFeedback { STANDARD, DELETE, MODIFIER, SELECTION, LONG_PRESS }
 
 /** الجسر بين منطق اللوحة (ViewModel) وحقل الإدخال الفعلي الذي تديره خدمة الـ IME */
 interface InputBridge {

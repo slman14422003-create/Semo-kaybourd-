@@ -81,7 +81,7 @@ enum class OneHandMode { OFF, LEFT, RIGHT }
 enum class HideButtonMode { RING, ARROW, OFF }
 
 /** أدوات التحرير في صفحة التحرير */
-enum class EditAction { SELECT_ALL, CUT, COPY, PASTE, LEFT, RIGHT, HOME, END }
+enum class EditAction { SELECT_ALL, CUT, COPY, PASTE, LEFT, RIGHT, UP, DOWN, HOME, END, UNDO, REDO }
 
 /** شكل زر الإدخال حسب نوع الحقل (إدخال عادي، بحث، إرسال ...) */
 enum class EnterKind { RETURN, SEARCH, SEND, GO, DONE, NEXT }
@@ -124,7 +124,9 @@ data class SemoSettings(
     /** شكل دائرة إخفاء اللوحة بالصف السفلي */
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
     /** رفع دائرتي الصف السفلي عن أسفل الشاشة (dp) كي لا تلتصقا بشريط التنقل */
-    val bottomRaiseDp: Float = 14f
+    val bottomRaiseDp: Float = 14f,
+    /** الإيموجي المستخدمة مؤخرًا (محفوظة بين الجلسات) */
+    val recentEmojis: List<String> = emptyList()
 )
 
 data class KeyboardUiState(
@@ -158,6 +160,8 @@ data class KeyboardUiState(
     val globeOffsetDp: Float = 0f,
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
     val bottomRaiseDp: Float = 14f,
+    /** نص نُسخ للتو: يظهر كشريحة لصق سريعة بشريط الاقتراحات لمدة قصيرة */
+    val freshClip: String? = null,
     /** اقتراحات الإكمال (بدون الكلمة المكتوبة نفسها) */
     val suggestions: List<String> = emptyList(),
     /** الكلمة الجارية كما كُتبت: تظهر بين علامتي اقتباس بأول خانة (مثل iOS) */
