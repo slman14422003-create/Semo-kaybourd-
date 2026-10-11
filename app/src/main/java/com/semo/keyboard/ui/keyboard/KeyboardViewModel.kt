@@ -128,6 +128,7 @@ class KeyboardViewModel(
                 size = s.size,
                 keySpacing = s.keySpacing,
                 numKeyTarget = s.numKeyTarget,
+                toolbarItems = s.toolbarItems,
                 oneHand = s.oneHand,
                 suggestionsEnabled = s.suggestionsEnabled,
                 keyPreview = s.keyPreview,

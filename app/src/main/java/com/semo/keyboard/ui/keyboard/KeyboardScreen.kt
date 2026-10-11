@@ -111,6 +111,7 @@ import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.clipDisplayText
 import com.semo.keyboard.domain.model.isClipImage
+import com.semo.keyboard.domain.model.ToolbarItem
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardPage
@@ -499,6 +500,7 @@ private fun TopStrip(
                 iconRes = R.drawable.ic_tool_chevron,
                 colors = colors,
                 rotate = if (state.toolbarOpen) 180f else 0f,
+                filled = false,
                 onClick = { viewModel.toggleToolbar() }
             )
             if (state.toolbarOpen) {
@@ -507,12 +509,17 @@ private fun TopStrip(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StripIconButton(R.drawable.ic_ios_emoji, colors) { viewModel.openPage(KeyboardPage.EMOJI) }
-                    StripIconButton(R.drawable.ic_tool_clipboard, colors) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
-                    StripIconButton(R.drawable.ic_tool_numpad, colors) { viewModel.openPage(KeyboardPage.NUMPAD) }
-                    StripIconButton(R.drawable.ic_tool_cursor, colors) { viewModel.openPage(KeyboardPage.EDIT) }
-                    StripIconButton(R.drawable.ic_tool_onehand, colors) { viewModel.cycleOneHand() }
-                    StripIconButton(R.drawable.ic_tool_settings, colors) { viewModel.openSettings() }
+                    // العناصر والترتيب من إعدادات «شريط الأدوات»
+                    state.toolbarItems.forEach { item ->
+                        when (item) {
+                            ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors) { viewModel.openPage(KeyboardPage.EMOJI) }
+                            ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
+                            ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors) { viewModel.openPage(KeyboardPage.NUMPAD) }
+                            ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors) { viewModel.openPage(KeyboardPage.EDIT) }
+                            ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors) { viewModel.cycleOneHand() }
+                            ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors) { viewModel.openSettings() }
+                        }
+                    }
                 }
             } else {
                 SuggestionsRow(state, colors, viewModel)
@@ -526,22 +533,31 @@ private fun StripIconButton(
     iconRes: Int,
     colors: SemoKeyboardColors,
     rotate: Float = 0f,
+    filled: Boolean = true,
     onClick: () -> Unit
 ) {
+    // منطقة اللمس أوسع من الشكل المرئي: حبّة بخلفية مدوّرة (أو أيقونة بلا خلفية للسهم)
     Box(
         modifier = Modifier
-            .size(width = 44.dp, height = 40.dp)
+            .size(width = 46.dp, height = 40.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            tint = colors.textMuted,
+        Box(
             modifier = Modifier
-                .size(22.dp)
-                .rotate(rotate)
-        )
+                .size(width = 40.dp, height = 32.dp)
+                .then(if (filled) Modifier.background(colors.chip, RoundedCornerShape(10.dp)) else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = if (filled) colors.text else colors.textMuted,
+                modifier = Modifier
+                    .size(if (filled) 20.dp else 22.dp)
+                    .rotate(rotate)
+            )
+        }
     }
 }
 

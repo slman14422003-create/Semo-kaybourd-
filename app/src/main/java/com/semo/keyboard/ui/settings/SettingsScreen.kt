@@ -84,6 +84,7 @@ import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.KeySpacing
 import com.semo.keyboard.domain.model.NumKeyTarget
+import com.semo.keyboard.domain.model.ToolbarItem
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
@@ -172,6 +173,16 @@ private fun sizeLabel(s: KeyboardSize) = when (s) {
     KeyboardSize.SMALL -> "صغير"
     KeyboardSize.MEDIUM -> "متوسط"
     KeyboardSize.LARGE -> "كبير"
+}
+
+/** اسم عنصر شريط الأدوات وأيقونته ولونه بصفحة الإعدادات */
+private fun toolbarItemInfo(item: ToolbarItem): Triple<String, Int, androidx.compose.ui.graphics.Color> = when (item) {
+    ToolbarItem.EMOJI -> Triple("الإيموجي", R.drawable.ic_ios_emoji, IconOrange)
+    ToolbarItem.CLIPBOARD -> Triple("الحافظة", R.drawable.ic_tool_clipboard, IconBlue)
+    ToolbarItem.NUMPAD -> Triple("لوحة الأرقام", R.drawable.ic_tool_numpad, IconPurple)
+    ToolbarItem.CURSOR -> Triple("التحرير وتحريك المؤشر", R.drawable.ic_tool_cursor, IconTeal)
+    ToolbarItem.ONEHAND -> Triple("وضع اليد الواحدة", R.drawable.ic_tool_onehand, IconGray)
+    ToolbarItem.SETTINGS -> Triple("الإعدادات", R.drawable.ic_tool_settings, IconGray)
 }
 
 private fun holdLabel(d: HoldDelay) = when (d) {
@@ -550,6 +561,38 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     onSelect = { scope.launch { repo.setOneHand(it) } }
                 )
             }
+        }
+        Section("شريط الأدوات") {
+            // المفعّلة أولًا بترتيبها المحفوظ، ثم المعطّلة
+            val enabled = settings.toolbarItems
+            val order = enabled + ToolbarItem.values().filter { it !in enabled }
+            order.forEachIndexed { index, item ->
+                val on = item in enabled
+                val info = toolbarItemInfo(item)
+                if (index > 0) Divider()
+                ToolbarItemRow(
+                    title = info.first,
+                    iconRes = info.second,
+                    tint = info.third,
+                    checked = on,
+                    canUp = on && index > 0,
+                    canDown = on && index < enabled.size - 1,
+                    // لازم يبقى عنصر واحد على الأقل
+                    canToggle = !(on && enabled.size == 1),
+                    onToggle = { scope.launch { repo.setToolbarItems(order.filter { (it in enabled) != (it == item) }) } },
+                    onUp = {
+                        val l = order.toMutableList()
+                        java.util.Collections.swap(l, index, index - 1)
+                        scope.launch { repo.setToolbarItems(l.filter { it in enabled }) }
+                    },
+                    onDown = {
+                        val l = order.toMutableList()
+                        java.util.Collections.swap(l, index, index + 1)
+                        scope.launch { repo.setToolbarItems(l.filter { it in enabled }) }
+                    }
+                )
+            }
+            Hint("اختر العناصر اللي بدك تظهر لما تفتح شريط الأدوات (السهم الصغير بطرف اللوحة)، ورتّبها بالأسهم.")
         }
         Section("الصف السفلي") {
             // دائرة إخفاء اللوحة بالصف السفلي (يمين) بمقابل دائرة الكرة الأرضية (يسار)

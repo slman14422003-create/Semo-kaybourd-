@@ -82,6 +82,9 @@ enum class KeySpacing(val horizontal: Float, val vertical: Float) {
     WIDE(1.35f, 1.15f)
 }
 
+/** عناصر شريط الأدوات: يختار المستخدم أيها يظهر وبأي ترتيب */
+enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CURSOR, ONEHAND, SETTINGS }
+
 /** ماذا يفتح مفتاح «123» بصفحة الحروف: لوحة أرقام 3×4 أو صفحة الرموز القديمة */
 enum class NumKeyTarget { NUMPAD, SYMBOLS }
 
@@ -172,6 +175,8 @@ data class SemoSettings(
     val keySpacing: KeySpacing = KeySpacing.NORMAL,
     /** ماذا يفتح مفتاح «123» */
     val numKeyTarget: NumKeyTarget = NumKeyTarget.NUMPAD,
+    /** عناصر شريط الأدوات الظاهرة بالترتيب */
+    val toolbarItems: List<ToolbarItem> = ToolbarItem.values().toList(),
     val oneHand: OneHandMode = OneHandMode.OFF,
     val suggestionsEnabled: Boolean = true,
     val keyPreview: Boolean = true,
@@ -229,6 +234,7 @@ data class KeyboardUiState(
     val size: KeyboardSize = KeyboardSize.MEDIUM,
     val keySpacing: KeySpacing = KeySpacing.NORMAL,
     val numKeyTarget: NumKeyTarget = NumKeyTarget.NUMPAD,
+    val toolbarItems: List<ToolbarItem> = ToolbarItem.values().toList(),
     val oneHand: OneHandMode = OneHandMode.OFF,
     val suggestionsEnabled: Boolean = true,
     val keyPreview: Boolean = true,

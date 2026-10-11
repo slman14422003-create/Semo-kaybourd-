@@ -573,3 +573,60 @@ internal fun SliderRow(
         )
     }
 }
+
+/** صف عنصر بشريط الأدوات: أيقونة + اسم + سهما ترتيب + مفتاح إظهار/إخفاء */
+@Composable
+internal fun ToolbarItemRow(
+    title: String,
+    iconRes: Int,
+    tint: Color,
+    checked: Boolean,
+    canUp: Boolean,
+    canDown: Boolean,
+    canToggle: Boolean,
+    onToggle: () -> Unit,
+    onUp: () -> Unit,
+    onDown: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconBadge(iconRes, tint)
+        Spacer(Modifier.width(12.dp))
+        Text(title, color = SemoPalette.TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        ToolbarArrow("▲", canUp, onUp)
+        ToolbarArrow("▼", canDown, onDown)
+        Spacer(Modifier.width(6.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            enabled = canToggle,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = SemoPalette.Ok,
+                checkedThumbColor = Color.White,
+                uncheckedTrackColor = SemoPalette.SurfaceHigh,
+                uncheckedThumbColor = SemoPalette.TextHint,
+                uncheckedBorderColor = SemoPalette.Stroke
+            )
+        )
+    }
+}
+
+@Composable
+private fun ToolbarArrow(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = if (enabled) SemoPalette.TextSecondary else SemoPalette.TextHint.copy(alpha = 0.35f),
+            fontSize = 14.sp
+        )
+    }
+}

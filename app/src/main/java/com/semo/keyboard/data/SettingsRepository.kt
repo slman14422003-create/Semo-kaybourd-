@@ -24,6 +24,7 @@ import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.KeyboardStyle
 import com.semo.keyboard.domain.model.KeySpacing
 import com.semo.keyboard.domain.model.NumKeyTarget
+import com.semo.keyboard.domain.model.ToolbarItem
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
@@ -111,6 +112,13 @@ private class LegacySettingsMigration(private val app: Context) : DataMigration<
     override suspend fun cleanUp() = Unit
 }
 
+/** عناصر شريط الأدوات المحفوظة (CSV بالترتيب)؛ لو لا شيء محفوظ أو القائمة فارغة نرجع للكل */
+private fun decodeToolbar(raw: String?): List<ToolbarItem> {
+    if (raw == null) return ToolbarItem.values().toList()
+    val list = raw.split(',').mapNotNull { n -> runCatching { enumValueOf<ToolbarItem>(n) }.getOrNull() }.distinct()
+    return if (list.isEmpty()) ToolbarItem.values().toList() else list
+}
+
 private inline fun <reified T : Enum<T>> String?.toEnumOr(default: T): T =
     this?.let { s -> runCatching { enumValueOf<T>(s) }.getOrNull() } ?: default
 
@@ -158,6 +166,7 @@ class SettingsRepository(context: Context) {
         val KEEP_SYMBOLS = booleanPreferencesKey("keep_symbol_panel")
         val KEY_SPACING = stringPreferencesKey("key_spacing")
         val NUM_KEY_TARGET = stringPreferencesKey("num_key_target")
+        val TOOLBAR_ITEMS = stringPreferencesKey("toolbar_items")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -177,6 +186,7 @@ class SettingsRepository(context: Context) {
                 size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
                 keySpacing = p[Keys.KEY_SPACING].toEnumOr(KeySpacing.NORMAL),
                 numKeyTarget = p[Keys.NUM_KEY_TARGET].toEnumOr(NumKeyTarget.NUMPAD),
+                toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS]),
                 oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
                 suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,
                 keyPreview = p[Keys.KEY_PREVIEW] ?: true,
@@ -216,6 +226,7 @@ class SettingsRepository(context: Context) {
     suspend fun setSize(v: KeyboardSize) { store.edit { it[Keys.SIZE] = v.name } }
     suspend fun setKeySpacing(v: KeySpacing) { store.edit { it[Keys.KEY_SPACING] = v.name } }
     suspend fun setNumKeyTarget(v: NumKeyTarget) { store.edit { it[Keys.NUM_KEY_TARGET] = v.name } }
+    suspend fun setToolbarItems(v: List<ToolbarItem>) { store.edit { it[Keys.TOOLBAR_ITEMS] = v.joinToString(",") { item -> item.name } } }
     suspend fun setOneHand(v: OneHandMode) { store.edit { it[Keys.ONE_HAND] = v.name } }
     suspend fun setSuggestionsEnabled(v: Boolean) { store.edit { it[Keys.SUGGESTIONS] = v } }
     suspend fun setKeyPreview(v: Boolean) { store.edit { it[Keys.KEY_PREVIEW] = v } }
