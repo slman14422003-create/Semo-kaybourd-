@@ -263,14 +263,14 @@ object KeyboardLayoutProvider {
             op("+", alts = listOf("=", "%", "±", "#")),
             op("(", alts = listOf("[", "{", "<")),
             digit(0), digit(1), digit(2),
-            KeyDefinition("⌫", KeyAction.Backspace)
+            KeyDefinition(if (arabic) "مسافة" else "space", KeyAction.Space)
         )
         val r2 = listOf(
             // الناقص يُعرض بعلامة − لكنه يُكتب - عادية كي تفهمه حقول الأرقام
             op("−", "-", alts = listOf("_", "–", "—")),
             op(")", alts = listOf("]", "}", ">")),
             digit(3), digit(4), digit(5),
-            KeyDefinition(if (arabic) "مسافة" else "space", KeyAction.Space)
+            KeyDefinition("⌫", KeyAction.Backspace)
         )
         val r3 = listOf(
             op("×", alts = listOf("*", "⋅", "x")),
@@ -359,12 +359,12 @@ object KeyboardLayoutProvider {
             EnterKind.DONE -> if (arabic) "تم" else "Done"
             EnterKind.NEXT -> if (arabic) "التالي" else "Next"
         }
-        // مثل iOS: مفتاح return رمادي عادي، ويصير أزرق فقط لما يكون له إجراء (بحث/إرسال/اذهب...)
+        // مفتاح الإدخال أزرق دائمًا بكل الصفحات (return/بحث/إرسال/اذهب...)
         return KeyDefinition(
             label = text,
             action = KeyAction.Enter,
             weight = 2.5f,
-            isAccent = kind != EnterKind.RETURN,
+            isAccent = true,
             textOnly = true
         )
     }

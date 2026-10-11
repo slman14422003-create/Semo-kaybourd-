@@ -635,6 +635,7 @@ internal fun EmojiPanel(
 // ============================ الحافظة ============================
 
 private val DeleteRed = Color(0xFFFF453A)
+private val PasteGreen = Color(0xFF30D158)
 
 /** اسم النوع بصيغة الجمع لشريط التصفية أعلى الحافظة */
 private fun kindFilterLabel(kind: ClipKind, arabic: Boolean): String = when (kind) {
@@ -751,13 +752,14 @@ internal fun ClipboardPanel(
                 )
             }
             Spacer(Modifier.width(8.dp))
-            ClipRoundButton(R.drawable.ic_clip_paste, accent = true, ink = colors.textOnAccent, colors = colors) {
+            // اللصق أخضر والحذف أحمر
+            ClipRoundButton(R.drawable.ic_clip_paste, accent = true, ink = Color.White, colors = colors, fill = PasteGreen) {
                 viewModel.onSelectionTick()
                 viewModel.onEditAction(EditAction.PASTE)
             }
             if (hasUnpinned) {
                 Spacer(Modifier.width(6.dp))
-                ClipRoundButton(R.drawable.ic_clip_trash, accent = false, ink = DeleteRed, colors = colors) {
+                ClipRoundButton(R.drawable.ic_clip_trash, accent = false, ink = Color.White, colors = colors, fill = DeleteRed) {
                     viewModel.onSelectionTick()
                     viewModel.onClipClearUnpinned()
                 }
@@ -816,13 +818,22 @@ internal fun ClipboardPanel(
 
 /** زر دائري صغير بأيقونة (لصق/مسح الكل) بالصف العلوي للحافظة */
 @Composable
-private fun ClipRoundButton(iconRes: Int, accent: Boolean, ink: Color, colors: SemoKeyboardColors, onClick: () -> Unit) {
+private fun ClipRoundButton(
+    iconRes: Int,
+    accent: Boolean,
+    ink: Color,
+    colors: SemoKeyboardColors,
+    fill: Color? = null,
+    onClick: () -> Unit
+) {
     PressBox(modifier = Modifier.size(34.dp), onClick = onClick) { pressed ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     when {
+                        fill != null && pressed -> fill.copy(alpha = 0.75f)
+                        fill != null -> fill
                         accent && pressed -> colors.keyAccent.copy(alpha = 0.75f)
                         accent -> colors.keyAccent
                         pressed -> colors.keyPressed

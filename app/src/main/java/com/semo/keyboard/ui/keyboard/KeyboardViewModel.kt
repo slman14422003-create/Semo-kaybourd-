@@ -189,6 +189,11 @@ class KeyboardViewModel(
         }
         undo = null
         refreshSuggestions()
+        // اتصال الحقل قد لا يكون جاهزًا لحظة فتح اللوحة (يرجع نصًا فارغًا) فيبقى الشريط فارغًا: نعيد التحديث بعد لحظة
+        viewModelScope.launch {
+            delay(300)
+            refreshSuggestions()
+        }
     }
 
     /** يُستدعى عند تحرك المؤشر: لو صرنا ببداية جملة نفعّل Shift تلقائيًا */
@@ -695,8 +700,13 @@ class KeyboardViewModel(
             val emoji = if (state.suggestEmojis && prevWord.isNotEmpty()) EmojiSuggestions.forWord(prevWord) else null
             val base = when {
                 atStart -> SuggestionEngine.starters(state.language)
-                state.nextWord && prevWord.isNotEmpty() ->
-                    NextWordModel.predict(prevWord, SuggestionEngine.languageOf(prevWord, state.language), learnedBigrams.value, 3)
+                // لو ما في توقّع للكلمة السابقة نعرض كلمات بداية شائعة بدل أن يبقى الشريط فارغًا
+                state.nextWord -> {
+                    val lang = if (prevWord.isNotEmpty()) SuggestionEngine.languageOf(prevWord, state.language) else state.language
+                    val predicted =
+                        if (prevWord.isNotEmpty()) NextWordModel.predict(prevWord, lang, learnedBigrams.value, 3) else emptyList()
+                    predicted.ifEmpty { SuggestionEngine.starters(lang) }
+                }
                 else -> emptyList()
             }
             return SuggestionResult(if (emoji != null) listOf(emoji) + base.take(2) else base.take(3), "", null, clear)
