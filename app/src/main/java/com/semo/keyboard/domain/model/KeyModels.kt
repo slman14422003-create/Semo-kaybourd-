@@ -174,7 +174,7 @@ data class SemoSettings(
     /** المسافة بين المفاتيح */
     val keySpacing: KeySpacing = KeySpacing.NORMAL,
     /** ماذا يفتح مفتاح «123» */
-    val numKeyTarget: NumKeyTarget = NumKeyTarget.NUMPAD,
+    val numKeyTarget: NumKeyTarget = NumKeyTarget.SYMBOLS,
     /** عناصر شريط الأدوات الظاهرة بالترتيب */
     val toolbarItems: List<ToolbarItem> = ToolbarItem.values().toList(),
     val oneHand: OneHandMode = OneHandMode.OFF,
@@ -233,7 +233,7 @@ data class KeyboardUiState(
     val style: KeyboardStyle = KeyboardStyle.IOS18,
     val size: KeyboardSize = KeyboardSize.MEDIUM,
     val keySpacing: KeySpacing = KeySpacing.NORMAL,
-    val numKeyTarget: NumKeyTarget = NumKeyTarget.NUMPAD,
+    val numKeyTarget: NumKeyTarget = NumKeyTarget.SYMBOLS,
     val toolbarItems: List<ToolbarItem> = ToolbarItem.values().toList(),
     val oneHand: OneHandMode = OneHandMode.OFF,
     val suggestionsEnabled: Boolean = true,

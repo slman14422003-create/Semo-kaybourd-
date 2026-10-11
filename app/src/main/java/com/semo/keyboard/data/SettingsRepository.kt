@@ -185,7 +185,7 @@ class SettingsRepository(context: Context) {
                 style = p[Keys.STYLE].toEnumOr(KeyboardStyle.IOS18),
                 size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
                 keySpacing = p[Keys.KEY_SPACING].toEnumOr(KeySpacing.NORMAL),
-                numKeyTarget = p[Keys.NUM_KEY_TARGET].toEnumOr(NumKeyTarget.NUMPAD),
+                numKeyTarget = p[Keys.NUM_KEY_TARGET].toEnumOr(NumKeyTarget.SYMBOLS),
                 toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS]),
                 oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
                 suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,

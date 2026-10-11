@@ -672,6 +672,7 @@ internal fun ClipboardPanel(
     state: KeyboardUiState,
     colors: SemoKeyboardColors,
     panelHeight: Dp,
+    bottomInset: Dp,
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language == KeyboardLanguage.ARABIC
@@ -698,6 +699,27 @@ internal fun ClipboardPanel(
                 .padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // زر أبج دائري بالصف العلوي (بدل الشريط السفلي): المحتوى ياخذ كل المساحة تحته
+            PressBox(modifier = Modifier.size(34.dp), onClick = {
+                viewModel.onSelectionTick()
+                viewModel.openPage(KeyboardPage.LETTERS)
+            }) { pressed ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(if (pressed) colors.keyPressed else colors.chip, RoundedCornerShape(17.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tr(arabic, "أبج", "ABC"),
+                        color = colors.text,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
             if (state.clipboardEnabled && presentKinds.size >= 2) {
                 Row(
                     modifier = Modifier
@@ -766,7 +788,8 @@ internal fun ClipboardPanel(
                 else -> LazyVerticalStaggeredGrid(
                     columns = StaggeredGridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = 6.dp),
+                    // ينتهي المحتوى فوق أزرار شريط التنقل لكن يمتد خلفها بالتمرير
+                    contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = 6.dp + bottomInset),
                     verticalItemSpacing = 6.dp,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -788,10 +811,6 @@ internal fun ClipboardPanel(
             }
         }
 
-        PanelBottomBar(arabic, colors, onBack = {
-            viewModel.onSelectionTick()
-            viewModel.openPage(KeyboardPage.LETTERS)
-        })
     }
 }
 

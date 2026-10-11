@@ -259,7 +259,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
 
                 when (state.page) {
                     KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
-                    KeyboardPage.CLIPBOARD -> ClipboardPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.CLIPBOARD -> ClipboardPanel(state, colors, panelHeight, bottomReserve, viewModel)
                     KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
                     else -> Box(
                         modifier = Modifier
@@ -291,7 +291,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     }
                 }
                 if (bottomReserve > 0.dp &&
-                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD || state.page == KeyboardPage.EDIT)
+                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT)
                 ) {
                     Spacer(Modifier.height(bottomReserve))
                 }

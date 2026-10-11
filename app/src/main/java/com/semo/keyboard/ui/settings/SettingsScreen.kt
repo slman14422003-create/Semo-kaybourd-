@@ -551,7 +551,7 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     selected = settings.numKeyTarget,
                     onSelect = { scope.launch { repo.setNumKeyTarget(it) } }
                 )
-                Hint("الضغطة المطوّلة على زر 123 تفتح الوجهة الأخرى، ولوحة الأرقام متاحة دائمًا من شريط الأدوات أيضًا. رموز مثل = % * # [ ] تلاقيها بالضغط المطوّل على مفاتيح اللوحة.")
+                Hint("لوحة الأرقام تظهر تلقائيًا بحقول الأرقام والهاتف، وبباقي الحقول يفتح 123 الوجهة المختارة. الضغطة المطوّلة على 123 تفتح الوجهة الأخرى، ولوحة الأرقام متاحة من شريط الأدوات أيضًا. رموز مثل = % * # [ ] تلاقيها بالضغط المطوّل على مفاتيح اللوحة.")
             }
             Divider()
             Block("وضع اليد الواحدة", R.drawable.ic_tool_onehand, IconOrange) {
