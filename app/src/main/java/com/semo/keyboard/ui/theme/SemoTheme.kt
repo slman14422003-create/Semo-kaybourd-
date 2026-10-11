@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.KeyboardStyle
+import com.semo.keyboard.domain.model.KeySpacing
 
 /** هوية سيمو البصرية: رمادي فحمي متدرّج + أزرق واضح (مأخوذة من تصميم GITHUB-MANGER) */
 object SemoPalette {
@@ -128,7 +129,12 @@ data class KeyMetrics(
  * عرض المفتاح = 0.82 من خانة الحرف (الفراغ الأفقي 0.18)، ارتفاعه = 1.27 × عرضه،
  * والمسافة بين الصفوف = 0.41 × عرض المفتاح. [widthDp] عرض اللوحة الفعلي (أقل مع اليد الواحدة).
  */
-fun keyMetrics(style: KeyboardStyle, size: KeyboardSize, widthDp: Float = 411f): KeyMetrics {
+fun keyMetrics(
+    style: KeyboardStyle,
+    size: KeyboardSize,
+    widthDp: Float = 411f,
+    spacing: KeySpacing = KeySpacing.NORMAL
+): KeyMetrics {
     val pitch = (widthDp - 6f) / 10f
     val keyWidth = pitch * 0.82f
     val factor = when (size) {
@@ -137,8 +143,9 @@ fun keyMetrics(style: KeyboardStyle, size: KeyboardSize, widthDp: Float = 411f):
         KeyboardSize.LARGE -> 1.09f
     }
     val height = (keyWidth * 1.27f * factor).coerceIn(37f, 52f)
-    val rowSpacing = (keyWidth * 0.41f).coerceIn(10f, 16f)
-    val keySpacing = (pitch * 0.18f).coerceIn(5f, 9f)
+    // المسافة بين المفاتيح حسب اختيار المستخدم (ضيّق/عادي/واسع)
+    val rowSpacing = ((keyWidth * 0.41f).coerceIn(10f, 16f) * spacing.vertical).coerceIn(7f, 19f)
+    val keySpacing = ((pitch * 0.18f).coerceIn(5f, 9f) * spacing.horizontal).coerceIn(3.5f, 12f)
     val radius = (keyWidth * 0.17f).coerceIn(5f, 8f)
     return KeyMetrics(height.dp, keySpacing.dp, rowSpacing.dp, 3.dp, radius.dp, 0.dp, 54.dp, 44.dp)
 }

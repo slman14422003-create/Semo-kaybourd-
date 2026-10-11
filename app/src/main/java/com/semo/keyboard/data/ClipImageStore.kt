@@ -106,7 +106,7 @@ class ClipImageStore(context: Context) {
         const val DIR_NAME = "clip_images"
         const val AUTHORITY_SUFFIX = ".clipfiles"
         private const val TMP_PREFIX = "tmp_"
-        private const val MAX_BYTES = 12L * 1024 * 1024
+        private const val MAX_BYTES = 25L * 1024 * 1024
 
         private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
             override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount

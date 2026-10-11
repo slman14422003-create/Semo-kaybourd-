@@ -10,6 +10,7 @@ import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardPage
 import com.semo.keyboard.domain.model.KeyboardUiState
+import com.semo.keyboard.domain.model.NumKeyTarget
 import com.semo.keyboard.domain.model.ShiftState
 
 /** فئة إيموجي: أيقونة التبويب + القائمة */
@@ -139,6 +140,7 @@ object KeyboardLayoutProvider {
             if (state.language == KeyboardLanguage.ARABIC) arabicRows(state) else englishRows(state)
         KeyboardPage.SYMBOLS_1 -> symbolRows(state, firstPage = true)
         KeyboardPage.SYMBOLS_2 -> symbolRows(state, firstPage = false)
+        KeyboardPage.NUMPAD -> numpadRows(state)
         KeyboardPage.EMOJI, KeyboardPage.CLIPBOARD, KeyboardPage.EDIT -> emptyList()
     }
 
@@ -241,6 +243,52 @@ object KeyboardLayoutProvider {
         ) + listOf(utilityRow(state))
     }
 
+    /**
+     * لوحة الأرقام: شبكة 3×4 للأرقام (1-9 ثم , 0 .) بالوسط، وعلى جانبيها عمودا رموز العمليات والرموز الشائعة
+     * (+ − × ÷ ( ) /) والحذف والمسافة والإدخال، بنفس عدد صفوف صفحة الحروف فلا يقفز ارتفاع اللوحة عند التبديل.
+     * بقية الرموز (= % * # [ ] { } _ ± ...) بالضغط المطوّل على المفاتيح المجاورة، وصفحة الرموز كاملة بمفتاح «رموز».
+     * المفاتيح ستة أعمدة متساوية العرض.
+     */
+    private fun numpadRows(state: KeyboardUiState): List<List<KeyDefinition>> {
+        val arabic = state.language == KeyboardLanguage.ARABIC
+        val d = digitsFor(state)
+        fun digit(i: Int, alts: List<String> = emptyList()) =
+            KeyDefinition(d[i], KeyAction.Character(d[i]), longPressChars = alts)
+        fun op(label: String, char: String = label, alts: List<String> = emptyList()) =
+            KeyDefinition(label, KeyAction.Character(char), longPressChars = alts, special = true)
+        fun plain(char: String, alts: List<String> = emptyList()) =
+            KeyDefinition(char, KeyAction.Character(char), longPressChars = alts)
+
+        val r1 = listOf(
+            op("+", alts = listOf("=", "%", "±", "#")),
+            op("(", alts = listOf("[", "{", "<")),
+            digit(0), digit(1), digit(2),
+            KeyDefinition("⌫", KeyAction.Backspace)
+        )
+        val r2 = listOf(
+            // الناقص يُعرض بعلامة − لكنه يُكتب - عادية كي تفهمه حقول الأرقام
+            op("−", "-", alts = listOf("_", "–", "—")),
+            op(")", alts = listOf("]", "}", ">")),
+            digit(3), digit(4), digit(5),
+            KeyDefinition(if (arabic) "مسافة" else "space", KeyAction.Space)
+        )
+        val r3 = listOf(
+            op("×", alts = listOf("*", "⋅", "x")),
+            op("/", alts = listOf("\\", "|", ":")),
+            digit(6), digit(7), digit(8),
+            enterKey(state.enterKind, arabic).copy(weight = 1f)
+        )
+        val r4 = listOf(
+            KeyDefinition(if (arabic) "أبج" else "ABC", KeyAction.SwitchToLetters),
+            op("÷", alts = listOf(":", "‰", "√")),
+            plain(",", alts = listOf(";", ":")),
+            digit(9, alts = listOf("%", "°", "‰")),
+            plain(".", alts = listOf("…", "٫", "·")),
+            KeyDefinition(if (arabic) "رموز" else "#+=", KeyAction.SwitchToSymbols, textOnly = true)
+        )
+        return listOf(r1, r2, r3, r4, utilityRow(state))
+    }
+
     private fun symbolRows(state: KeyboardUiState, firstPage: Boolean): List<List<KeyDefinition>> {
         fun mapRow(chars: List<String>, weight: Float = 1f) =
             chars.map { KeyDefinition(it, KeyAction.Character(it), weight = weight) }
@@ -261,8 +309,12 @@ object KeyboardLayoutProvider {
     /** صف آيفون: [123] [إيموجي] [مسافة] [return] بالنسب المقيسة 1.25 / 1.25 / 5 / 2.5 */
     private fun bottomRow(state: KeyboardUiState, letters: Boolean): List<KeyDefinition> {
         val arabic = state.language == KeyboardLanguage.ARABIC
+        // «123»: ضغطة = الوجهة المختارة بالإعدادات (لوحة الأرقام أو الرموز)، ومطوّلة = الوجهة الأخرى
         val left = if (letters)
-            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = 1.25f)
+            KeyDefinition(
+                "123", KeyAction.SwitchToNumbers, weight = 1.25f,
+                longPressAction = if (state.numKeyTarget == NumKeyTarget.NUMPAD) KeyAction.SwitchToSymbols else KeyAction.SwitchToNumpad
+            )
         else
             KeyDefinition(if (arabic) "أبج" else "ABC", KeyAction.SwitchToLetters, weight = 1.25f)
 

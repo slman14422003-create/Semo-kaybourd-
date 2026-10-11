@@ -22,6 +22,8 @@ import com.semo.keyboard.domain.model.SpaceBarAction
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.KeyboardStyle
+import com.semo.keyboard.domain.model.KeySpacing
+import com.semo.keyboard.domain.model.NumKeyTarget
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
@@ -29,6 +31,7 @@ import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -153,6 +156,8 @@ class SettingsRepository(context: Context) {
         val BACKSPACE_SPEED = stringPreferencesKey("backspace_speed")
         val SPACE_ACTION = stringPreferencesKey("space_bar_action")
         val KEEP_SYMBOLS = booleanPreferencesKey("keep_symbol_panel")
+        val KEY_SPACING = stringPreferencesKey("key_spacing")
+        val NUM_KEY_TARGET = stringPreferencesKey("num_key_target")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -170,6 +175,8 @@ class SettingsRepository(context: Context) {
                 arabicLayout = p[Keys.ARABIC_LAYOUT].toEnumOr(ArabicLayout.STANDARD),
                 style = p[Keys.STYLE].toEnumOr(KeyboardStyle.IOS18),
                 size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
+                keySpacing = p[Keys.KEY_SPACING].toEnumOr(KeySpacing.NORMAL),
+                numKeyTarget = p[Keys.NUM_KEY_TARGET].toEnumOr(NumKeyTarget.NUMPAD),
                 oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
                 suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,
                 keyPreview = p[Keys.KEY_PREVIEW] ?: true,
@@ -194,6 +201,7 @@ class SettingsRepository(context: Context) {
                 recentEmojis = p[Keys.RECENT_EMOJIS].orEmpty().split(' ').filter { it.isNotEmpty() }
             )
         }
+        .distinctUntilChanged()
 
     suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[Keys.THEME_MODE] = mode.name } }
     suspend fun setSoundEnabled(v: Boolean) { store.edit { it[Keys.SOUND] = v } }
@@ -206,6 +214,8 @@ class SettingsRepository(context: Context) {
     suspend fun setArabicLayout(v: ArabicLayout) { store.edit { it[Keys.ARABIC_LAYOUT] = v.name } }
     suspend fun setStyle(v: KeyboardStyle) { store.edit { it[Keys.STYLE] = v.name } }
     suspend fun setSize(v: KeyboardSize) { store.edit { it[Keys.SIZE] = v.name } }
+    suspend fun setKeySpacing(v: KeySpacing) { store.edit { it[Keys.KEY_SPACING] = v.name } }
+    suspend fun setNumKeyTarget(v: NumKeyTarget) { store.edit { it[Keys.NUM_KEY_TARGET] = v.name } }
     suspend fun setOneHand(v: OneHandMode) { store.edit { it[Keys.ONE_HAND] = v.name } }
     suspend fun setSuggestionsEnabled(v: Boolean) { store.edit { it[Keys.SUGGESTIONS] = v } }
     suspend fun setKeyPreview(v: Boolean) { store.edit { it[Keys.KEY_PREVIEW] = v } }

@@ -5,6 +5,8 @@ import android.graphics.Typeface
 import android.util.Patterns
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -75,6 +77,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
@@ -89,7 +92,12 @@ import com.semo.keyboard.domain.logic.EmojiCategory
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.clipImageName
+import com.semo.keyboard.domain.logic.ClipClassifier
+import com.semo.keyboard.domain.logic.ClipKind
+import com.semo.keyboard.domain.model.clipDisplayText
+import com.semo.keyboard.domain.model.clipLongLength
 import com.semo.keyboard.domain.model.isClipImage
+import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.isImage
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.KeyAction
@@ -628,11 +636,25 @@ internal fun EmojiPanel(
 
 private val DeleteRed = Color(0xFFFF453A)
 
-private fun clipKindLabel(text: String, arabic: Boolean): String {
+/** اسم النوع بصيغة الجمع لشريط التصفية أعلى الحافظة */
+private fun kindFilterLabel(kind: ClipKind, arabic: Boolean): String = when (kind) {
+    ClipKind.TEXT -> tr(arabic, "نصوص", "Text")
+    ClipKind.LINK -> tr(arabic, "روابط", "Links")
+    ClipKind.CODE -> tr(arabic, "أكواد", "Code")
+    ClipKind.IMAGE -> tr(arabic, "صور", "Images")
+}
+
+/** وسم البطاقة (مفرد): نوع العنصر، ومع النص الطويل يُضاف عدد أحرفه */
+private fun clipKindLabel(text: String, kind: ClipKind, arabic: Boolean): String {
+    if (text.isClipLong()) {
+        val base = if (kind == ClipKind.CODE) tr(arabic, "كود طويل", "Long code") else tr(arabic, "نص طويل", "Long text")
+        return base + " · " + text.clipLongLength() + tr(arabic, " حرف", " chars")
+    }
     val t = text.trim()
     return when {
-        text.isClipImage() -> tr(arabic, "صورة", "Image")
-        Patterns.WEB_URL.matcher(t).matches() -> tr(arabic, "رابط", "Link")
+        kind == ClipKind.IMAGE -> tr(arabic, "صورة", "Image")
+        kind == ClipKind.LINK -> tr(arabic, "رابط", "Link")
+        kind == ClipKind.CODE -> tr(arabic, "كود", "Code")
         Patterns.EMAIL_ADDRESS.matcher(t).matches() -> tr(arabic, "بريد", "Email")
         t.length >= 5 && t.all { it.isDigit() || it == '+' || it == '-' || it == '(' || it == ')' || it == ' ' } ->
             tr(arabic, "رقم", "Number")
@@ -653,8 +675,15 @@ internal fun ClipboardPanel(
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language == KeyboardLanguage.ARABIC
-    val pinned = remember(state.clipItems) { state.clipItems.filter { it.pinned } }
-    val recent = remember(state.clipItems) { state.clipItems.filter { !it.pinned } }
+    // تصفية حسب النوع (نصوص/روابط/أكواد/صور): تظهر الأزرار فقط لو الحافظة فيها أكثر من نوع
+    var filter by remember { mutableStateOf<ClipKind?>(null) }
+    val presentKinds = remember(state.clipItems) { state.clipItems.map { ClipClassifier.kindOf(it) }.toSet() }
+    val activeFilter = filter?.takeIf { it in presentKinds }
+    val shownItems = remember(state.clipItems, activeFilter) {
+        if (activeFilter == null) state.clipItems else state.clipItems.filter { ClipClassifier.kindOf(it) == activeFilter }
+    }
+    val pinned = remember(shownItems) { shownItems.filter { it.pinned } }
+    val recent = remember(shownItems) { shownItems.filter { !it.pinned } }
 
     Column(
         modifier = Modifier
@@ -688,6 +717,29 @@ internal fun ClipboardPanel(
             }
         }
 
+        if (state.clipboardEnabled && presentKinds.size >= 2) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ClipFilterChip(tr(arabic, "الكل", "All"), activeFilter == null, colors) {
+                    viewModel.onSelectionTick()
+                    filter = null
+                }
+                ClipKind.values().filter { it in presentKinds }.forEach { kind ->
+                    ClipFilterChip(kindFilterLabel(kind, arabic), activeFilter == kind, colors) {
+                        viewModel.onSelectionTick()
+                        filter = kind
+                    }
+                }
+            }
+        }
+
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -701,7 +753,12 @@ internal fun ClipboardPanel(
                 )
                 state.clipItems.isEmpty() -> ClipEmptyState(
                     tr(arabic, "الحافظة فاضية", "Nothing copied yet"),
-                    tr(arabic, "انسخ نصًا وسيظهر هنا للصقه بلمسة", "Copy some text and it will show up here"),
+                    tr(arabic, "انسخ نصًا أو رابطًا أو كودًا أو صورة وسيظهر هنا للصقه بلمسة", "Copy text, a link, code or an image and it will show up here"),
+                    colors
+                )
+                shownItems.isEmpty() -> ClipEmptyState(
+                    tr(arabic, "ما في عناصر من هذا النوع", "Nothing of this type"),
+                    tr(arabic, "اختر «الكل» لعرض كل المنسوخ", "Choose All to see everything copied"),
                     colors
                 )
                 else -> LazyVerticalStaggeredGrid(
@@ -733,6 +790,34 @@ internal fun ClipboardPanel(
             viewModel.onSelectionTick()
             viewModel.openPage(KeyboardPage.LETTERS)
         })
+    }
+}
+
+@Composable
+private fun ClipFilterChip(label: String, selected: Boolean, colors: SemoKeyboardColors, onClick: () -> Unit) {
+    PressBox(modifier = Modifier.height(28.dp), onClick = onClick) { pressed ->
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .background(
+                    when {
+                        selected -> colors.keyAccent
+                        pressed -> colors.keyPressed
+                        else -> colors.chip
+                    },
+                    RoundedCornerShape(14.dp)
+                )
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                color = if (selected) colors.textOnAccent else colors.text,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -804,7 +889,10 @@ private fun ClipHeaderChip(
 @Composable
 private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
     var menu by remember(item.text) { mutableStateOf(false) }
-    val kind = remember(item.text, arabic) { clipKindLabel(item.text, arabic) }
+    val kind = remember(item.text) { ClipClassifier.kindOf(item.text) }
+    val kindLabel = remember(item.text, arabic) { clipKindLabel(item.text, kind, arabic) }
+    // النص الطويل يُعرض بمعاينة أوله فقط (الكامل بملف ويُلصق كاملًا عند الضغط)
+    val shown = remember(item.text) { item.text.clipDisplayText() }
     PressBox(
         modifier = Modifier.fillMaxWidth(),
         onClick = {
@@ -826,11 +914,30 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 .background(if (pressed) colors.keyPressed else colors.key, RoundedCornerShape(14.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            if (item.isImage) {
-                ClipImageThumb(item.text.clipImageName(), colors)
-            } else {
-                Text(
-                    text = item.text,
+            when (kind) {
+                ClipKind.IMAGE -> ClipImageThumb(item.text.clipImageName(), colors)
+                // الكود: خط أحادي المسافة واتجاه من اليسار دائمًا ليبقى التنسيق والمسافات كما نُسخت
+                ClipKind.CODE -> Text(
+                    text = shown,
+                    color = colors.text,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 8,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(textDirection = TextDirection.Ltr)
+                )
+                ClipKind.LINK -> Text(
+                    text = shown.trim(),
+                    color = colors.keyAccent,
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(textDirection = TextDirection.Ltr)
+                )
+                ClipKind.TEXT -> Text(
+                    text = shown,
                     color = colors.text,
                     fontSize = 14.sp,
                     lineHeight = 19.sp,
@@ -859,7 +966,7 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = kind, color = colors.textMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    Text(text = kindLabel, color = colors.textMuted, fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1f))
                     if (item.pinned) {
                         Icon(
                             painter = painterResource(R.drawable.ic_clip_pin_fill),

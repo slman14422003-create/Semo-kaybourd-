@@ -82,6 +82,8 @@ import com.semo.keyboard.data.DictionaryManager
 import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardSize
+import com.semo.keyboard.domain.model.KeySpacing
+import com.semo.keyboard.domain.model.NumKeyTarget
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
@@ -522,6 +524,23 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     selected = settings.size,
                     onSelect = { scope.launch { repo.setSize(it) } }
                 )
+            }
+            Divider()
+            Block("المسافة بين المفاتيح", R.drawable.ic_tool_cursor, IconBlue) {
+                Segmented(
+                    options = listOf(KeySpacing.TIGHT to "ضيّقة", KeySpacing.NORMAL to "عادية", KeySpacing.WIDE to "واسعة"),
+                    selected = settings.keySpacing,
+                    onSelect = { scope.launch { repo.setKeySpacing(it) } }
+                )
+            }
+            Divider()
+            Block("زر 123", R.drawable.ic_tool_numpad, IconPurple) {
+                Segmented(
+                    options = listOf(NumKeyTarget.NUMPAD to "لوحة أرقام 3×4", NumKeyTarget.SYMBOLS to "صفحة الرموز"),
+                    selected = settings.numKeyTarget,
+                    onSelect = { scope.launch { repo.setNumKeyTarget(it) } }
+                )
+                Hint("الضغطة المطوّلة على زر 123 تفتح الوجهة الأخرى، ولوحة الأرقام متاحة دائمًا من شريط الأدوات أيضًا. رموز مثل = % * # [ ] تلاقيها بالضغط المطوّل على مفاتيح اللوحة.")
             }
             Divider()
             Block("وضع اليد الواحدة", R.drawable.ic_tool_onehand, IconOrange) {

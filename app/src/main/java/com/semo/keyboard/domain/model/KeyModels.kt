@@ -12,6 +12,10 @@ sealed class KeyAction {
     data object SwitchToSymbols : KeyAction()
     data object SwitchToSymbols2 : KeyAction()
     data object SwitchToLetters : KeyAction()
+    /** مفتاح «123» بصفحة الحروف: يفتح لوحة الأرقام أو صفحة الرموز حسب الإعداد */
+    data object SwitchToNumbers : KeyAction()
+    /** يفتح لوحة الأرقام 3×4 مباشرة (ضغطة مطوّلة على «123» أو من شريط الأدوات) */
+    data object SwitchToNumpad : KeyAction()
     data object SwitchLanguage : KeyAction()
     data object Emoji : KeyAction()
     data object Globe : KeyAction()
@@ -42,7 +46,9 @@ data class KeyDefinition(
     /** شارة صغيرة فوق الدائرة (رمز اللغة الحالية EN / ع) */
     val badge: String = "",
     /** دائرة بلا أيقونة: تُرسم خلف سهم الإخفاء الخاص بالنظام فيبدو داخل الدائرة */
-    val ringOnly: Boolean = false
+    val ringOnly: Boolean = false,
+    /** يُرسم بلون المفاتيح الوظيفية (الرمادي) حتى لو كان حرفًا عاديًا، مثل رموز العمليات بلوحة الأرقام */
+    val special: Boolean = false
 ) {
     companion object {
         fun spacer(weight: Float) = KeyDefinition("", KeyAction.None, weight, isSpacer = true)
@@ -50,7 +56,7 @@ data class KeyDefinition(
 }
 
 enum class ShiftState { OFF, ON, LOCKED }
-enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, EMOJI, CLIPBOARD, EDIT }
+enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, NUMPAD, EMOJI, CLIPBOARD, EDIT }
 enum class KeyboardLanguage { ENGLISH, ARABIC }
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -68,6 +74,16 @@ enum class KeyboardStyle { IOS18 }
 
 /** ارتفاع المفاتيح */
 enum class KeyboardSize { SMALL, MEDIUM, LARGE }
+
+/** المسافة بين المفاتيح (أفقيًا وعموديًا): ضيّق، عادي، واسع */
+enum class KeySpacing(val horizontal: Float, val vertical: Float) {
+    TIGHT(0.7f, 0.8f),
+    NORMAL(1f, 1f),
+    WIDE(1.35f, 1.15f)
+}
+
+/** ماذا يفتح مفتاح «123» بصفحة الحروف: لوحة أرقام 3×4 أو صفحة الرموز القديمة */
+enum class NumKeyTarget { NUMPAD, SYMBOLS }
 
 /** وضع اليد الواحدة: اللوحة مزاحة لليسار أو لليمين */
 enum class OneHandMode { OFF, LEFT, RIGHT }
@@ -103,6 +119,7 @@ enum class EditAction { SELECT_ALL, CUT, COPY, PASTE, LEFT, RIGHT, UP, DOWN, HOM
 enum class EnterKind { RETURN, SEARCH, SEND, GO, DONE, NEXT }
 
 /** عنصر من سجل الحافظة */
+@Immutable
 data class ClipItem(val text: String, val pinned: Boolean)
 
 /**
@@ -117,7 +134,24 @@ fun String.clipImageName(): String = removePrefix(CLIP_IMAGE_PREFIX).substringBe
 fun String.clipImageMime(): String = removePrefix(CLIP_IMAGE_PREFIX).substringAfter('|', "image/png")
 val ClipItem.isImage: Boolean get() = text.isClipImage()
 
+/**
+ * عنصر الحافظة النص الطويل (أكواد، مقالات...): النص الكامل بملف بتخزين التطبيق (ClipTextStore) كي لا يتضخّم
+ * مخزن التفضيلات ولا يبطؤ، ويُخزَّن بالسجل مفتاح خاص: بادئة + اسم الملف + عدد الأحرف + معاينة أول النص.
+ */
+const val CLIP_LONG_PREFIX = "\u0003txt|"
+
+fun clipLongKey(fileName: String, length: Int, preview: String): String = "$CLIP_LONG_PREFIX$fileName|$length|$preview"
+fun String.isClipLong(): Boolean = startsWith(CLIP_LONG_PREFIX)
+fun String.clipLongName(): String = removePrefix(CLIP_LONG_PREFIX).substringBefore('|')
+fun String.clipLongLength(): Int = removePrefix(CLIP_LONG_PREFIX).substringAfter('|', "").substringBefore('|').toIntOrNull() ?: 0
+fun String.clipLongPreview(): String = removePrefix(CLIP_LONG_PREFIX).substringAfter('|', "").substringAfter('|', "")
+val ClipItem.isLongText: Boolean get() = text.isClipLong()
+
+/** النص الذي يُعرض للمستخدم: المعاينة للنص الطويل، والنص نفسه لغيره */
+fun String.clipDisplayText(): String = if (isClipLong()) clipLongPreview() else this
+
 /** ناتج عملية حسابية مكتوبة قبل المؤشر (مثل 60*30+20 → 1820) */
+@Immutable
 data class MathResult(val expression: String, val value: String)
 
 /** تفضيلات المستخدم المحفوظة */
@@ -134,6 +168,10 @@ data class SemoSettings(
     val arabicLayout: ArabicLayout = ArabicLayout.STANDARD,
     val style: KeyboardStyle = KeyboardStyle.IOS18,
     val size: KeyboardSize = KeyboardSize.MEDIUM,
+    /** المسافة بين المفاتيح */
+    val keySpacing: KeySpacing = KeySpacing.NORMAL,
+    /** ماذا يفتح مفتاح «123» */
+    val numKeyTarget: NumKeyTarget = NumKeyTarget.NUMPAD,
     val oneHand: OneHandMode = OneHandMode.OFF,
     val suggestionsEnabled: Boolean = true,
     val keyPreview: Boolean = true,
@@ -170,6 +208,7 @@ data class SemoSettings(
     val recentEmojis: List<String> = emptyList()
 )
 
+@Immutable
 data class KeyboardUiState(
     val page: KeyboardPage = KeyboardPage.LETTERS,
     val shiftState: ShiftState = ShiftState.OFF,
@@ -188,6 +227,8 @@ data class KeyboardUiState(
     val arabicLayout: ArabicLayout = ArabicLayout.STANDARD,
     val style: KeyboardStyle = KeyboardStyle.IOS18,
     val size: KeyboardSize = KeyboardSize.MEDIUM,
+    val keySpacing: KeySpacing = KeySpacing.NORMAL,
+    val numKeyTarget: NumKeyTarget = NumKeyTarget.NUMPAD,
     val oneHand: OneHandMode = OneHandMode.OFF,
     val suggestionsEnabled: Boolean = true,
     val keyPreview: Boolean = true,

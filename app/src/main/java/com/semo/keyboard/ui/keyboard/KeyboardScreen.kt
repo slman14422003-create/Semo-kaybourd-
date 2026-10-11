@@ -109,6 +109,7 @@ import com.semo.keyboard.domain.model.HoldDelay
 import com.semo.keyboard.domain.model.SpaceBarAction
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.KeyAction
+import com.semo.keyboard.domain.model.clipDisplayText
 import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
@@ -159,10 +160,10 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
-    val metrics = remember(state.style, state.size, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow) {
+    val metrics = remember(state.style, state.size, state.keySpacing, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow) {
         // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
         val width = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
-        val base = keyMetrics(state.style, state.size, width)
+        val base = keyMetrics(state.style, state.size, width, state.keySpacing)
         if (screenWidthDp > screenHeightDp) {
             // الوضع الأفقي: العرض كبير فكانت المفاتيح تطلع بأقصى ارتفاع وتغطي معظم الشاشة.
             // نحصر ارتفاع اللوحة بحوالي نصف الشاشة كي يبقى الحقل النصي ظاهرًا.
@@ -175,7 +176,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val rows = remember(
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
         state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind,
-        state.hideButtonMode
+        state.hideButtonMode, state.numKeyTarget
     ) { KeyboardLayoutProvider.rows(state) }
     // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل. فبدل ما نترك مساحة فارغة تحت الصف الأخير،
     // نجعل صف الكرة الأرضية والميكروفون بنفس ارتفاع شريط التنقل ونوسّط أيقوناته فيه (مثل آيفون
@@ -508,6 +509,7 @@ private fun TopStrip(
                 ) {
                     StripIconButton(R.drawable.ic_ios_emoji, colors) { viewModel.openPage(KeyboardPage.EMOJI) }
                     StripIconButton(R.drawable.ic_tool_clipboard, colors) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
+                    StripIconButton(R.drawable.ic_tool_numpad, colors) { viewModel.openPage(KeyboardPage.NUMPAD) }
                     StripIconButton(R.drawable.ic_tool_cursor, colors) { viewModel.openPage(KeyboardPage.EDIT) }
                     StripIconButton(R.drawable.ic_tool_onehand, colors) { viewModel.cycleOneHand() }
                     StripIconButton(R.drawable.ic_tool_settings, colors) { viewModel.openSettings() }
@@ -568,7 +570,7 @@ private fun RowScope.FreshClipChip(text: String, arabic: Boolean, colors: SemoKe
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = if (text.isClipImage()) tr(arabic, "صورة منسوخة · اضغط للصق", "Copied image · tap to paste") else text.replace('\n', ' '),
+                text = if (text.isClipImage()) tr(arabic, "صورة منسوخة · اضغط للصق", "Copied image · tap to paste") else text.clipDisplayText().replace('\n', ' ').trim(),
                 color = colors.suggestion,
                 fontSize = 15.sp,
                 maxLines = 1,
@@ -1193,9 +1195,10 @@ private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
     }
 }
 
-private fun isSpecial(def: KeyDefinition): Boolean = when (def.action) {
+private fun isSpecial(def: KeyDefinition): Boolean = def.special || when (def.action) {
     KeyAction.Shift, KeyAction.Backspace, KeyAction.Globe, KeyAction.Emoji,
     KeyAction.SwitchToSymbols, KeyAction.SwitchToSymbols2, KeyAction.SwitchToLetters,
+    KeyAction.SwitchToNumbers, KeyAction.SwitchToNumpad,
     KeyAction.SwitchLanguage -> true
     KeyAction.Enter -> !def.isAccent
     else -> false

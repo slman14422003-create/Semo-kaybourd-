@@ -64,6 +64,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** أقصى عدد أحرف بدفعة لصق واحدة (النص الطويل يُلصق على دفعات كي لا يتجاوز حدّ حجم رسالة Binder) */
+private const val COMMIT_CHUNK = 8_000
+
 /**
  * خدمة لوحة المفاتيح. تستضيف واجهة Compose داخل نافذة الـ IME.
  *
@@ -194,7 +197,11 @@ class SemoKeyboardService :
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
     }
 
-    /** يحفظ آخر نص منسوخ بسجل الحافظة (إلا بحقول كلمات المرور أو لو علّم التطبيق النص كحساس) */
+    /**
+     * يحفظ آخر شيء نُسخ بسجل الحافظة (إلا بحقول كلمات المرور أو لو علّم التطبيق النص كحساس):
+     * صورة (لقطة شاشة وغيرها) تُنسخ لتخزين التطبيق لأن رابط الحافظة مؤقت، أو نص/رابط/كود
+     * (الطويل منه يُحفظ كاملًا بملف عبر ClipboardRepository).
+     */
     private fun captureClipboard() {
         if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
         runCatching {
@@ -205,29 +212,47 @@ class SemoKeyboardService :
                 val sensitive = clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true
                 if (sensitive) return
             }
-            val item = clip.getItemAt(0)
             val desc = clip.description
-            val imageMime = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }.firstOrNull { it.startsWith("image/") }
-            val imageUri = item.uri
-            if (imageMime != null && imageUri != null) {
-                // صورة (لقطة شاشة مثلًا): ننسخها لتخزين التطبيق لأن رابط الحافظة مؤقت
-                val id = imageUri.toString()
+            val items = (0 until clip.itemCount).map { clip.getItemAt(it) }
+            val descImageMime = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }.firstOrNull { it.startsWith("image/") }
+            val firstText = items.asSequence()
+                .map { it.coerceToText(this)?.toString().orEmpty() }
+                .firstOrNull { it.isNotBlank() }
+
+            // عنصر برابط content:// قد يكون صورة (لقطة شاشة): بعض التطبيقات لا تذكر نوعها بوصف المقطع فنسأل المزوّد
+            val contentUri = items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme == "content" } }
+            if (contentUri != null) {
+                val id = contentUri.toString()
                 if (id == lastCapturedClip) return
                 lastCapturedClip = id
                 serviceScope.launch {
-                    val name = withContext(Dispatchers.IO) { imageStore.saveFromUri(imageUri, imageMime) } ?: return@launch
-                    val key = clipImageKey(name, imageMime)
-                    clipboardRepository.add(key)
-                    viewModel.onClipboardCopied(key)
+                    val mime = withContext(Dispatchers.IO) { resolveImageMime(descImageMime, contentUri) }
+                    val stored = if (mime != null) {
+                        val name = withContext(Dispatchers.IO) { imageStore.saveFromUri(contentUri, mime) } ?: return@launch
+                        clipboardRepository.add(clipImageKey(name, mime))
+                    } else if (!firstText.isNullOrBlank()) {
+                        clipboardRepository.add(firstText)
+                    } else null
+                    if (stored != null) viewModel.onClipboardCopied(stored)
                 }
                 return
             }
-            val text = item.coerceToText(this)?.toString().orEmpty()
-            if (text.isBlank() || text == lastCapturedClip) return
+
+            val text = firstText ?: return
+            if (text == lastCapturedClip) return
             lastCapturedClip = text
-            serviceScope.launch { clipboardRepository.add(text) }
-            viewModel.onClipboardCopied(text)
+            serviceScope.launch {
+                val stored = clipboardRepository.add(text) ?: return@launch
+                viewModel.onClipboardCopied(stored)
+            }
         }
+    }
+
+    /** نوع الصورة: من مزوّد المحتوى أولًا (الأدق)، ثم من وصف المقطع؛ null لو الرابط ليس صورة */
+    private fun resolveImageMime(descMime: String?, uri: android.net.Uri): String? {
+        val provider = runCatching { contentResolver.getType(uri) }.getOrNull()
+            ?.takeIf { it.startsWith("image/") && !it.endsWith("/*") }
+        return provider ?: descMime
     }
 
     override fun onCreateInputView(): View {
@@ -279,7 +304,9 @@ class SemoKeyboardService :
         val inputType = info?.inputType ?: 0
         val inputClass = inputType and InputType.TYPE_MASK_CLASS
         val page = when (inputClass) {
-            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> KeyboardPage.SYMBOLS_1
+            // حقول الأرقام والهاتف: لوحة الأرقام 3×4 (أرقام + عمليات + رموز شائعة)، والتاريخ والوقت: صفحة الرموز
+            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE -> KeyboardPage.NUMPAD
+            InputType.TYPE_CLASS_DATETIME -> KeyboardPage.SYMBOLS_1
             else -> KeyboardPage.LETTERS
         }
         val variation = inputType and InputType.TYPE_MASK_VARIATION
@@ -383,7 +410,25 @@ class SemoKeyboardService :
     private val bridge = object : InputBridge {
 
         override fun commitText(text: String) {
-            runCatching { currentInputConnection?.commitText(text, 1) }
+            val ic = currentInputConnection ?: return
+            if (text.length <= COMMIT_CHUNK) {
+                runCatching { ic.commitText(text, 1) }
+                return
+            }
+            // النص الطويل (كود مثلًا): الاتصال بالتطبيق الهدف عبر Binder وحجم الرسالة الواحدة محدود (~1MB)،
+            // فنلصقه على دفعات داخل عملية تحرير واحدة (تراجع واحد) بدل رسالة ضخمة تفشل
+            runCatching {
+                ic.beginBatchEdit()
+                var start = 0
+                while (start < text.length) {
+                    var end = minOf(start + COMMIT_CHUNK, text.length)
+                    // لا نقطع زوج surrogate (إيموجي) بين دفعتين
+                    if (end < text.length && text[end - 1].isHighSurrogate()) end--
+                    ic.commitText(text.substring(start, end), 1)
+                    start = end
+                }
+                ic.endBatchEdit()
+            }
         }
 
         override fun deleteBackward() {

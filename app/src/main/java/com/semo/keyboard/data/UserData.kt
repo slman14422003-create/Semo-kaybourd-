@@ -10,43 +10,80 @@ import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.TextShortcut
 import com.semo.keyboard.domain.model.clipImageName
+import com.semo.keyboard.domain.model.clipLongKey
+import com.semo.keyboard.domain.model.clipLongName
 import com.semo.keyboard.domain.model.isClipImage
+import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.isImage
+import com.semo.keyboard.domain.model.isLongText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 private const val SEP = "\u001E"
 private const val FIELD = "\u001F"
 
-/** سجل الحافظة: يُحفظ محليًا فقط، والعناصر المثبّتة لا تُحذف تلقائيًا */
+/**
+ * سجل الحافظة: يُحفظ محليًا فقط، والعناصر المثبّتة لا تُحذف تلقائيًا.
+ * يدعم النصوص والروابط والأكواد (القصير بالسجل نفسه، والطويل بملف مستقل عبر [ClipTextStore])
+ * والصور (لقطات الشاشة عبر [ClipImageStore]).
+ */
 class ClipboardRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val store = appContext.semoDataStore
     private val key = stringPreferencesKey("clipboard_items")
     private val images = ClipImageStore(appContext)
+    private val texts = ClipTextStore(appContext)
 
-    /** قبل فك قفل الجهاز بعد التشغيل (Direct Boot) تكون القائمة فارغة ولا نكتب شيئًا */
+    /**
+     * قبل فك قفل الجهاز بعد التشغيل (Direct Boot) تكون القائمة فارغة ولا نكتب شيئًا.
+     * نقارن النص الخام أولًا: مخزن التفضيلات يُصدر عند أي تغيير (حتى لو الكلمات المتعلَّمة)،
+     * وفك السجل كله بكل مرة كان يبطّئ الكتابة.
+     */
     val items: Flow<List<ClipItem>> = appContext.credentialPrefsFlow()
-        .map { p -> decode(p[key]) }
+        .map { p -> p[key] }
+        .distinctUntilChanged()
+        .map { raw -> decode(raw) }
 
-    suspend fun add(text: String) {
-        if (!appContext.isUserStorageUnlocked()) return
-        val t = text.trim().replace(SEP, " ")
-        if (t.isEmpty() || t.length > MAX_LENGTH) return
+    /**
+     * يضيف نصًا (أو مفتاح صورة) للسجل ويرجع المفتاح المخزَّن بالسجل (للصق السريع)، أو null لو رُفض.
+     * النص الطويل يُحفظ كاملًا بملف ويُخزَّن بالسجل مفتاح بمعاينة أوله. المسافات البادئة تبقى كما هي (الأكواد).
+     */
+    suspend fun add(text: String): String? {
+        if (!appContext.isUserStorageUnlocked()) return null
+        val raw = text.replace(SEP, " ")
+        val body = if (raw.isClipImage()) raw else raw.trimEnd().trimStart('\n', '\r')
+        if (body.isBlank()) return null
+        val stored: String = when {
+            body.isClipImage() -> body
+            body.length > INLINE_MAX -> {
+                if (body.length > MAX_TEXT_LENGTH) return null
+                val name = withContext(Dispatchers.IO) { texts.save(body) } ?: return null
+                clipLongKey(name, body.length, previewOf(body))
+            }
+            else -> body
+        }
         store.edit { p ->
             val list = decode(p[key]).toMutableList()
-            val index = list.indexOfFirst { it.text == t }
+            val index = list.indexOfFirst { it.text == stored }
             val pinned = index >= 0 && list[index].pinned
             if (index >= 0) list.removeAt(index)
-            list.add(0, ClipItem(t, pinned))
+            list.add(0, ClipItem(stored, pinned))
             val kept = limit(list)
-            // الصور المحذوفة بحدّ العدد تُمسح ملفاتها أيضًا
-            list.filter { it.isImage && it !in kept }.forEach { images.delete(it.text.clipImageName()) }
+            // الصور والنصوص الطويلة المحذوفة بحدّ العدد تُمسح ملفاتها أيضًا
+            list.filter { it !in kept }.forEach { deleteBacking(it.text) }
             p[key] = encode(kept)
         }
+        return stored
     }
+
+    /** النص الكامل لعنصر الحافظة: يقرأ ملف النص الطويل، ويرجع النص نفسه لغيره (null لو الملف مفقود) */
+    suspend fun fullText(stored: String): String? =
+        if (stored.isClipLong()) withContext(Dispatchers.IO) { texts.read(stored.clipLongName()) } else stored
 
     suspend fun togglePin(text: String) {
         if (!appContext.isUserStorageUnlocked()) return
@@ -58,7 +95,7 @@ class ClipboardRepository(context: Context) {
 
     suspend fun remove(text: String) {
         if (!appContext.isUserStorageUnlocked()) return
-        if (text.isClipImage()) images.delete(text.clipImageName())
+        deleteBacking(text)
         store.edit { p -> p[key] = encode(decode(p[key]).filterNot { it.text == text }) }
     }
 
@@ -67,7 +104,7 @@ class ClipboardRepository(context: Context) {
         if (!appContext.isUserStorageUnlocked()) return
         store.edit { p ->
             val all = decode(p[key])
-            all.filter { !it.pinned && it.isImage }.forEach { images.delete(it.text.clipImageName()) }
+            all.filter { !it.pinned }.forEach { deleteBacking(it.text) }
             p[key] = encode(all.filter { it.pinned })
         }
     }
@@ -75,16 +112,33 @@ class ClipboardRepository(context: Context) {
     suspend fun clearAll() {
         if (!appContext.isUserStorageUnlocked()) return
         images.deleteAll()
+        texts.deleteAll()
         store.edit { p -> p.remove(key) }
+    }
+
+    /** يمسح الملف المرتبط بالعنصر (صورة أو نص طويل)، ولا يفعل شيئًا للنص القصير */
+    private fun deleteBacking(text: String) {
+        when {
+            text.isClipImage() -> images.delete(text.clipImageName())
+            text.isClipLong() -> texts.delete(text.clipLongName())
+        }
+    }
+
+    private fun previewOf(text: String): String {
+        val cut = text.take(PREVIEW_LENGTH)
+        // لا نقطع زوج surrogate (إيموجي) من المنتصف
+        return if (cut.isNotEmpty() && cut.last().isHighSurrogate()) cut.dropLast(1) else cut
     }
 
     private fun limit(list: List<ClipItem>): List<ClipItem> {
         var unpinned = 0
         var unpinnedImages = 0
+        var unpinnedLong = 0
         return list.filter { item ->
             when {
                 item.pinned -> true
                 item.isImage -> { unpinnedImages++; unpinnedImages <= MAX_UNPINNED_IMAGES }
+                item.isLongText -> { unpinnedLong++; unpinnedLong <= MAX_UNPINNED_LONG }
                 else -> { unpinned++; unpinned <= MAX_UNPINNED }
             }
         }
@@ -101,8 +155,13 @@ class ClipboardRepository(context: Context) {
     }
 
     private companion object {
-        const val MAX_LENGTH = 5000
-        const val MAX_UNPINNED = 30
+        /** أطول من هذا يُحفظ بملف مستقل (الأكواد الطويلة والمقالات) */
+        const val INLINE_MAX = 1500
+        /** أقصى طول نص يُحفظ (200 ألف حرف)؛ الأطول يُتجاهل بدل أن يُلصق مقطوعًا */
+        const val MAX_TEXT_LENGTH = 200_000
+        const val PREVIEW_LENGTH = 400
+        const val MAX_UNPINNED = 40
+        const val MAX_UNPINNED_LONG = 15
         const val MAX_UNPINNED_IMAGES = 10
     }
 }
@@ -121,11 +180,15 @@ class LearnedWordsRepository(context: Context) {
 
     /** الأكثر استعمالًا أولًا، ومع التساوي الأحدث أولًا (الترتيب المستقر يحفظ الحداثة) */
     val words: Flow<List<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> decodeWords(p[key]).sortedByDescending { it.second }.map { it.first } }
+        .map { p: Preferences -> p[key] }
+        .distinctUntilChanged()
+        .map { raw -> decodeWords(raw).sortedByDescending { it.second }.map { it.first } }
 
     /** كلمة (بصيغة مفتاح البحث) ← الكلمات التي تلتها مرتبة بالأكثر تكرارًا */
     val bigrams: Flow<Map<String, List<String>>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> decodePairs(p[pairKey]) }
+        .map { p: Preferences -> p[pairKey] }
+        .distinctUntilChanged()
+        .map { raw -> decodePairs(raw) }
 
     suspend fun learn(word: String) {
         if (!appContext.isUserStorageUnlocked()) return
@@ -206,7 +269,9 @@ class ShortcutsRepository(context: Context) {
     private val key = stringPreferencesKey("text_shortcuts")
 
     val shortcuts: Flow<List<TextShortcut>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> decode(p[key]) }
+        .map { p: Preferences -> p[key] }
+        .distinctUntilChanged()
+        .map { raw -> decode(raw) }
 
     /** يرجع false لو الاختصار أو النص غير صالح (الاختصار حروف فقط حتى 15 حرفًا، والنص حتى 200) */
     suspend fun add(abbr: String, expansion: String): Boolean {

@@ -18,6 +18,8 @@ import com.semo.keyboard.domain.logic.WordLists
 import com.semo.keyboard.domain.model.clipImageMime
 import com.semo.keyboard.domain.model.clipImageName
 import com.semo.keyboard.domain.model.isClipImage
+import com.semo.keyboard.domain.model.isClipLong
+import com.semo.keyboard.domain.model.NumKeyTarget
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
@@ -124,6 +126,8 @@ class KeyboardViewModel(
                 arabicLayout = s.arabicLayout,
                 style = s.style,
                 size = s.size,
+                keySpacing = s.keySpacing,
+                numKeyTarget = s.numKeyTarget,
                 oneHand = s.oneHand,
                 suggestionsEnabled = s.suggestionsEnabled,
                 keyPreview = s.keyPreview,
@@ -241,7 +245,8 @@ class KeyboardViewModel(
             is KeyAction.Character -> {
                 if (transient.value.freshClip != null) transient.update { it.copy(freshClip = null) }
                 val ch = action.char.first()
-                if (!ch.isLetter() && ch != '\'' && ch != '’') {
+                // الأرقام ورموز العمليات لا تُنهي كلمة: نتجنّب قراءة النص من التطبيق (استدعاء بين عمليتين) بكل ضغطة رقم
+                if (!ch.isLetter() && !ch.isDigit() && ch != '\'' && ch != '’' && ch !in NON_WORD_END_SYMBOLS) {
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
                     val before = bridge.textBeforeCursor(40)
                     if (!(ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null)) learnWord(SuggestionEngine.currentWord(before))
@@ -285,6 +290,9 @@ class KeyboardViewModel(
             KeyAction.SwitchToSymbols -> setPage(KeyboardPage.SYMBOLS_1)
             KeyAction.SwitchToSymbols2 -> setPage(KeyboardPage.SYMBOLS_2)
             KeyAction.SwitchToLetters -> setPage(KeyboardPage.LETTERS)
+            KeyAction.SwitchToNumbers ->
+                setPage(if (state.numKeyTarget == NumKeyTarget.NUMPAD) KeyboardPage.NUMPAD else KeyboardPage.SYMBOLS_1)
+            KeyAction.SwitchToNumpad -> setPage(KeyboardPage.NUMPAD)
             KeyAction.Emoji -> setPage(KeyboardPage.EMOJI)
             KeyAction.SwitchLanguage -> {
                 val next = if (state.language == KeyboardLanguage.ENGLISH) KeyboardLanguage.ARABIC else KeyboardLanguage.ENGLISH
@@ -451,26 +459,27 @@ class KeyboardViewModel(
 
     private var freshClipJob: Job? = null
 
-    /** تُستدعى من الخدمة عند نسخ نص جديد: تظهر شريحة لصق سريعة بالشريط لمدة 90 ثانية */
-    fun onClipboardCopied(text: String) {
-        val preview = text.trim().take(160)
-        if (preview.isEmpty()) return
-        transient.update { it.copy(freshClip = preview) }
+    /**
+     * تُستدعى من الخدمة عند نسخ شيء جديد: تظهر شريحة لصق سريعة بالشريط لمدة 90 ثانية.
+     * [stored] هو المفتاح المخزَّن بسجل الحافظة (نص، رابط، كود، مفتاح صورة أو نص طويل)،
+     * فيُلصق مباشرة بدون البحث عنه بالسجل.
+     */
+    fun onClipboardCopied(stored: String) {
+        if (stored.isBlank()) return
+        transient.update { it.copy(freshClip = stored) }
         freshClipJob?.cancel()
         freshClipJob = viewModelScope.launch {
             delay(FRESH_CLIP_MS)
-            transient.update { if (it.freshClip == preview) it.copy(freshClip = null) else it }
+            transient.update { if (it.freshClip == stored) it.copy(freshClip = null) else it }
         }
     }
 
     fun onFreshClipPaste() {
-        val text = transient.value.freshClip ?: return
+        val stored = transient.value.freshClip ?: return
         val state = uiState.value
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, KeyFeedback.MODIFIER, state.soundVolume)
         transient.update { it.copy(freshClip = null) }
-        // نلصق النص الكامل من سجل الحافظة (المعاينة قد تكون مقصوصة)
-        val full = state.clipItems.firstOrNull { it.text.startsWith(text) }?.text ?: text
-        onClipPaste(full)
+        onClipPaste(stored)
     }
 
     fun dismissFreshClip() {
@@ -505,12 +514,21 @@ class KeyboardViewModel(
     // ---------- الحافظة والتحرير ----------
 
     fun onClipPaste(text: String) {
-        if (text.isClipImage()) {
-            bridge.commitImage(text.clipImageName(), text.clipImageMime())
-            return
+        when {
+            text.isClipImage() -> bridge.commitImage(text.clipImageName(), text.clipImageMime())
+            text.isClipLong() -> viewModelScope.launch {
+                // النص الطويل (كود مثلًا) محفوظ بملف: نقرأه بخيط خلفي ثم نلصقه كاملًا
+                val full = clipboardRepository.fullText(text)
+                if (!full.isNullOrEmpty()) {
+                    bridge.commitText(full)
+                    refreshSuggestions()
+                }
+            }
+            else -> {
+                bridge.commitText(text)
+                refreshSuggestions()
+            }
         }
-        bridge.commitText(text)
-        refreshSuggestions()
     }
 
     fun onClipTogglePin(text: String) {
@@ -697,6 +715,8 @@ class KeyboardViewModel(
         val SENTENCE_END = setOf('.', '!', '?', '؟')
         /** علامات الترقيم التي تُنهي الكلمة وتشغّل التصحيح التلقائي */
         const val AUTOCORRECT_TRIGGERS = ".,!?;:)\"؟،"
+        /** رموز العمليات الحسابية: كتابتها لا تشغّل التصحيح ولا تعلّم الكلمة السابقة */
+        const val NON_WORD_END_SYMBOLS = "+×÷=*%^<>~|#"
         const val MAX_RECENT_EMOJIS = 32
         const val FRESH_CLIP_MS = 90_000L
         const val DOUBLE_TAP_MS = 350L
