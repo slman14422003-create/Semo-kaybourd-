@@ -57,10 +57,12 @@ import com.semo.keyboard.ui.keyboard.KeyboardViewModel
 import com.semo.keyboard.ui.keyboard.KeyboardViewModelFactory
 import com.semo.keyboard.ui.MainActivity
 import kotlin.math.abs
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -92,7 +94,7 @@ class SemoKeyboardService :
     private lateinit var viewModel: KeyboardViewModel
     private lateinit var clipboardRepository: ClipboardRepository
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, _ -> })
 
     /** صوت ضغط شبيه بآيفون (مُولَّد برمجيًا) */
     private var clickPlayer: KeyClickPlayer? = null
@@ -197,54 +199,69 @@ class SemoKeyboardService :
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
     }
 
+    private class ClipSnap(val text: String?, val uri: android.net.Uri?, val imageMime: String?)
+
+    private fun clipKey(text: String): String = "t${text.length}:${text.hashCode()}"
+
+    /** يقرأ الحافظة بخيط خلفي (النص الطويل قد يتأخر) ويرجع null لو فاضية أو حساسة */
+    private fun readClip(): ClipSnap? {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
+        val clip = cm.primaryClip ?: return null
+        if (clip.itemCount == 0) return null
+        if (Build.VERSION.SDK_INT >= 33) {
+            val sensitive = clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true
+            if (sensitive) return null
+        }
+        val desc = clip.description
+        val items = (0 until clip.itemCount).map { clip.getItemAt(it) }
+        val descImageMime = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }.firstOrNull { it.startsWith("image/") }
+        val plain = items.firstNotNullOfOrNull { runCatching { it.text?.toString() }.getOrNull()?.takeIf { s -> s.isNotBlank() } }
+        val html = if (plain == null) {
+            items.firstNotNullOfOrNull { runCatching { it.htmlText }.getOrNull()?.takeIf { s -> s.isNotBlank() } }
+                ?.let { android.text.Html.fromHtml(it, android.text.Html.FROM_HTML_MODE_LEGACY).toString() }
+                ?.takeIf { it.isNotBlank() }
+        } else null
+        val coerced = if (plain == null && html == null) {
+            items.firstNotNullOfOrNull { runCatching { it.coerceToText(this)?.toString() }.getOrNull()?.takeIf { s -> s.isNotBlank() } }
+        } else null
+        val uri = items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme == "content" } }
+        val mime = if (uri != null && plain == null) resolveImageMime(descImageMime, uri) else null
+        return ClipSnap(plain ?: html ?: coerced, uri, mime)
+    }
+
     /**
-     * يحفظ آخر شيء نُسخ بسجل الحافظة (إلا بحقول كلمات المرور أو لو علّم التطبيق النص كحساس):
-     * صورة (لقطة شاشة وغيرها) تُنسخ لتخزين التطبيق لأن رابط الحافظة مؤقت، أو نص/رابط/كود
-     * (الطويل منه يُحفظ كاملًا بملف عبر ClipboardRepository).
+     * يحفظ آخر شيء نُسخ بسجل الحافظة (إلا بحقول كلمات المرور أو لو علّم التطبيق النص كحساس).
+     * القراءة والحفظ بخيط خلفي مع إعادة محاولة (الحافظة قد لا تكون جاهزة لحظة الإشعار)، والنص الطويل يُحفظ كاملًا بملف.
      */
     private fun captureClipboard(force: Boolean = false) {
         if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
-        runCatching {
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-            val clip = cm.primaryClip ?: return
-            if (clip.itemCount == 0) return
-            if (Build.VERSION.SDK_INT >= 33) {
-                val sensitive = clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true
-                if (sensitive) return
+        serviceScope.launch {
+            var snap: ClipSnap? = null
+            for (attempt in 0..3) {
+                snap = withContext(Dispatchers.IO) { runCatching { readClip() }.getOrNull() }
+                if (snap != null && (snap.text != null || snap.imageMime != null)) break
+                delay(250)
             }
-            val desc = clip.description
-            val items = (0 until clip.itemCount).map { clip.getItemAt(it) }
-            val descImageMime = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }.firstOrNull { it.startsWith("image/") }
-            val firstText = items.asSequence()
-                .map { (it.text ?: it.coerceToText(this))?.toString().orEmpty() }
-                .firstOrNull { it.isNotBlank() }
-
-            // عنصر برابط content:// قد يكون صورة (لقطة شاشة): بعض التطبيقات لا تذكر نوعها بوصف المقطع فنسأل المزوّد
-            val contentUri = items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme == "content" } }
-            if (contentUri != null) {
-                val id = contentUri.toString()
-                if (!force && id == lastCapturedClip) return
+            val s = snap ?: return@launch
+            if (s.imageMime != null && s.uri != null) {
+                val id = s.uri.toString()
+                if (!force && id == lastCapturedClip) return@launch
                 lastCapturedClip = id
-                serviceScope.launch {
-                    val mime = withContext(Dispatchers.IO) { resolveImageMime(descImageMime, contentUri) }
-                    val stored = if (mime != null) {
-                        val name = withContext(Dispatchers.IO) { imageStore.saveFromUri(contentUri, mime) } ?: return@launch
-                        clipboardRepository.add(clipImageKey(name, mime))
-                    } else if (!firstText.isNullOrBlank()) {
-                        clipboardRepository.add(firstText)
-                    } else null
-                    if (stored != null) viewModel.onClipboardCopied(stored)
-                }
-                return
-            }
-
-            val text = firstText ?: return
-            if (!force && text == lastCapturedClip) return
-            lastCapturedClip = text
-            serviceScope.launch {
-                val stored = clipboardRepository.add(text) ?: return@launch
+                val name = withContext(Dispatchers.IO) { runCatching { imageStore.saveFromUri(s.uri, s.imageMime) }.getOrNull() } ?: return@launch
+                val stored = clipboardRepository.add(clipImageKey(name, s.imageMime)) ?: return@launch
                 viewModel.onClipboardCopied(stored)
+                return@launch
             }
+            val text = s.text ?: return@launch
+            val key = clipKey(text)
+            if (!force && key == lastCapturedClip) return@launch
+            lastCapturedClip = key
+            var stored = clipboardRepository.add(text)
+            if (stored == null) {
+                delay(300)
+                stored = clipboardRepository.add(text)
+            }
+            if (stored != null) viewModel.onClipboardCopied(stored)
         }
     }
 
@@ -570,7 +587,7 @@ class SemoKeyboardService :
     private fun pasteViaClipboard(ic: android.view.inputmethod.InputConnection, text: String) {
         runCatching {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            lastCapturedClip = text
+            lastCapturedClip = clipKey(text)
             cm.setPrimaryClip(ClipData.newPlainText("code", text))
             ic.performContextMenuAction(android.R.id.paste)
         }

@@ -899,7 +899,7 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
             .fillMaxWidth()
             .background(colors.key, RoundedCornerShape(14.dp))
             .pointerInput(item.text, menu) {
-                androidx.compose.foundation.gestures.detectTapGestures(
+                detectTapGestures(
                     onTap = {
                         if (menu) menu = false else {
                             viewModel.onSelectionTick()

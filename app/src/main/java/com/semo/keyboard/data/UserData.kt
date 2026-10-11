@@ -55,14 +55,14 @@ class ClipboardRepository(context: Context) {
      */
     suspend fun add(text: String): String? {
         if (!appContext.isUserStorageUnlocked()) return null
-        val raw = text.replace(SEP, " ")
+        val raw = sanitize(text).replace(SEP, " ")
         val body = if (raw.isClipImage()) raw else raw.trimEnd().trimStart('\n', '\r')
         if (body.isBlank()) return null
         val stored: String = when {
             body.isClipImage() -> body
             body.length > INLINE_MAX -> {
                 if (body.length > MAX_TEXT_LENGTH) return null
-                val name = withContext(Dispatchers.IO) { texts.save(body) } ?: return null
+                val name = withContext(Dispatchers.IO) { texts.save(body) ?: texts.save(body) } ?: return null
                 clipLongKey(name, body.length, previewOf(body))
             }
             else -> body
@@ -79,6 +79,26 @@ class ClipboardRepository(context: Context) {
             p[key] = encode(kept)
         }
         return stored
+    }
+
+    /** يحذف ما يكسر التخزين: أحرف surrogate منفردة، NUL، وBOM */
+    private fun sanitize(s: String): String {
+        val sb = StringBuilder(s.length)
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                c == '\u0000' || c == '\uFEFF' -> {}
+                c.isHighSurrogate() && i + 1 < s.length && s[i + 1].isLowSurrogate() -> {
+                    sb.append(c).append(s[i + 1])
+                    i++
+                }
+                c.isSurrogate() -> {}
+                else -> sb.append(c)
+            }
+            i++
+        }
+        return sb.toString()
     }
 
     /** النص الكامل لعنصر الحافظة: يقرأ ملف النص الطويل، ويرجع النص نفسه لغيره (null لو الملف مفقود) */
