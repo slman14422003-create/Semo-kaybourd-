@@ -80,6 +80,22 @@ enum class OneHandMode { OFF, LEFT, RIGHT }
  */
 enum class HideButtonMode { RING, ARROW, OFF }
 
+/** مهلة الضغط المطوّل (بدائل الحروف، لوحة اللمس): قصيرة 0.2 ثانية، متوسطة 0.3، طويلة 0.5 */
+enum class HoldDelay(val millis: Long) { SHORT(200L), MEDIUM(300L), LONG(500L) }
+
+/** سرعة الحذف المتكرر عند الاستمرار بالضغط على Backspace (بالميلي ثانية) */
+enum class BackspaceSpeed(val firstDelay: Long, val slowRepeat: Long, val fastRepeat: Long) {
+    SLOW(500L, 85L, 55L),
+    NORMAL(400L, 55L, 32L),
+    FAST(300L, 38L, 22L)
+}
+
+/** الضغطة المطوّلة على شريط المسافة: تحريك المؤشر، تبديل اللغة، أو لا شيء */
+enum class SpaceBarAction { CURSOR, SWITCH_LANGUAGE, NONE }
+
+/** اختصار نصي: كتابة [abbr] ثم مسافة تحوّله إلى [expansion] */
+data class TextShortcut(val abbr: String, val expansion: String)
+
 /** أدوات التحرير في صفحة التحرير */
 enum class EditAction { SELECT_ALL, CUT, COPY, PASTE, LEFT, RIGHT, UP, DOWN, HOME, END, UNDO, REDO }
 
@@ -137,6 +153,19 @@ data class SemoSettings(
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
     /** رفع دائرتي الصف السفلي عن أسفل الشاشة (dp) كي لا تلتصقا بشريط التنقل */
     val bottomRaiseDp: Float = 14f,
+    /** توقّع الكلمة التالية (من أنماط كتابتك + قائمة مدمجة) */
+    val nextWord: Boolean = true,
+    /** تدقيق إملائي: اقتراح التصحيح بالشريط لو الكلمة غير موجودة بالقاموس */
+    val spellCheck: Boolean = true,
+    /** اقتراح إيموجي بشريط الاقتراحات */
+    val suggestEmojis: Boolean = true,
+    /** تفعيل الاختصارات النصية */
+    val textShortcuts: Boolean = true,
+    val holdDelay: HoldDelay = HoldDelay.MEDIUM,
+    val backspaceSpeed: BackspaceSpeed = BackspaceSpeed.NORMAL,
+    val spaceBarAction: SpaceBarAction = SpaceBarAction.CURSOR,
+    /** تبقى لوحة الرموز مفتوحة بعد كتابة رمز (لو متوقف ترجع للحروف) */
+    val keepSymbolPanel: Boolean = true,
     /** الإيموجي المستخدمة مؤخرًا (محفوظة بين الجلسات) */
     val recentEmojis: List<String> = emptyList()
 )
@@ -181,5 +210,18 @@ data class KeyboardUiState(
     val mathResult: MathResult? = null,
     val toolbarOpen: Boolean = false,
     val clipItems: List<ClipItem> = emptyList(),
+    /** توقّع الكلمة التالية (من أنماط كتابتك + قائمة مدمجة) */
+    val nextWord: Boolean = true,
+    /** تدقيق إملائي: اقتراح التصحيح بالشريط لو الكلمة غير موجودة بالقاموس */
+    val spellCheck: Boolean = true,
+    /** اقتراح إيموجي بشريط الاقتراحات */
+    val suggestEmojis: Boolean = true,
+    /** تفعيل الاختصارات النصية */
+    val textShortcuts: Boolean = true,
+    val holdDelay: HoldDelay = HoldDelay.MEDIUM,
+    val backspaceSpeed: BackspaceSpeed = BackspaceSpeed.NORMAL,
+    val spaceBarAction: SpaceBarAction = SpaceBarAction.CURSOR,
+    /** تبقى لوحة الرموز مفتوحة بعد كتابة رمز (لو متوقف ترجع للحروف) */
+    val keepSymbolPanel: Boolean = true,
     val recentEmojis: List<String> = emptyList()
 )

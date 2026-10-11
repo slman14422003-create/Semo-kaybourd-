@@ -1,38 +1,79 @@
 package com.semo.keyboard.data
 
 import android.content.Context
+import com.semo.keyboard.domain.logic.AsciiWordList
 import com.semo.keyboard.domain.logic.BigDictionary
+import com.semo.keyboard.domain.logic.ValidWords
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * يُنزّل قواميس كبيرة مرتبة حسب الشيوع (قوائم FrequencyWords المبنية من ترجمات OpenSubtitles، رخصة CC-BY-SA 4.0)
+ * يحمّل القاموس المدمج (كلمات شائعة عربية وإنكليزية + قائمة 114 ألف كلمة إنكليزية صالحة للتدقيق من assets،
+ * تعمل بدون إنترنت)، ثم يدمج معه القاموس الكبير لو نزّله المستخدم.
+ *
+ * القاموس الكبير: يُنزّل قواميس كبيرة مرتبة حسب الشيوع (قوائم FrequencyWords المبنية من ترجمات OpenSubtitles، رخصة CC-BY-SA 4.0)
  * ويخزّنها بملفات على الجهاز، ثم يحمّلها بالذاكرة لتُدمج مع الإكمال التلقائي والكتابة بالسحب.
  * التنزيل يحصل فقط عند ضغط المستخدم زر التنزيل بإعدادات التطبيق، ولا يتصل خدمة لوحة المفاتيح بالإنترنت.
  */
 object DictionaryManager {
 
     private const val BASE_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018"
-    private const val MAX_WORDS = 50_000
+    private const val MAX_WORDS = 100_000
 
-    private fun url(language: KeyboardLanguage): String =
-        if (language == KeyboardLanguage.ARABIC) "$BASE_URL/ar/ar_50k.txt" else "$BASE_URL/en/en_50k.txt"
+    /** نجرّب القائمة الكاملة (نقرأ أول 100 ألف كلمة صالحة فقط) ثم نرجع لقائمة الـ50 ألف لو تعذّرت */
+    private fun urls(language: KeyboardLanguage): List<String> {
+        val code = if (language == KeyboardLanguage.ARABIC) "ar" else "en"
+        return listOf("$BASE_URL/$code/${code}_full.txt", "$BASE_URL/$code/${code}_50k.txt")
+    }
+
+    private fun coreAsset(language: KeyboardLanguage): String =
+        if (language == KeyboardLanguage.ARABIC) "dict/ar_core.txt" else "dict/en_core.txt"
+
+    /** الكلمات الشائعة المدمجة بترتيب الشيوع (من assets؛ متاحة حتى قبل فك قفل الجهاز) */
+    private fun readCore(context: Context, language: KeyboardLanguage): List<String> =
+        runCatching {
+            context.assets.open(coreAsset(language)).bufferedReader(Charsets.UTF_8).useLines { lines ->
+                lines.map { it.trim() }.filter { it.isNotEmpty() }.toList()
+            }
+        }.getOrNull().orEmpty()
+
+    /** المدمج أولًا (له الأولوية بالترتيب) ثم المنزّل بلا تكرار */
+    private fun merged(context: Context, language: KeyboardLanguage, downloaded: List<String>): List<String> {
+        val all = LinkedHashSet<String>()
+        all.addAll(readCore(context, language))
+        all.addAll(downloaded)
+        return all.toList()
+    }
+
+    private fun loadValidWords(context: Context) {
+        if (ValidWords.english != null) return
+        runCatching {
+            val bytes = context.assets.open("dict/en_valid.txt").use { it.readBytes() }
+            ValidWords.english = AsciiWordList(bytes)
+        }
+    }
 
     private fun dictFile(context: Context, language: KeyboardLanguage): File {
         val name = if (language == KeyboardLanguage.ARABIC) "ar.txt" else "en.txt"
         return File(File(context.applicationContext.filesDir, "dict"), name)
     }
 
-    /** يحمّل الملفات الموجودة بالذاكرة (ثقيل: يُستدعى بخيط خلفي). قبل فك قفل الجهاز لا نفعل شيئًا. */
+    /**
+     * يحمّل القاموس المدمج والمنزَّل بالذاكرة (ثقيل: يُستدعى بخيط خلفي). المدمج من assets يُحمَّل دائمًا،
+     * أما الملفات المنزَّلة (تخزين مشفّر) فلا تُقرأ قبل فك قفل الجهاز.
+     */
     fun loadAll(context: Context) {
         val app = context.applicationContext
-        if (!app.isUserStorageUnlocked()) return
+        loadValidWords(app)
+        val unlocked = app.isUserStorageUnlocked()
         for (language in KeyboardLanguage.values()) {
             val f = dictFile(app, language)
-            if (!f.exists()) continue
-            val words = runCatching { f.readLines(Charsets.UTF_8).filter { it.isNotBlank() } }.getOrNull() ?: continue
+            val downloaded = if (unlocked && f.exists()) {
+                runCatching { f.readLines(Charsets.UTF_8).filter { it.isNotBlank() } }.getOrNull().orEmpty()
+            } else emptyList()
+            val words = merged(app, language, downloaded)
             if (words.isNotEmpty()) BigDictionary.setWords(language, words)
         }
     }
@@ -40,10 +81,13 @@ object DictionaryManager {
     fun hasDownloaded(context: Context): Boolean =
         KeyboardLanguage.values().any { dictFile(context, it).exists() }
 
+    /** يحذف الملفات المنزَّلة ويُبقي القاموس المدمج شغّالًا */
     fun delete(context: Context) {
+        val app = context.applicationContext
         for (language in KeyboardLanguage.values()) {
-            runCatching { dictFile(context, language).delete() }
-            BigDictionary.clear(language)
+            runCatching { dictFile(app, language).delete() }
+            val core = readCore(app, language)
+            if (core.isEmpty()) BigDictionary.clear(language) else BigDictionary.setWords(language, core)
         }
     }
 
@@ -63,16 +107,24 @@ object DictionaryManager {
             if (target.exists()) target.delete()
             if (!tmp.renameTo(target)) error("تعذّر حفظ الملف")
             onProgress("جاري بناء الفهرس...")
-            BigDictionary.setWords(language, words)
+            BigDictionary.setWords(language, merged(app, language, words))
             if (language == KeyboardLanguage.ARABIC) arabic = words.size else english = words.size
         }
         english to arabic
     }
 
     private fun fetch(language: KeyboardLanguage): List<String> {
-        val connection = URL(url(language)).openConnection() as HttpURLConnection
+        for (address in urls(language)) {
+            val words = runCatching { fetchFrom(address, language) }.getOrNull()
+            if (words != null && words.size >= 1000) return words
+        }
+        error("تعذّر تنزيل القاموس")
+    }
+
+    private fun fetchFrom(address: String, language: KeyboardLanguage): List<String> {
+        val connection = URL(address).openConnection() as HttpURLConnection
         connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
+        connection.readTimeout = 45_000
         connection.requestMethod = "GET"
         try {
             if (connection.responseCode != HttpURLConnection.HTTP_OK) error("HTTP " + connection.responseCode)

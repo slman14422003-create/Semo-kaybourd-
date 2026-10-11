@@ -31,6 +31,26 @@ object BigDictionary {
 
     fun size(language: KeyboardLanguage): Int = indexOf(language)?.words?.size ?: 0
 
+    fun isLoaded(language: KeyboardLanguage): Boolean = size(language) > 0
+
+    /** ترتيب الكلمة بقائمة الشيوع (0 = الأشيع) أو -1 لو غير موجودة. الهمزات والحروف الكبيرة لا تؤثر */
+    fun rankOf(word: String, language: KeyboardLanguage): Int {
+        val idx = indexOf(language) ?: return -1
+        val p = key(word)
+        if (p.isEmpty()) return -1
+        var lo = 0
+        var hi = idx.order.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (idx.keys[idx.order[mid]] < p) lo = mid + 1 else hi = mid
+        }
+        // الترتيب مستقر: أول تطابق هو أصغر رقم (الأشيع) بين الكلمات المتطابقة المفتاح
+        return if (lo < idx.order.size && idx.keys[idx.order[lo]] == p) idx.order[lo] else -1
+    }
+
+    /** الكلمة بصيغتها الأصلية (بالهمزات) عند ترتيبها [rank] */
+    fun wordAt(rank: Int, language: KeyboardLanguage): String? = indexOf(language)?.words?.getOrNull(rank)
+
     fun clear(language: KeyboardLanguage) {
         if (language == KeyboardLanguage.ARABIC) arabic = null else english = null
     }

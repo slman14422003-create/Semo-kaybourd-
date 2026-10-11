@@ -15,7 +15,10 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
+import com.semo.keyboard.domain.model.BackspaceSpeed
 import com.semo.keyboard.domain.model.HideButtonMode
+import com.semo.keyboard.domain.model.HoldDelay
+import com.semo.keyboard.domain.model.SpaceBarAction
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.KeyboardStyle
@@ -142,6 +145,14 @@ class SettingsRepository(context: Context) {
         val HIDE_BUTTON = stringPreferencesKey("hide_button_mode")
         val BOTTOM_RAISE = floatPreferencesKey("bottom_raise_dp")
         val RECENT_EMOJIS = stringPreferencesKey("recent_emojis")
+        val NEXT_WORD = booleanPreferencesKey("next_word")
+        val SPELL_CHECK = booleanPreferencesKey("spell_check")
+        val SUGGEST_EMOJIS = booleanPreferencesKey("suggest_emojis")
+        val TEXT_SHORTCUTS = booleanPreferencesKey("text_shortcuts_enabled")
+        val HOLD_DELAY = stringPreferencesKey("hold_delay")
+        val BACKSPACE_SPEED = stringPreferencesKey("backspace_speed")
+        val SPACE_ACTION = stringPreferencesKey("space_bar_action")
+        val KEEP_SYMBOLS = booleanPreferencesKey("keep_symbol_panel")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -172,6 +183,14 @@ class SettingsRepository(context: Context) {
                 globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f),
                 hideButtonMode = p[Keys.HIDE_BUTTON].toEnumOr(HideButtonMode.ARROW),
                 bottomRaiseDp = (p[Keys.BOTTOM_RAISE] ?: 14f).coerceIn(0f, 40f),
+                nextWord = p[Keys.NEXT_WORD] ?: true,
+                spellCheck = p[Keys.SPELL_CHECK] ?: true,
+                suggestEmojis = p[Keys.SUGGEST_EMOJIS] ?: true,
+                textShortcuts = p[Keys.TEXT_SHORTCUTS] ?: true,
+                holdDelay = p[Keys.HOLD_DELAY].toEnumOr(HoldDelay.MEDIUM),
+                backspaceSpeed = p[Keys.BACKSPACE_SPEED].toEnumOr(BackspaceSpeed.NORMAL),
+                spaceBarAction = p[Keys.SPACE_ACTION].toEnumOr(SpaceBarAction.CURSOR),
+                keepSymbolPanel = p[Keys.KEEP_SYMBOLS] ?: true,
                 recentEmojis = p[Keys.RECENT_EMOJIS].orEmpty().split(' ').filter { it.isNotEmpty() }
             )
         }
@@ -201,4 +220,25 @@ class SettingsRepository(context: Context) {
     suspend fun setHideButtonMode(v: HideButtonMode) { store.edit { it[Keys.HIDE_BUTTON] = v.name } }
     suspend fun setBottomRaise(v: Float) { store.edit { it[Keys.BOTTOM_RAISE] = v.coerceIn(0f, 40f) } }
     suspend fun setRecentEmojis(list: List<String>) { store.edit { it[Keys.RECENT_EMOJIS] = list.joinToString(" ") } }
+    suspend fun setNextWord(v: Boolean) { store.edit { it[Keys.NEXT_WORD] = v } }
+    suspend fun setSpellCheck(v: Boolean) { store.edit { it[Keys.SPELL_CHECK] = v } }
+    suspend fun setSuggestEmojis(v: Boolean) { store.edit { it[Keys.SUGGEST_EMOJIS] = v } }
+    suspend fun setTextShortcuts(v: Boolean) { store.edit { it[Keys.TEXT_SHORTCUTS] = v } }
+    suspend fun setHoldDelay(v: HoldDelay) { store.edit { it[Keys.HOLD_DELAY] = v.name } }
+    suspend fun setBackspaceSpeed(v: BackspaceSpeed) { store.edit { it[Keys.BACKSPACE_SPEED] = v.name } }
+    suspend fun setSpaceBarAction(v: SpaceBarAction) { store.edit { it[Keys.SPACE_ACTION] = v.name } }
+    suspend fun setKeepSymbolPanel(v: Boolean) { store.edit { it[Keys.KEEP_SYMBOLS] = v } }
+
+    /** يعيد كل الإعدادات للافتراضي، ويُبقي إكمال الدليل واللغة الحالية والإيموجي الأخيرة */
+    suspend fun resetToDefaults() {
+        store.edit { p ->
+            val onboarding = p[Keys.ONBOARDING]
+            val language = p[Keys.LANGUAGE]
+            val recent = p[Keys.RECENT_EMOJIS]
+            p.clear()
+            if (onboarding != null) p[Keys.ONBOARDING] = onboarding
+            if (language != null) p[Keys.LANGUAGE] = language
+            if (recent != null) p[Keys.RECENT_EMOJIS] = recent
+        }
+    }
 }

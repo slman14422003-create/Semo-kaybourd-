@@ -42,6 +42,7 @@ import com.semo.keyboard.data.ClipImageStore
 import com.semo.keyboard.data.ClipboardRepository
 import com.semo.keyboard.data.DictionaryManager
 import com.semo.keyboard.data.LearnedWordsRepository
+import com.semo.keyboard.data.ShortcutsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.clipImageKey
@@ -181,9 +182,10 @@ class SemoKeyboardService :
         val settingsRepository = SettingsRepository(applicationContext)
         clipboardRepository = ClipboardRepository(applicationContext)
         val learnedRepository = LearnedWordsRepository(applicationContext)
+        val shortcutsRepository = ShortcutsRepository(applicationContext)
         viewModel = ViewModelProvider(
             this,
-            KeyboardViewModelFactory(settingsRepository, clipboardRepository, learnedRepository, bridge)
+            KeyboardViewModelFactory(settingsRepository, clipboardRepository, learnedRepository, shortcutsRepository, bridge)
         )[KeyboardViewModel::class.java]
 
         (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.addPrimaryClipChangedListener(clipListener)

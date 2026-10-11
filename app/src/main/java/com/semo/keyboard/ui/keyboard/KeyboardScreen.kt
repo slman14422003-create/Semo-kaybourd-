@@ -45,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -102,7 +103,10 @@ import androidx.compose.ui.zIndex
 import com.semo.keyboard.R
 import com.semo.keyboard.domain.logic.EmojiCategory
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
+import com.semo.keyboard.domain.model.BackspaceSpeed
 import com.semo.keyboard.domain.model.ClipItem
+import com.semo.keyboard.domain.model.HoldDelay
+import com.semo.keyboard.domain.model.SpaceBarAction
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.isClipImage
@@ -123,6 +127,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
+
+/** إعدادات اللمس القابلة للضبط (مهلة الضغط المطوّل، سرعة الحذف، ضغطة المسافة المطوّلة) تصل لكل المفاتيح */
+internal data class TouchTuning(
+    val holdMs: Long = HoldDelay.MEDIUM.millis,
+    val backspace: BackspaceSpeed = BackspaceSpeed.NORMAL,
+    val spaceAction: SpaceBarAction = SpaceBarAction.CURSOR
+)
+
+internal val LocalTouchTuning = staticCompositionLocalOf { TouchTuning() }
 
 /** صف مفاتيح بلا خلفية (أيقونات عائمة) أو فراغات فقط = الصف الأخير تحت المسافة */
 private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
@@ -217,7 +230,14 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val swipeEnabled = state.swipeTyping && state.page == KeyboardPage.LETTERS &&
         state.alternates.isEmpty() && !trackpad
 
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    val tuning = remember(state.holdDelay, state.backspaceSpeed, state.spaceBarAction) {
+        TouchTuning(state.holdDelay.millis, state.backspaceSpeed, state.spaceBarAction)
+    }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+        LocalTouchTuning provides tuning
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -756,9 +776,11 @@ private fun RowScope.KeyButton(
 
     // شريط المسافة: ضغطة = مسافة، وضغطة مطوّلة ثم سحب = لوحة لمس لتحريك المؤشر (مثل آيفون).
     // باقي المفاتيح: ضغط/ضغط مطوّل.
-    val gestureModifier = if (isSpace) {
-        Modifier.pointerInput(def) {
+    val tuning = LocalTouchTuning.current
+    val gestureModifier = if (isSpace && tuning.spaceAction == SpaceBarAction.CURSOR) {
+        Modifier.pointerInput(def, tuning) {
             spaceGestures(
+                holdMs = tuning.holdMs,
                 onPressedChange = {
                     pressed = it
                     if (it) currentOnDown(KeyAction.Space)
@@ -770,20 +792,20 @@ private fun RowScope.KeyButton(
         }
     } else if (isBackspace) {
         // الحذف: فوري ثم تكرار تلقائي عند الاستمرار بالضغط
-        Modifier.pointerInput(def) {
+        Modifier.pointerInput(def, tuning) {
             detectTapGestures(
                 onPress = {
                     pressed = true
                     currentOnKey(KeyAction.Backspace)
                     coroutineScope {
                         val repeat = launch {
-                            delay(400)
+                            delay(tuning.backspace.firstDelay)
                             var repeats = 0
                             while (true) {
                                 currentOnKey(KeyAction.Backspace)
                                 repeats++
                                 // يتسارع الحذف مع طول الضغط (مثل iOS)
-                                delay(if (repeats < 10) 55L else 32L)
+                                delay(if (repeats < 10) tuning.backspace.slowRepeat else tuning.backspace.fastRepeat)
                             }
                         }
                         tryAwaitRelease()
@@ -799,10 +821,12 @@ private fun RowScope.KeyButton(
         val longPress: (() -> Unit)? = when {
             hasAlternates -> ({ currentOnLong(def) })
             def.longPressAction != null -> ({ currentOnKey(def.longPressAction) })
+            isSpace && tuning.spaceAction == SpaceBarAction.SWITCH_LANGUAGE -> ({ currentOnKey(KeyAction.SwitchLanguage) })
             else -> null
         }
-        Modifier.pointerInput(def) {
+        Modifier.pointerInput(def, tuning) {
             keyGestures(
+                holdMs = tuning.holdMs,
                 // الصوت والاهتزاز لحظة اللمس (مثل آيفون)، والإدخال الفعلي عند الرفع
                 onPressedChange = {
                     pressed = it
@@ -949,6 +973,7 @@ private class BalloonShape(
  * وتُلغى فقط لو استهلكها حدث آخر (كالكتابة بالسحب). الضغطة المطوّلة (إن وُجدت) تُنفَّذ بعد المهلة.
  */
 internal suspend fun PointerInputScope.keyGestures(
+    holdMs: Long = -1L,
     onPressedChange: (Boolean) -> Unit,
     onTap: () -> Unit,
     onLongPress: (() -> Unit)?
@@ -958,7 +983,7 @@ internal suspend fun PointerInputScope.keyGestures(
         onPressedChange(true)
         try {
             // 1 = رُفع الإصبع (ضغطة)، 2 = أُلغيت، null = انتهت مهلة الضغط المطوّل
-            val timeout = if (onLongPress != null) viewConfiguration.longPressTimeoutMillis else Long.MAX_VALUE
+            val timeout = if (onLongPress != null) (if (holdMs > 0L) holdMs else viewConfiguration.longPressTimeoutMillis) else Long.MAX_VALUE
             val outcome: Int? = withTimeoutOrNull(timeout) {
                 var result = 0
                 while (result == 0) {
@@ -996,6 +1021,7 @@ internal suspend fun PointerInputScope.keyGestures(
  * المؤشر (كل ~10dp أفقيًا = حرف، وكل ~26dp عموديًا = سطر). الحركة قبل انتهاء مهلة الضغط المطوّل تُلغي الإيماءة.
  */
 private suspend fun PointerInputScope.spaceGestures(
+    holdMs: Long,
     onPressedChange: (Boolean) -> Unit,
     onTap: () -> Unit,
     onTrackpad: (Boolean) -> Unit,
@@ -1008,7 +1034,7 @@ private suspend fun PointerInputScope.spaceGestures(
         onPressedChange(true)
         try {
             // 1 = رُفع الإصبع (لمسة قصيرة)، 2 = تحرك الإصبع (إلغاء)، null = انتهت المهلة (ضغطة مطوّلة)
-            val outcome: Int? = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            val outcome: Int? = withTimeoutOrNull(holdMs) {
                 var result = 0
                 while (result == 0) {
                     val event = awaitPointerEvent()

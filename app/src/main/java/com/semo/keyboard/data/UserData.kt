@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.model.ClipItem
+import com.semo.keyboard.domain.model.TextShortcut
 import com.semo.keyboard.domain.model.clipImageName
 import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.isImage
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 private const val SEP = "\u001E"
+private const val FIELD = "\u001F"
 
 /** سجل الحافظة: يُحفظ محليًا فقط، والعناصر المثبّتة لا تُحذف تلقائيًا */
 class ClipboardRepository(context: Context) {
@@ -104,37 +107,139 @@ class ClipboardRepository(context: Context) {
     }
 }
 
-/** الكلمات التي تعلّمتها اللوحة من الكتابة (محلية بالكامل، قابلة للمسح) */
+/**
+ * الكلمات وأزواج الكلمات التي تعلّمتها اللوحة من الكتابة (محلية بالكامل، قابلة للمسح).
+ * كل كلمة تُحفظ مع عدد مرات استعمالها فتتقدّم الكلمات الأكثر استعمالًا بالاقتراحات، وأزواج
+ * (كلمة ← الكلمة التي تلتها) تُستعمل لتوقّع الكلمة التالية.
+ */
 class LearnedWordsRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val store = appContext.semoDataStore
     private val key = stringPreferencesKey("learned_words")
+    private val pairKey = stringPreferencesKey("learned_bigrams")
 
+    /** الأكثر استعمالًا أولًا، ومع التساوي الأحدث أولًا (الترتيب المستقر يحفظ الحداثة) */
     val words: Flow<List<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> decode(p[key]) }
+        .map { p: Preferences -> decodeWords(p[key]).sortedByDescending { it.second }.map { it.first } }
+
+    /** كلمة (بصيغة مفتاح البحث) ← الكلمات التي تلتها مرتبة بالأكثر تكرارًا */
+    val bigrams: Flow<Map<String, List<String>>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> decodePairs(p[pairKey]) }
 
     suspend fun learn(word: String) {
         if (!appContext.isUserStorageUnlocked()) return
-        val w = word.trim().replace(SEP, "")
+        val w = clean(word)
         if (w.length < 3 || w.length > 30) return
         store.edit { p ->
-            val list = decode(p[key]).toMutableList()
-            list.remove(w)
-            list.add(0, w)
-            p[key] = list.take(MAX_WORDS).joinToString(SEP)
+            val list = decodeWords(p[key]).toMutableList()
+            val old = list.indexOfFirst { it.first == w }
+            val count = if (old >= 0) list.removeAt(old).second + 1 else 1
+            list.add(0, w to count.coerceAtMost(MAX_COUNT))
+            while (list.size > MAX_WORDS) {
+                val min = list.minOf { it.second }
+                list.removeAt(list.indexOfLast { it.second == min })
+            }
+            p[key] = list.joinToString(SEP) { it.first + FIELD + it.second }
         }
     }
 
-    suspend fun clear() {
+    /** يسجّل أن [next] جاءت بعد [prev] */
+    suspend fun learnPair(prev: String, next: String) {
         if (!appContext.isUserStorageUnlocked()) return
-        store.edit { p -> p.remove(key) }
+        val a = clean(BigDictionary.key(prev))
+        val b = clean(next)
+        if (a.isEmpty() || a.length > 30 || b.length < 2 || b.length > 30) return
+        store.edit { p ->
+            val list = decodeRawPairs(p[pairKey]).toMutableList()
+            val old = list.indexOfFirst { it.first == a && it.second == b }
+            val count = if (old >= 0) list.removeAt(old).third + 1 else 1
+            list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
+            while (list.size > MAX_PAIRS) {
+                val min = list.minOf { it.third }
+                list.removeAt(list.indexOfLast { it.third == min })
+            }
+            p[pairKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+        }
     }
 
-    private fun decode(raw: String?): List<String> =
-        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).filter { it.isNotEmpty() }
+    /** يمسح الكلمات المتعلَّمة وأزواج التوقّع معًا */
+    suspend fun clear() {
+        if (!appContext.isUserStorageUnlocked()) return
+        store.edit { p ->
+            p.remove(key)
+            p.remove(pairKey)
+        }
+    }
+
+    private fun clean(s: String): String = s.trim().replace(SEP, "").replace(FIELD, "")
+
+    /** الصيغة القديمة (كلمة بلا عدّاد) تُقرأ بعدّاد 1 فلا تضيع الكلمات المتعلَّمة سابقًا */
+    private fun decodeWords(raw: String?): List<Pair<String, Int>> =
+        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).filter { it.isNotEmpty() }.map {
+            it.substringBefore(FIELD) to (it.substringAfter(FIELD, "").toIntOrNull() ?: 1)
+        }
+
+    private fun decodeRawPairs(raw: String?): List<Triple<String, String, Int>> =
+        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).mapNotNull { e ->
+            val parts = e.split(FIELD)
+            if (parts.size < 3) null else Triple(parts[0], parts[1], parts[2].toIntOrNull() ?: 1)
+        }
+
+    private fun decodePairs(raw: String?): Map<String, List<String>> =
+        decodeRawPairs(raw)
+            .groupBy({ it.first }, { it.second to it.third })
+            .mapValues { entry -> entry.value.sortedByDescending { it.second }.map { it.first } }
 
     private companion object {
-        const val MAX_WORDS = 400
+        const val MAX_WORDS = 1500
+        const val MAX_PAIRS = 1200
+        const val MAX_COUNT = 1000
+    }
+}
+
+/** الاختصارات النصية التي يضيفها المستخدم (omw ← On my way!): محلية ومشفّرة مع باقي بيانات المستخدم */
+class ShortcutsRepository(context: Context) {
+
+    private val appContext = context.applicationContext
+    private val store = appContext.semoDataStore
+    private val key = stringPreferencesKey("text_shortcuts")
+
+    val shortcuts: Flow<List<TextShortcut>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> decode(p[key]) }
+
+    /** يرجع false لو الاختصار أو النص غير صالح (الاختصار حروف فقط حتى 15 حرفًا، والنص حتى 200) */
+    suspend fun add(abbr: String, expansion: String): Boolean {
+        val a = abbr.trim()
+        val e = expansion.trim().replace(SEP, " ").replace(FIELD, " ")
+        if (a.isEmpty() || a.length > MAX_ABBR || e.isEmpty() || e.length > MAX_EXPANSION) return false
+        if (!a.all { it.isLetter() || it == '\'' || it == '’' }) return false
+        if (!appContext.isUserStorageUnlocked()) return false
+        store.edit { p ->
+            val list = decode(p[key]).filterNot { it.abbr.equals(a, ignoreCase = true) }.toMutableList()
+            list.add(0, TextShortcut(a, e))
+            p[key] = encode(list.take(MAX_SHORTCUTS))
+        }
+        return true
+    }
+
+    suspend fun remove(abbr: String) {
+        if (!appContext.isUserStorageUnlocked()) return
+        store.edit { p -> p[key] = encode(decode(p[key]).filterNot { it.abbr == abbr }) }
+    }
+
+    private fun encode(list: List<TextShortcut>): String = list.joinToString(SEP) { it.abbr + FIELD + it.expansion }
+
+    private fun decode(raw: String?): List<TextShortcut> =
+        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).mapNotNull { e ->
+            val abbr = e.substringBefore(FIELD)
+            val expansion = e.substringAfter(FIELD, "")
+            if (abbr.isEmpty() || expansion.isEmpty()) null else TextShortcut(abbr, expansion)
+        }
+
+    private companion object {
+        const val MAX_ABBR = 15
+        const val MAX_EXPANSION = 200
+        const val MAX_SHORTCUTS = 100
     }
 }
