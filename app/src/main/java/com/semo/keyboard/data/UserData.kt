@@ -210,48 +210,46 @@ class LearnedWordsRepository(context: Context) {
         .distinctUntilChanged()
         .map { raw -> decodePairs(raw) }
 
-    suspend fun learn(word: String) {
+    /**
+     * يكتب دفعة كلمات وأزواج بعملية تخزين واحدة (بدل كتابة بكل كلمة): فك السجل وترتيبه وإعادة بناء
+     * القوائم بالذاكرة يحصل مرة واحدة كل بضع ثوانٍ، فتخفّ الكتابة على المعالج والبطارية.
+     */
+    suspend fun learnBatch(newWords: List<String>, newPairs: List<Pair<String, String>>) {
+        if (newWords.isEmpty() && newPairs.isEmpty()) return
         if (!appContext.isUserStorageUnlocked()) return
-        val w = clean(word)
-        if (w.length < 3 || w.length > 30) return
         store.edit { p ->
-            val list = decodeWords(p[key]).toMutableList()
-            val old = list.indexOfFirst { it.first == w }
-            val count = if (old >= 0) list.removeAt(old).second + 1 else 1
-            list.add(0, w to count.coerceAtMost(MAX_COUNT))
-            while (list.size > MAX_WORDS) {
-                val min = list.minOf { it.second }
-                list.removeAt(list.indexOfLast { it.second == min })
+            if (newWords.isNotEmpty()) {
+                val list = decodeWords(p[key]).toMutableList()
+                for (raw in newWords) {
+                    val w = clean(raw)
+                    if (w.length < 3 || w.length > 30) continue
+                    val old = list.indexOfFirst { it.first == w }
+                    val count = if (old >= 0) list.removeAt(old).second + 1 else 1
+                    list.add(0, w to count.coerceAtMost(MAX_COUNT))
+                }
+                while (list.size > MAX_WORDS) {
+                    val min = list.minOf { it.second }
+                    list.removeAt(list.indexOfLast { it.second == min })
+                }
+                p[key] = list.joinToString(SEP) { it.first + FIELD + it.second }
             }
-            p[key] = list.joinToString(SEP) { it.first + FIELD + it.second }
-        }
-    }
-
-    /** يسجّل أن [next] جاءت بعد [prev] */
-    suspend fun learnPair(prev: String, next: String) {
-        if (!appContext.isUserStorageUnlocked()) return
-        val a = clean(if (prev.contains(' ')) prev else BigDictionary.key(prev))
-        val b = clean(next)
-        if (a.isEmpty() || a.length > 61 || b.length < 2 || b.length > 30) return
-        store.edit { p ->
-            val list = decodeRawPairs(p[pairKey]).toMutableList()
-            val old = list.indexOfFirst { it.first == a && it.second == b }
-            val count = if (old >= 0) list.removeAt(old).third + 1 else 1
-            list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
-            while (list.size > MAX_PAIRS) {
-                val min = list.minOf { it.third }
-                list.removeAt(list.indexOfLast { it.third == min })
+            if (newPairs.isNotEmpty()) {
+                val list = decodeRawPairs(p[pairKey]).toMutableList()
+                for ((prev, next) in newPairs) {
+                    val a = clean(if (prev.contains(' ')) prev else BigDictionary.key(prev))
+                    val b = clean(next)
+                    if (a.isEmpty() || a.length > 61 || b.length < 2 || b.length > 30) continue
+                    val old = list.indexOfFirst { it.first == a && it.second == b }
+                    val count = if (old >= 0) list.removeAt(old).third + 1 else 1
+                    list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
+                }
+                while (list.size > MAX_PAIRS) {
+                    val min = list.minOf { it.third }
+                    list.removeAt(list.indexOfLast { it.third == min })
+                }
+                p[pairKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
             }
-            p[pairKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
         }
-    }
-
-    /** يسجّل أن [next] جاءت بعد الكلمتين [prev2] ثم [prev] (توقّع أدق من الزوج) */
-    suspend fun learnTriple(prev2: String, prev: String, next: String) {
-        val a = BigDictionary.key(prev2)
-        val b = BigDictionary.key(prev)
-        if (a.isEmpty() || b.isEmpty()) return
-        learnPair("$a $b", next)
     }
 
     /** يمسح الكلمات المتعلَّمة وأزواج التوقّع معًا */
@@ -283,8 +281,8 @@ class LearnedWordsRepository(context: Context) {
             .mapValues { entry -> entry.value.sortedByDescending { it.second }.map { it.first } }
 
     private companion object {
-        const val MAX_WORDS = 4000
-        const val MAX_PAIRS = 4000
+        const val MAX_WORDS = 2500
+        const val MAX_PAIRS = 3000
         const val MAX_COUNT = 1000
     }
 }

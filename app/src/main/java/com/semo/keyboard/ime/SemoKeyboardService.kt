@@ -362,7 +362,7 @@ class SemoKeyboardService :
         hasSelection = newSelStart != newSelEnd
         // نجمع تحديثات المؤشر المتتالية (تصل مع كل حرف) بمهمة واحدة، لأن كل واحدة تكلّف استدعاءات للتطبيق
         mainHandler.removeCallbacks(cursorMovedTask)
-        mainHandler.postDelayed(cursorMovedTask, 40)
+        mainHandler.postDelayed(cursorMovedTask, 70)
     }
 
     override fun onWindowShown() {
@@ -374,6 +374,7 @@ class SemoKeyboardService :
 
     override fun onWindowHidden() {
         super.onWindowHidden()
+        if (::viewModel.isInitialized) viewModel.flushLearning()
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         KeyboardStatusHelper.setImeVisible(this, false)
     }

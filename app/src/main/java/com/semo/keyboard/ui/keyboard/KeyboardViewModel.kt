@@ -41,6 +41,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -86,7 +88,7 @@ class KeyboardViewModel(
     private val transient = MutableStateFlow(LocalState())
 
     private val learnedWords: StateFlow<List<String>> =
-        learnedWordsRepository.words.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        learnedWordsRepository.words.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** الكلمات المتعلَّمة بصيغة مفتاح البحث (للتدقيق الإملائي: الكلمة المتعلَّمة تُعدّ صحيحة) */
     private val learnedKeys: StateFlow<Set<String>> =
@@ -95,11 +97,12 @@ class KeyboardViewModel(
                 val keys: Set<String> = list.mapTo(HashSet<String>()) { BigDictionary.key(it) }
                 keys
             }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     /** أزواج الكلمات المتعلَّمة لتوقّع الكلمة التالية */
     private val learnedBigrams: StateFlow<Map<String, List<String>>> =
-        learnedWordsRepository.bigrams.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+        learnedWordsRepository.bigrams.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val shortcuts: StateFlow<List<TextShortcut>> =
         shortcutsRepository.shortcuts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -107,7 +110,7 @@ class KeyboardViewModel(
     val uiState: StateFlow<KeyboardUiState> =
         combine(
             transient,
-            settingsRepository.settings,
+            settingsRepository.settings.distinctUntilChanged(),
             clipboardRepository.items
         ) { t: LocalState, s: SemoSettings, clips: List<ClipItem> ->
             KeyboardUiState(
@@ -614,10 +617,34 @@ class KeyboardViewModel(
     private fun normalizeForLearning(word: String): String =
         if (word.firstOrNull()?.code?.let { it < 0x0600 } == true) word.lowercase() else word
 
+    private val pendingWords = ArrayList<String>()
+    private val pendingPairs = ArrayList<Pair<String, String>>()
+    private var learnFlushJob: Job? = null
+
+    private fun scheduleLearnFlush() {
+        learnFlushJob?.cancel()
+        learnFlushJob = viewModelScope.launch {
+            delay(6_000)
+            flushLearning()
+        }
+    }
+
+    /** يكتب ما تعلّمته اللوحة دفعة واحدة (يُستدعى بعد هدوء الكتابة وعند إخفاء اللوحة) */
+    fun flushLearning() {
+        learnFlushJob?.cancel()
+        if (pendingWords.isEmpty() && pendingPairs.isEmpty()) return
+        val words = pendingWords.toList()
+        val pairs = pendingPairs.toList()
+        pendingWords.clear()
+        pendingPairs.clear()
+        viewModelScope.launch(Dispatchers.Default) { learnedWordsRepository.learnBatch(words, pairs) }
+    }
+
     private fun learnWord(word: String) {
         if (!canLearn() || word.length < 3) return
         val normalized = normalizeForLearning(word)
-        viewModelScope.launch { learnedWordsRepository.learn(normalized) }
+        pendingWords.add(normalized)
+        scheduleLearnFlush()
     }
 
     /**
@@ -633,10 +660,9 @@ class KeyboardViewModel(
         val next = normalizeForLearning(word)
         val before2 = rest.trimEnd(' ').dropLast(prev.length)
         val prev2 = if (before2.endsWith(' ')) SuggestionEngine.currentWord(before2.trimEnd(' ')) else ""
-        viewModelScope.launch {
-            learnedWordsRepository.learnPair(prev, next)
-            if (prev2.isNotEmpty()) learnedWordsRepository.learnTriple(prev2, prev, next)
-        }
+        pendingPairs.add(prev to next)
+        if (prev2.isNotEmpty()) pendingPairs.add("${BigDictionary.key(prev2)} ${BigDictionary.key(prev)}" to next)
+        scheduleLearnFlush()
     }
 
     private fun setSuggestions(list: List<String>, literal: String, math: MathResult?) {

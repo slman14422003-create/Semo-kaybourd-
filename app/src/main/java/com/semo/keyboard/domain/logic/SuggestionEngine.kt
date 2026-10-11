@@ -42,18 +42,18 @@ object SuggestionEngine {
         // الكلمات التي تعلّمتها اللوحة بعد الكلمة السابقة تتقدّم على غيرها
         if (context.isNotEmpty()) {
             bigrams[BigDictionary.key(context)]?.forEach { w ->
-                if (out.size < limit && w.length > p.length && w.lowercase().startsWith(p)) out.add(w)
+                if (out.size < limit && w.length > p.length && w.startsWith(p, ignoreCase = true)) out.add(w)
             }
         }
 
         for (w in learned) {
             if (out.size >= limit) break
             val sameScript = w.firstOrNull()?.let { isArabicChar(it) == arabic } ?: false
-            if (sameScript && w.length > p.length && w.lowercase().startsWith(p)) out.add(w)
+            if (sameScript && w.length > p.length && w.startsWith(p, ignoreCase = true)) out.add(w)
         }
         for (w in builtIn) {
             if (out.size >= limit) break
-            if (w.length > p.length && w.lowercase().startsWith(p)) out.add(w)
+            if (w.length > p.length && w.startsWith(p, ignoreCase = true)) out.add(w)
         }
         // القاموس الكبير (إن نُزِّل من الإعدادات) يكمّل ما لم تغطّه القائمة المدمجة
         if (out.size < limit) {

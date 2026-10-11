@@ -203,6 +203,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // نجهّز الإيموجي بالخلفية قبل أن يفتح المستخدم لوحتها: فلترة الرموز غير المدعومة ثم رسم أول الأقسام لصور جاهزة
     val warmDensity = LocalDensity.current.density
     LaunchedEffect(warmDensity) {
+        // بعد ما تستقر اللوحة: التحضير بالخلفية لا يزاحم أول ضغطات الكتابة
+        delay(2_500)
         withContext(Dispatchers.Default) {
             EmojiBitmapCache.configure(warmDensity)
             EmojiBitmapCache.prefetch(supportedEmojiCache.take(2).flatMap { it.emojis }.distinct())
