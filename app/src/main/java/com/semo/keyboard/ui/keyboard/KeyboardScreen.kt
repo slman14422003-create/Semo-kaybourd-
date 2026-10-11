@@ -255,11 +255,15 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     .weight(if (oneHanded) 0.84f else 1f)
                     .padding(horizontal = metrics.sidePadding)
             ) {
-                TopStrip(state, colors, metrics, viewModel)
+                if (state.page != KeyboardPage.CLIPBOARD) TopStrip(state, colors, metrics, viewModel)
 
                 when (state.page) {
                     KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
-                    KeyboardPage.CLIPBOARD -> ClipboardPanel(state, colors, panelHeight, bottomReserve, viewModel)
+                    KeyboardPage.CLIPBOARD -> ClipboardPanel(
+                        state, colors,
+                        (panelHeight + metrics.stripHeight + 96.dp).coerceAtMost((screenHeightDp * 0.6f).dp),
+                        bottomReserve, viewModel
+                    )
                     KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
                     else -> Box(
                         modifier = Modifier

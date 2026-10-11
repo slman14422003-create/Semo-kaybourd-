@@ -9,6 +9,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
@@ -33,10 +34,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -637,19 +634,11 @@ internal fun EmojiPanel(
 private val DeleteRed = Color(0xFFFF453A)
 private val PasteGreen = Color(0xFF30D158)
 
-/** اسم النوع بصيغة الجمع لشريط التصفية أعلى الحافظة */
-private fun kindFilterLabel(kind: ClipKind, arabic: Boolean): String = when (kind) {
-    ClipKind.TEXT -> tr(arabic, "نصوص", "Text")
-    ClipKind.LINK -> tr(arabic, "روابط", "Links")
-    ClipKind.CODE -> tr(arabic, "أكواد", "Code")
-    ClipKind.IMAGE -> tr(arabic, "صور", "Images")
-}
-
 /** وسم البطاقة (مفرد): نوع العنصر، ومع النص الطويل يُضاف عدد أحرفه */
 
 /**
- * الحافظة بنمط بطاقات مدمجة: صف علوي واحد (أزرار التصفية أو العنوان + لصق + مسح الكل)، وبطاقتان بكل صف.
- * ضغطة على البطاقة = لصق، وتحتها أزرار ظاهرة للتثبيت والحذف.
+ * الحافظة: صف علوي (زر الرجوع للوحة | العنوان | تثبيت (عرض المثبّتة فقط) | حذف غير المثبّت) وتحته شبكة بطاقات
+ * بثلاثة أعمدة بارتفاع موحّد. ضغطة = لصق، وضغطة مطوّلة = خياران (تثبيت/حذف) على نفس البطاقة.
  */
 @Composable
 internal fun ClipboardPanel(
@@ -660,16 +649,13 @@ internal fun ClipboardPanel(
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language == KeyboardLanguage.ARABIC
-    // تصفية حسب النوع (نصوص/روابط/أكواد/صور): تظهر الأزرار فقط لو الحافظة فيها أكثر من نوع
-    var filter by remember { mutableStateOf<ClipKind?>(null) }
-    val presentKinds = remember(state.clipItems) { state.clipItems.map { ClipClassifier.kindOf(it) }.toSet() }
-    val activeFilter = filter?.takeIf { it in presentKinds }
-    val shownItems = remember(state.clipItems, activeFilter) {
-        if (activeFilter == null) state.clipItems else state.clipItems.filter { ClipClassifier.kindOf(it) == activeFilter }
-    }
-    val pinned = remember(shownItems) { shownItems.filter { it.pinned } }
-    val recent = remember(shownItems) { shownItems.filter { !it.pinned } }
+    var pinnedOnly by remember { mutableStateOf(false) }
+    val hasPinned = remember(state.clipItems) { state.clipItems.any { it.pinned } }
     val hasUnpinned = remember(state.clipItems) { state.clipItems.any { !it.pinned } }
+    val shownItems = remember(state.clipItems, pinnedOnly, hasPinned) {
+        if (pinnedOnly && hasPinned) state.clipItems.filter { it.pinned }
+        else state.clipItems.sortedByDescending { it.pinned }
+    }
 
     Column(
         modifier = Modifier
@@ -679,73 +665,59 @@ internal fun ClipboardPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
-                .padding(horizontal = 2.dp),
+                .height(52.dp)
+                .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // زر أبج دائري بالصف العلوي (بدل الشريط السفلي): المحتوى ياخذ كل المساحة تحته
-            PressBox(modifier = Modifier.size(34.dp), onClick = {
+            PressBox(modifier = Modifier.size(width = 48.dp, height = 40.dp), onClick = {
                 viewModel.onSelectionTick()
                 viewModel.openPage(KeyboardPage.LETTERS)
-            }) { pressed ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(if (pressed) colors.keyPressed else colors.chip, RoundedCornerShape(17.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = tr(arabic, "أبج", "ABC"),
-                        color = colors.text,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
-                    )
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            if (state.clipboardEnabled && presentKinds.size >= 2) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ClipFilterChip(tr(arabic, "الكل", "All"), activeFilter == null, colors) {
-                        viewModel.onSelectionTick()
-                        filter = null
-                    }
-                    ClipKind.values().filter { it in presentKinds }.forEach { kind ->
-                        ClipFilterChip(kindFilterLabel(kind, arabic), activeFilter == kind, colors) {
-                            viewModel.onSelectionTick()
-                            filter = kind
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    text = tr(arabic, "الحافظة", "Clipboard"),
-                    color = colors.text,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 6.dp)
+            }) { _ ->
+                Icon(
+                    painter = painterResource(R.drawable.ic_clip_keyboard),
+                    contentDescription = null,
+                    tint = colors.text,
+                    modifier = Modifier.size(26.dp)
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            // اللصق أخضر والحذف أحمر
-            ClipRoundButton(R.drawable.ic_clip_paste, accent = true, ink = Color.White, colors = colors, fill = PasteGreen) {
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 10.dp)
+                    .width(1.dp)
+                    .height(18.dp)
+                    .background(colors.divider)
+            )
+            Text(
+                text = tr(arabic, "الحافظة", "Clipboard"),
+                color = colors.text,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            PressBox(modifier = Modifier.size(width = 52.dp, height = 40.dp), onClick = {
                 viewModel.onSelectionTick()
-                viewModel.onEditAction(EditAction.PASTE)
+                pinnedOnly = !pinnedOnly
+            }) { _ ->
+                Icon(
+                    painter = painterResource(if (pinnedOnly) R.drawable.ic_clip_pin_fill else R.drawable.ic_clip_pin),
+                    contentDescription = null,
+                    tint = if (pinnedOnly) colors.keyAccent else colors.text,
+                    modifier = Modifier.size(26.dp)
+                )
             }
-            if (hasUnpinned) {
-                Spacer(Modifier.width(6.dp))
-                ClipRoundButton(R.drawable.ic_clip_trash, accent = false, ink = Color.White, colors = colors, fill = DeleteRed) {
+            PressBox(modifier = Modifier.size(width = 52.dp, height = 40.dp), onClick = {
+                if (hasUnpinned) {
                     viewModel.onSelectionTick()
                     viewModel.onClipClearUnpinned()
                 }
+            }) { _ ->
+                Icon(
+                    painter = painterResource(R.drawable.ic_clip_trash),
+                    contentDescription = null,
+                    tint = if (hasUnpinned) colors.text else colors.textMuted,
+                    modifier = Modifier.size(26.dp)
+                )
             }
         }
 
@@ -760,115 +732,23 @@ internal fun ClipboardPanel(
                     tr(arabic, "فعّله من إعدادات التطبيق", "Turn it on in the app settings"),
                     colors
                 )
-                state.clipItems.isEmpty() -> ClipEmptyState(
+                shownItems.isEmpty() -> ClipEmptyState(
                     tr(arabic, "الحافظة فاضية", "Nothing copied yet"),
                     tr(arabic, "انسخ نصًا أو رابطًا أو كودًا أو صورة وسيظهر هنا", "Copy text, a link, code or an image and it shows up here"),
                     colors
                 )
-                shownItems.isEmpty() -> ClipEmptyState(
-                    tr(arabic, "ما في عناصر من هذا النوع", "Nothing of this type"),
-                    tr(arabic, "اختر «الكل» لعرض كل المنسوخ", "Choose All to see everything copied"),
-                    colors
-                )
-                else -> LazyVerticalStaggeredGrid(
-                    columns = StaggeredGridCells.Fixed(2),
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
                     modifier = Modifier.fillMaxSize(),
-                    // ينتهي المحتوى فوق أزرار شريط التنقل لكن يمتد خلفها بالتمرير
-                    contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = 6.dp + bottomInset),
-                    verticalItemSpacing = 6.dp,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 8.dp + bottomInset),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (pinned.isNotEmpty()) {
-                        item(key = "pinned-label", span = StaggeredGridItemSpan.FullLine) {
-                            ClipSectionLabel(tr(arabic, "المثبّتة", "PINNED"), colors)
-                        }
-                        items(pinned, key = { it.text }) { item -> ClipCard(item, arabic, colors, viewModel) }
-                    }
-                    if (recent.isNotEmpty()) {
-                        if (pinned.isNotEmpty()) {
-                            item(key = "recent-label", span = StaggeredGridItemSpan.FullLine) {
-                                ClipSectionLabel(tr(arabic, "الأحدث", "RECENT"), colors)
-                            }
-                        }
-                        items(recent, key = { it.text }) { item -> ClipCard(item, arabic, colors, viewModel) }
-                    }
+                    items(shownItems, key = { it.text }) { item -> ClipCard(item, arabic, colors, viewModel) }
                 }
             }
         }
-
     }
-}
-
-/** زر دائري صغير بأيقونة (لصق/مسح الكل) بالصف العلوي للحافظة */
-@Composable
-private fun ClipRoundButton(
-    iconRes: Int,
-    accent: Boolean,
-    ink: Color,
-    colors: SemoKeyboardColors,
-    fill: Color? = null,
-    onClick: () -> Unit
-) {
-    PressBox(modifier = Modifier.size(34.dp), onClick = onClick) { pressed ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    when {
-                        fill != null && pressed -> fill.copy(alpha = 0.75f)
-                        fill != null -> fill
-                        accent && pressed -> colors.keyAccent.copy(alpha = 0.75f)
-                        accent -> colors.keyAccent
-                        pressed -> colors.keyPressed
-                        else -> colors.chip
-                    },
-                    RoundedCornerShape(17.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(painter = painterResource(iconRes), contentDescription = null, tint = ink, modifier = Modifier.size(16.dp))
-        }
-    }
-}
-
-@Composable
-private fun ClipFilterChip(label: String, selected: Boolean, colors: SemoKeyboardColors, onClick: () -> Unit) {
-    PressBox(modifier = Modifier.height(28.dp), onClick = onClick) { pressed ->
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .background(
-                    when {
-                        selected -> colors.keyAccent
-                        pressed -> colors.keyPressed
-                        else -> colors.chip
-                    },
-                    RoundedCornerShape(14.dp)
-                )
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                color = if (selected) colors.textOnAccent else colors.text,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-@Composable
-private fun ClipSectionLabel(text: String, colors: SemoKeyboardColors) {
-    Text(
-        text = text,
-        color = colors.textMuted,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.6.sp,
-        modifier = Modifier.padding(start = 6.dp, top = 4.dp)
-    )
 }
 
 @Composable
@@ -897,7 +777,10 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.key, RoundedCornerShape(14.dp))
+            .height(112.dp)
+            .background(colors.key, RoundedCornerShape(16.dp))
+            .border(1.dp, colors.divider, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
             .pointerInput(item.text, menu) {
                 detectTapGestures(
                     onTap = {
@@ -915,8 +798,8 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 9.dp)
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             when (kind) {
                 ClipKind.IMAGE -> ClipImageThumb(item.text.clipImageName(), colors)
@@ -924,9 +807,9 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                     text = shown,
                     color = colors.text,
                     fontSize = 11.sp,
-                    lineHeight = 15.sp,
+                    lineHeight = 14.sp,
                     fontFamily = FontFamily.Monospace,
-                    maxLines = 6,
+                    maxLines = 5,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(textDirection = TextDirection.Ltr)
                 )
@@ -942,8 +825,8 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 ClipKind.TEXT -> Text(
                     text = shown,
                     color = colors.text,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(textDirection = TextDirection.Content)
@@ -963,7 +846,7 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
             Row(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(colors.keyPressed.copy(alpha = 0.96f), RoundedCornerShape(14.dp)),
+                    .background(colors.keyPressed.copy(alpha = 0.97f), RoundedCornerShape(16.dp)),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
