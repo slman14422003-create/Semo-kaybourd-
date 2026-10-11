@@ -646,23 +646,6 @@ private fun kindFilterLabel(kind: ClipKind, arabic: Boolean): String = when (kin
 }
 
 /** وسم البطاقة (مفرد): نوع العنصر، ومع النص الطويل يُضاف عدد أحرفه */
-private fun clipKindLabel(text: String, kind: ClipKind, arabic: Boolean): String {
-    if (text.isClipLong()) {
-        val base = if (kind == ClipKind.CODE) tr(arabic, "كود طويل", "Long code") else tr(arabic, "نص طويل", "Long text")
-        return base + " · " + text.clipLongLength() + tr(arabic, " حرف", " chars")
-    }
-    val t = text.trim()
-    return when {
-        kind == ClipKind.IMAGE -> tr(arabic, "صورة", "Image")
-        kind == ClipKind.LINK -> tr(arabic, "رابط", "Link")
-        kind == ClipKind.CODE -> tr(arabic, "كود", "Code")
-        Patterns.EMAIL_ADDRESS.matcher(t).matches() -> tr(arabic, "بريد", "Email")
-        t.length >= 5 && t.all { it.isDigit() || it == '+' || it == '-' || it == '(' || it == ')' || it == ' ' } ->
-            tr(arabic, "رقم", "Number")
-        t.length > 140 -> tr(arabic, "نص طويل", "Long text")
-        else -> tr(arabic, "نص", "Text")
-    }
-}
 
 /**
  * الحافظة بنمط بطاقات مدمجة: صف علوي واحد (أزرار التصفية أو العنوان + لصق + مسح الكل)، وبطاقتان بكل صف.
@@ -909,97 +892,112 @@ private fun ClipEmptyState(title: String, hint: String, colors: SemoKeyboardColo
 @Composable
 private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
     val kind = remember(item.text) { ClipClassifier.kindOf(item.text) }
-    val kindLabel = remember(item.text, arabic) { clipKindLabel(item.text, kind, arabic) }
-    // النص الطويل يُعرض بمعاينة أوله فقط (الكامل بملف ويُلصق كاملًا عند الضغط)
     val shown = remember(item.text) { item.text.clipDisplayText() }
-    Column(
+    var menu by remember { mutableStateOf(false) }
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.key, RoundedCornerShape(14.dp))
+            .pointerInput(item.text, menu) {
+                androidx.compose.foundation.gestures.detectTapGestures(
+                    onTap = {
+                        if (menu) menu = false else {
+                            viewModel.onSelectionTick()
+                            viewModel.onClipPaste(item.text)
+                        }
+                    },
+                    onLongPress = {
+                        viewModel.onSelectionTick()
+                        menu = true
+                    }
+                )
+            }
     ) {
-        // منطقة المحتوى: ضغطة = لصق
-        PressBox(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
-                viewModel.onSelectionTick()
-                viewModel.onClipPaste(item.text)
-            }
-        ) { pressed ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (pressed) colors.keyPressed else Color.Transparent,
-                        RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
-                    )
-                    .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 2.dp)
-            ) {
-                when (kind) {
-                    ClipKind.IMAGE -> ClipImageThumb(item.text.clipImageName(), colors)
-                    // الكود: خط أحادي المسافة واتجاه من اليسار دائمًا ليبقى التنسيق والمسافات كما نُسخت
-                    ClipKind.CODE -> Text(
-                        text = shown,
-                        color = colors.text,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 6,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(textDirection = TextDirection.Ltr)
-                    )
-                    ClipKind.LINK -> Text(
-                        text = shown.trim(),
-                        color = colors.keyAccent,
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(textDirection = TextDirection.Ltr)
-                    )
-                    ClipKind.TEXT -> Text(
-                        text = shown,
-                        color = colors.text,
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(textDirection = TextDirection.Content)
-                    )
-                }
-            }
-        }
-        // شريط سفلي: نوع العنصر + زر تثبيت + زر حذف (ظاهران دائمًا)
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(30.dp)
-                .padding(start = 10.dp, end = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 10.dp, vertical = 9.dp)
         ) {
-            Text(text = kindLabel, color = colors.textMuted, fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1f))
-            ClipIconAction(
-                iconRes = if (item.pinned) R.drawable.ic_clip_pin_fill else R.drawable.ic_clip_pin,
-                ink = if (item.pinned) colors.keyAccent else colors.textMuted
-            ) {
-                viewModel.onSelectionTick()
-                viewModel.onClipTogglePin(item.text)
+            when (kind) {
+                ClipKind.IMAGE -> ClipImageThumb(item.text.clipImageName(), colors)
+                ClipKind.CODE -> Text(
+                    text = shown,
+                    color = colors.text,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(textDirection = TextDirection.Ltr)
+                )
+                ClipKind.LINK -> Text(
+                    text = shown.trim(),
+                    color = colors.keyAccent,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(textDirection = TextDirection.Ltr)
+                )
+                ClipKind.TEXT -> Text(
+                    text = shown,
+                    color = colors.text,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(textDirection = TextDirection.Content)
+                )
             }
-            ClipIconAction(iconRes = R.drawable.ic_clip_trash, ink = DeleteRed) {
-                viewModel.onSelectionTick()
-                viewModel.onClipDelete(item.text)
+            if (item.pinned) {
+                Spacer(Modifier.height(4.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_clip_pin_fill),
+                    contentDescription = null,
+                    tint = colors.keyAccent,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
+        if (menu) {
+            Row(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(colors.keyPressed.copy(alpha = 0.96f), RoundedCornerShape(14.dp)),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ClipMenuAction(
+                    iconRes = if (item.pinned) R.drawable.ic_clip_pin_fill else R.drawable.ic_clip_pin,
+                    label = if (item.pinned) tr(arabic, "إلغاء التثبيت", "Unpin") else tr(arabic, "تثبيت", "Pin"),
+                    ink = colors.keyAccent
+                ) {
+                    menu = false
+                    viewModel.onClipTogglePin(item.text)
+                }
+                ClipMenuAction(
+                    iconRes = R.drawable.ic_clip_trash,
+                    label = tr(arabic, "حذف", "Delete"),
+                    ink = DeleteRed
+                ) {
+                    menu = false
+                    viewModel.onClipDelete(item.text)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ClipIconAction(iconRes: Int, ink: Color, onClick: () -> Unit) {
-    PressBox(modifier = Modifier.size(width = 32.dp, height = 30.dp), onClick = onClick) { _ ->
-        Icon(painter = painterResource(iconRes), contentDescription = null, tint = ink, modifier = Modifier.size(15.dp))
+private fun ClipMenuAction(iconRes: Int, label: String, ink: Color, onClick: () -> Unit) {
+    PressBox(modifier = Modifier.size(width = 64.dp, height = 44.dp), onClick = onClick) { _ ->
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+            Icon(painter = painterResource(iconRes), contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
+            Text(text = label, color = ink, fontSize = 11.sp, maxLines = 1)
+        }
     }
 }
 
-/** مصغّرة صورة من الحافظة (تُفك بخيط خلفي وتُخزَّن مؤقتًا كي لا تتقطع القائمة) */
 @Composable
 private fun ClipImageThumb(name: String, colors: SemoKeyboardColors) {
     val context = LocalContext.current

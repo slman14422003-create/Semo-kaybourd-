@@ -561,51 +561,6 @@ private fun StripIconButton(
     }
 }
 
-/** شريحة لصق سريع بشريط الاقتراحات: تظهر لمدة قصيرة بعد نسخ نص جديد (مثل خانة "لصق" بآيفون) */
-@Composable
-private fun RowScope.FreshClipChip(text: String, arabic: Boolean, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxHeight(),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier
-                .height(32.dp)
-                .background(colors.chip, RoundedCornerShape(16.dp))
-                .clickable { viewModel.onFreshClipPaste() }
-                .padding(start = 12.dp, end = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_tool_clipboard),
-                contentDescription = null,
-                tint = colors.keyAccent,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = if (text.isClipImage()) tr(arabic, "صورة منسوخة · اضغط للصق", "Copied image · tap to paste") else text.clipDisplayText().replace('\n', ' ').trim(),
-                color = colors.suggestion,
-                fontSize = 15.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(textDirection = TextDirection.Content),
-                modifier = Modifier.widthIn(max = 230.dp)
-            )
-            Text(
-                text = "✕",
-                color = colors.textMuted,
-                fontSize = 13.sp,
-                modifier = Modifier
-                    .clickable { viewModel.dismissFreshClip() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            )
-        }
-    }
-}
-
 private data class SuggestionSlot(val text: String, val bold: Boolean, val onClick: () -> Unit)
 
 /** اختصار التعبير الحسابي الطويل كي يتسع بالشريط */
@@ -644,13 +599,7 @@ private fun RowScope.SuggestionsRow(
         return
     }
 
-    val fresh = state.freshClip
-    if (fresh != null && state.literal.isEmpty()) {
-        FreshClipChip(fresh, state.language == KeyboardLanguage.ARABIC, colors, viewModel)
-        return
-    }
-
-    val latestClip = if (state.literal.isEmpty() && state.clipboardEnabled) state.clipItems.firstOrNull() else null
+    val latestClip = if (state.literal.isEmpty() && state.clipboardEnabled) state.freshClip else null
 
     val slots = buildList {
         if (latestClip != null) {
@@ -716,7 +665,7 @@ private fun RowScope.SuggestionsRow(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickable { viewModel.onClipPaste(latestClip.text) }
+                    .clickable { viewModel.onFreshClipPaste() }
                     .padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
@@ -729,8 +678,8 @@ private fun RowScope.SuggestionsRow(
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    text = if (latestClip.text.isClipImage()) tr(state.language == KeyboardLanguage.ARABIC, "صورة", "Image")
-                    else latestClip.text.clipDisplayText().replace('\n', ' ').trim(),
+                    text = if (latestClip.isClipImage()) tr(state.language == KeyboardLanguage.ARABIC, "صورة", "Image")
+                    else latestClip.clipDisplayText().replace('\n', ' ').trim(),
                     color = colors.suggestion,
                     fontSize = 15.sp,
                     maxLines = 1,

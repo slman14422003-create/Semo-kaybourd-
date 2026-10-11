@@ -742,7 +742,7 @@ class KeyboardViewModel(
         /** رموز العمليات الحسابية: كتابتها لا تشغّل التصحيح ولا تعلّم الكلمة السابقة */
         const val NON_WORD_END_SYMBOLS = "+×÷=*%^<>~|#"
         const val MAX_RECENT_EMOJIS = 32
-        const val FRESH_CLIP_MS = 90_000L
+        const val FRESH_CLIP_MS = 180_000L
         const val DOUBLE_TAP_MS = 350L
     }
 }

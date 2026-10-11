@@ -305,8 +305,7 @@ class SemoKeyboardService :
         val inputClass = inputType and InputType.TYPE_MASK_CLASS
         val page = when (inputClass) {
             // حقول الأرقام والهاتف: لوحة الأرقام 3×4 (أرقام + عمليات + رموز شائعة)، والتاريخ والوقت: صفحة الرموز
-            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE -> KeyboardPage.NUMPAD
-            InputType.TYPE_CLASS_DATETIME -> KeyboardPage.SYMBOLS_1
+            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> KeyboardPage.NUMPAD
             else -> KeyboardPage.LETTERS
         }
         val variation = inputType and InputType.TYPE_MASK_VARIATION

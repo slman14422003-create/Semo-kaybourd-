@@ -151,10 +151,9 @@ object KeyboardLayoutProvider {
      * فيبدو داخل دائرة تنسجم مع دائرة الكرة، أو بسهم خاص بالتطبيق حسب الإعدادات.
      */
     fun utilityRow(state: KeyboardUiState): List<KeyDefinition> {
-        val badge = if (state.language == KeyboardLanguage.ARABIC) "ع" else "EN"
         val globe = KeyDefinition(
             "🌐", KeyAction.SwitchLanguage, weight = 2.8f,
-            longPressAction = KeyAction.Globe, plain = true, badge = badge
+            longPressAction = KeyAction.Globe, plain = true
         )
         val hide = when (state.hideButtonMode) {
             HideButtonMode.OFF -> KeyDefinition.spacer(2.8f)
