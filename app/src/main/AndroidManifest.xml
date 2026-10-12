@@ -9,8 +9,12 @@
     <!-- الاهتزاز الخفيف عند الضغط على المفاتيح (الصلاحية الوحيدة المطلوبة، وهي عادية ولا تُسأل من المستخدم) -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- للزر اليدوي «تنزيل القاموس الكبير» بإعدادات التطبيق فقط؛ خدمة لوحة المفاتيح نفسها لا تتصل بالإنترنت -->
+    <!-- للزر اليدوي «تنزيل القاموس الكبير» وللتحقق من التحديثات بإعدادات التطبيق فقط؛ خدمة لوحة المفاتيح نفسها لا تتصل بالإنترنت -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- تثبيت تحديث التطبيق المُنزَّل من ريليس جيتهاب (يُطلب من المستخدم عند أول استخدام فقط) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="true"

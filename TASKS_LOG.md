@@ -9,3 +9,8 @@
 - إعدادات ← المظهر: شريط «حجم الكيبورد» 80%–130%.
 - ألوان الداكن أغمق 8% وتحجيم الخطوط والأيقونات مع الحجم.
 - تبعية جديدة: commons-compress (فك bz2 لجمل Tatoeba) + قواعد proguard.
+- الأصوات: استبدال الصوت المولَّد برمجيًا بملفات حقيقية (key_press_click/delete/modifier.wav في res/raw) عبر SoundPool؛ KeyClickPlayer صار يأخذ Context.
+- الضغط المطوّل على الحروف المُشكَّلة: فقاعة عائمة (Popup) تظهر فوق المفتاح مباشرة (مثل iOS) بدل شريط الأعلى، وسحب الإصبع فوقها بدون رفعه ينقّل التحديد؛ دالة جديدة alternatesKeyGestures بـ KeyboardScreen.kt.
+- أيقونات شريط الأدوات: توحيد سماكة الخط (1.6) بكل الأيقونات، numpad صار شبكة نقاط 3×3 (مثل circle.grid.3x3)، onehand صار رمز لوحة مفاتيح + سهم بدل شكل الهاتف.
+- الحافظة: تصنيف LINK صار يلتقط روابط مرفقة بنص قصير حولها (مو بس رابط صافي)، readClip() صار يلتقط نص الرابط من ClipData.Item.uri غير content:// (حالة text/uri-list)، تقليل التأخير الأول للقراءة (0ms بدل 250ms) لمزامنة أسرع، وزر «فتح» جديد بقائمة بطاقة الحافظة للعناصر من نوع LINK (ClipClassifier.extractUrl + ic_clip_open_link.xml).
+- ميزة تحديث التطبيق من ريليس جيتهاب: UpdateManager.kt جديد (فحص GitHub API + تنزيل APK بتقدّم + تثبيت عبر FileProvider)، صلاحية REQUEST_INSTALL_PACKAGES، مسار updates/ بـ clip_file_paths.xml، وواجهة فحص/تنزيل/تثبيت بصفحة «حول» بالإعدادات (UpdateDialog).

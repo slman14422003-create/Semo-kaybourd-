@@ -183,7 +183,7 @@ class SemoKeyboardService :
         super.onCreate()
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
-        clickPlayer = KeyClickPlayer()
+        clickPlayer = KeyClickPlayer(applicationContext)
         val settingsRepository = SettingsRepository(applicationContext)
         clipboardRepository = ClipboardRepository(applicationContext)
         val learnedRepository = LearnedWordsRepository(applicationContext)
@@ -226,7 +226,12 @@ class SemoKeyboardService :
         } else null
         val uri = items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme == "content" } }
         val mime = if (uri != null && plain == null) resolveImageMime(descImageMime, uri) else null
-        return ClipSnap(plain ?: html ?: coerced, uri, mime)
+        // بعض التطبيقات تنسخ الروابط كـ ClipData.Item فيه uri فقط بلا نص (text/uri-list)،
+        // فلو ما لقينا نصًا من أي مصدر سابق نأخذ الرابط من أول uri غير content (http/https/mailto...)
+        val linkText = if (plain == null && html == null && coerced == null) {
+            items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme != null && it.scheme != "content" }?.toString() }
+        } else null
+        return ClipSnap(plain ?: html ?: coerced ?: linkText, uri, mime)
     }
 
     /**
@@ -236,11 +241,14 @@ class SemoKeyboardService :
     private fun captureClipboard(force: Boolean = false) {
         if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
         serviceScope.launch {
+            // محاولة فورية أولًا (أغلب الحالات تنجح من أول مرة)، ثم إعادة محاولة متباعدة
+            // قليلًا فقط لو الحافظة لم تكن جاهزة بعد (رابط تطبيقات مثل X/Twitter أحيانًا يتأخر).
             var snap: ClipSnap? = null
-            for (attempt in 0..3) {
+            val delays = longArrayOf(0L, 60L, 150L, 300L)
+            for (attempt in delays.indices) {
+                if (delays[attempt] > 0L) delay(delays[attempt])
                 snap = withContext(Dispatchers.IO) { runCatching { readClip() }.getOrNull() }
                 if (snap != null && (snap.text != null || snap.imageMime != null)) break
-                delay(250)
             }
             val s = snap ?: return@launch
             if (s.imageMime != null && s.uri != null) {

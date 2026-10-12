@@ -88,8 +88,11 @@ import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -128,6 +131,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
 
@@ -475,63 +479,33 @@ private fun TopStrip(
             .padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (state.alternates.isNotEmpty()) {
+        StripIconButton(
+            iconRes = R.drawable.ic_tool_chevron,
+            colors = colors,
+            rotate = if (state.toolbarOpen) 180f else 0f,
+            filled = false,
+            onClick = { viewModel.toggleToolbar() }
+        )
+        if (state.toolbarOpen) {
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                state.alternates.forEach { alt ->
-                    Box(
-                        modifier = Modifier
-                            .size(width = 38.dp, height = 34.dp)
-                            .background(colors.chip, RoundedCornerShape(8.dp))
-                            .clickable { viewModel.onAlternateChosen(alt) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = alt, fontSize = 20.sp, color = colors.text)
+                // العناصر والترتيب من إعدادات «شريط الأدوات»
+                state.toolbarItems.forEach { item ->
+                    when (item) {
+                        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors) { viewModel.openPage(KeyboardPage.EMOJI) }
+                        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
+                        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors) { viewModel.openPage(KeyboardPage.NUMPAD) }
+                        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors) { viewModel.openPage(KeyboardPage.EDIT) }
+                        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors) { viewModel.cycleOneHand() }
+                        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors) { viewModel.openSettings() }
                     }
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "✕",
-                color = colors.textMuted,
-                fontSize = 16.sp,
-                modifier = Modifier
-                    .clickable { viewModel.dismissAlternates() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            )
         } else {
-            StripIconButton(
-                iconRes = R.drawable.ic_tool_chevron,
-                colors = colors,
-                rotate = if (state.toolbarOpen) 180f else 0f,
-                filled = false,
-                onClick = { viewModel.toggleToolbar() }
-            )
-            if (state.toolbarOpen) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // العناصر والترتيب من إعدادات «شريط الأدوات»
-                    state.toolbarItems.forEach { item ->
-                        when (item) {
-                            ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors) { viewModel.openPage(KeyboardPage.EMOJI) }
-                            ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
-                            ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors) { viewModel.openPage(KeyboardPage.NUMPAD) }
-                            ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors) { viewModel.openPage(KeyboardPage.EDIT) }
-                            ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors) { viewModel.cycleOneHand() }
-                            ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors) { viewModel.openSettings() }
-                        }
-                    }
-                }
-            } else {
-                SuggestionsRow(state, colors, viewModel)
-            }
+            SuggestionsRow(state, colors, viewModel)
         }
     }
 }
@@ -730,6 +704,8 @@ private fun KeyRow(
                 onKeyDown = viewModel::onKeyDown,
                 onKeyTap = viewModel::onKeyTapped,
                 onLongPress = viewModel::onKeyLongPressed,
+                onAlternateChosen = viewModel::onAlternateChosen,
+                onAlternatesDismissed = viewModel::dismissAlternates,
                 onCursor = viewModel::onCursorMove,
                 onTrackpad = onTrackpad
             )
@@ -751,6 +727,8 @@ private fun RowScope.KeyButton(
     onKeyDown: (KeyAction) -> Unit,
     onKeyTap: (KeyAction) -> Unit,
     onLongPress: (KeyDefinition) -> Unit,
+    onAlternateChosen: (String) -> Unit,
+    onAlternatesDismissed: () -> Unit,
     onCursor: (Int, Int) -> Unit,
     onTrackpad: (Boolean) -> Unit
 ) {
@@ -764,9 +742,17 @@ private fun RowScope.KeyButton(
     val currentOnDown by rememberUpdatedState(onKeyDown)
     val currentOnTap by rememberUpdatedState(onKeyTap)
     val currentOnLong by rememberUpdatedState(onLongPress)
+    val currentOnAlternate by rememberUpdatedState(onAlternateChosen)
+    val currentOnAlternatesDismissed by rememberUpdatedState(onAlternatesDismissed)
     val currentOnCursor by rememberUpdatedState(onCursor)
     val currentOnTrackpad by rememberUpdatedState(onTrackpad)
     val hasAlternates = def.longPressChars.isNotEmpty()
+    var keyBoxWidthPx by remember { mutableStateOf(0) }
+    var popupOpen by remember { mutableStateOf(false) }
+    var popupIndex by remember { mutableStateOf(0) }
+    val popupDensity = LocalDensity.current
+    val chipWidthDp = 40.dp
+    val chipWidthPx = with(popupDensity) { chipWidthDp.toPx() }
     val isBackspace = def.action == KeyAction.Backspace
     val isSpace = def.action == KeyAction.Space
     val isLetterKey = def.action is KeyAction.Character
@@ -832,11 +818,46 @@ private fun RowScope.KeyButton(
                 }
             )
         }
+    } else if (hasAlternates) {
+        // مفاتيح فيها أحرف بديلة (كالحروف المُشكَّلة): ضغطة مطوّلة تفتح فقاعة فوق المفتاح
+        // مباشرة (مثل iOS)، وسحب الإصبع فوقها يُغيّر الحرف المُحدَّد قبل الرفع.
+        Modifier
+            .onSizeChanged { keyBoxWidthPx = it.width }
+            .pointerInput(def, tuning) {
+                alternatesKeyGestures(
+                    holdMs = tuning.holdMs,
+                    computeIndex = { x ->
+                        val n = def.longPressChars.size
+                        if (n <= 1) 0 else {
+                            val popupWidthPx = chipWidthPx * n
+                            val left = (keyBoxWidthPx - popupWidthPx) / 2f
+                            (((x - left) / chipWidthPx).toInt()).coerceIn(0, n - 1)
+                        }
+                    },
+                    onPressedChange = {
+                        pressed = it
+                        if (it) currentOnDown(def.action)
+                    },
+                    onTap = { currentOnTap(def.action) },
+                    onLongPressStart = {
+                        currentOnLong(def)
+                        popupOpen = true
+                    },
+                    onIndexChange = { popupIndex = it },
+                    onCommit = { i ->
+                        popupOpen = false
+                        currentOnAlternate(def.longPressChars[i])
+                    },
+                    onCancel = {
+                        popupOpen = false
+                        currentOnAlternatesDismissed()
+                    }
+                )
+            }
     } else {
         // باقي المفاتيح: ضغطة تُسجَّل عند رفع الإصبع حتى لو تحرّك قليلًا (بدون حدّ الانزلاق)،
         // لأن detectTapGestures كان يُلغي الضغطة بالكتابة السريعة فتبدو اللوحة "ما بتلحق".
         val longPress: (() -> Unit)? = when {
-            hasAlternates -> ({ currentOnLong(def) })
             def.longPressAction != null -> ({ currentOnKey(def.longPressAction) })
             isSpace && tuning.spaceAction == SpaceBarAction.SWITCH_LANGUAGE -> ({ currentOnKey(KeyAction.SwitchLanguage) })
             else -> null
@@ -945,6 +966,44 @@ private fun RowScope.KeyButton(
                 }
             }
         }
+
+        // فقاعة الأحرف البديلة: تظهر فوق المفتاح مباشرة (مثل iOS)، وسحب الإصبع فوقها
+        // بدون رفعه يُنقّل التحديد (الحرف المُظلَّل) قبل تحرير الإصبع.
+        if (popupOpen && hasAlternates) {
+            val chars = def.longPressChars
+            Popup(
+                alignment = Alignment.TopCenter,
+                offset = IntOffset(0, with(popupDensity) { -(metrics.keyHeight + 58.dp).roundToPx() })
+            ) {
+                Row(
+                    modifier = Modifier
+                        .shadow(4.dp, RoundedCornerShape(12.dp))
+                        .background(colors.bubble, RoundedCornerShape(12.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    chars.forEachIndexed { i, ch ->
+                        val selected = i == popupIndex
+                        Box(
+                            modifier = Modifier
+                                .width(chipWidthDp - 4.dp)
+                                .height(44.dp)
+                                .background(
+                                    if (selected) colors.keyAccent else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = ch,
+                                fontSize = 20.sp,
+                                color = if (selected) colors.textOnAccent else colors.text
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -982,6 +1041,70 @@ private class BalloonShape(
         }
         val joined = Path.combine(PathOperation.Union, Path.combine(PathOperation.Union, head, neck), base)
         return Outline.Generic(joined)
+    }
+}
+
+/**
+ * إيماءة مفاتيح الأحرف البديلة: ضغطة قصيرة = الحرف الأساسي، وضغطة مطوّلة تفتح فقاعة
+ * فوق المفتاح (مثل iOS) ثم السحب فوقها (بدون رفع الإصبع) يُغيّر التحديد، والرفع يُثبّت
+ * الحرف المُحدَّد لحظتها.
+ */
+internal suspend fun PointerInputScope.alternatesKeyGestures(
+    holdMs: Long,
+    computeIndex: (Float) -> Int,
+    onPressedChange: (Boolean) -> Unit,
+    onTap: () -> Unit,
+    onLongPressStart: () -> Unit,
+    onIndexChange: (Int) -> Unit,
+    onCommit: (Int) -> Unit,
+    onCancel: () -> Unit
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        onPressedChange(true)
+        var lastX = down.position.x
+        try {
+            val timeout = if (holdMs > 0L) holdMs else viewConfiguration.longPressTimeoutMillis
+            val outcome: Int? = withTimeoutOrNull(timeout) {
+                var result = 0
+                while (result == 0) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    result = when {
+                        change == null -> 2
+                        change.isConsumed -> 2
+                        change.changedToUpIgnoreConsumed() -> 1
+                        else -> {
+                            lastX = change.position.x
+                            0
+                        }
+                    }
+                }
+                result
+            }
+            when (outcome) {
+                1 -> onTap()
+                null -> {
+                    onLongPressStart()
+                    onIndexChange(computeIndex(lastX))
+                    var committed = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) {
+                            onCommit(computeIndex(change.position.x))
+                            committed = true
+                            break
+                        }
+                        onIndexChange(computeIndex(change.position.x))
+                    }
+                    if (!committed) onCancel()
+                }
+                else -> onCancel()
+            }
+        } finally {
+            onPressedChange(false)
+        }
     }
 }
 

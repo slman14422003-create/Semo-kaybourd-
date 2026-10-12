@@ -43,6 +43,11 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import com.semo.keyboard.update.UpdateCheckResult
+import com.semo.keyboard.update.UpdateInfo
+import com.semo.keyboard.update.UpdateManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -662,7 +667,8 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
 @Composable
 private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val player = remember { KeyClickPlayer() }
+    val localContext = LocalContext.current
+    val player = remember { KeyClickPlayer(localContext) }
     DisposableEffect(Unit) { onDispose { player.release() } }
 
     SubPage("اللمس والصوت والاهتزاز", onBack) {
@@ -827,6 +833,16 @@ private fun PrivacyPage(
 
 // ---------------- حول وإعادة الضبط ----------------
 
+/** حالة شاشة التحقق من التحديثات بإعدادات التطبيق */
+private sealed class UpdateUiState {
+    object Checking : UpdateUiState()
+    object UpToDate : UpdateUiState()
+    data class Available(val info: UpdateInfo) : UpdateUiState()
+    data class Downloading(val downloadedBytes: Long, val totalBytes: Long) : UpdateUiState()
+    data class ReadyToInstall(val file: java.io.File) : UpdateUiState()
+    data class Error(val message: String) : UpdateUiState()
+}
+
 @Composable
 private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -835,6 +851,49 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
     }
     var confirmReset by remember { mutableStateOf(false) }
+    var updateState by remember { mutableStateOf<UpdateUiState?>(null) }
+
+    fun startCheck() {
+        updateState = UpdateUiState.Checking
+        scope.launch {
+            updateState = when (val result = UpdateManager.checkForUpdate(context)) {
+                is UpdateCheckResult.Available -> UpdateUiState.Available(result.info)
+                is UpdateCheckResult.UpToDate -> UpdateUiState.UpToDate
+                is UpdateCheckResult.Error -> UpdateUiState.Error(result.message)
+            }
+        }
+    }
+
+    fun startDownload(info: UpdateInfo) {
+        updateState = UpdateUiState.Downloading(0L, info.apkSizeBytes)
+        scope.launch {
+            runCatching {
+                UpdateManager.downloadApk(context, info) { downloaded, total ->
+                    updateState = UpdateUiState.Downloading(downloaded, total)
+                }
+            }.onSuccess { file ->
+                updateState = UpdateUiState.ReadyToInstall(file)
+            }.onFailure { e ->
+                updateState = UpdateUiState.Error(e.message ?: "فشل تنزيل التحديث")
+            }
+        }
+    }
+
+    if (updateState != null) {
+        UpdateDialog(
+            state = updateState!!,
+            onDismiss = { updateState = null },
+            onRetry = { startCheck() },
+            onDownload = { info -> startDownload(info) },
+            onInstall = { file ->
+                if (!UpdateManager.canInstallUnknownApps(context)) {
+                    UpdateManager.requestInstallPermission(context)
+                } else {
+                    UpdateManager.installApk(context, file)
+                }
+            }
+        )
+    }
 
     SubPage("حول وإعادة الضبط", onBack) {
         Section {
@@ -849,6 +908,8 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
                     Text("الإصدار $version", color = SemoPalette.TextHint, fontSize = 13.sp)
                 }
             }
+            Divider()
+            ActionRow("التحقق من التحديثات", onClick = ::startCheck)
             Divider()
             ActionRow("إعادة عرض دليل الإعداد", onClick = onReplay)
         }
@@ -866,5 +927,124 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
             }
         }
         Hint("بيرجّع كل الإعدادات (التخطيط، المظهر، اللمس، الصوت…) للقيم الافتراضية. الكلمات المتعلَّمة والاختصارات وسجل الحافظة ما بتنمسح.")
+    }
+}
+
+/** نافذة التحقق من التحديثات: تعرض حالة الفحص/التنزيل/التثبيت فوق باقي الشاشة */
+@Composable
+private fun UpdateDialog(
+    state: UpdateUiState,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onDownload: (UpdateInfo) -> Unit,
+    onInstall: (java.io.File) -> Unit
+) {
+    val dismissible = state !is UpdateUiState.Downloading
+    Dialog(onDismissRequest = { if (dismissible) onDismiss() }) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SemoPalette.Surface, RoundedCornerShape(20.dp))
+                .border(1.dp, SemoPalette.Stroke, RoundedCornerShape(20.dp))
+                .padding(20.dp)
+        ) {
+            when (state) {
+                is UpdateUiState.Checking -> {
+                    Text("جارٍ التحقق من آخر إصدار…", color = SemoPalette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(10.dp))
+                    UpdateProgressBar(indeterminate = true)
+                }
+                is UpdateUiState.UpToDate -> {
+                    Text("التطبيق محدَّث", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("عندك آخر إصدار من سيمو كيبورد.", color = SemoPalette.TextHint, fontSize = 13.sp)
+                    Spacer(Modifier.height(16.dp))
+                    UpdateDialogButton("تم", modifier = Modifier.fillMaxWidth(), filled = true, onClick = onDismiss)
+                }
+                is UpdateUiState.Available -> {
+                    Text("فيه تحديث جديد: ${state.info.versionName}", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (state.info.notes.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            state.info.notes.take(400),
+                            color = SemoPalette.TextHint,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            maxLines = 8,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        UpdateDialogButton("لاحقًا", modifier = Modifier.weight(1f), onClick = onDismiss)
+                        UpdateDialogButton("تنزيل وتثبيت", modifier = Modifier.weight(1f), filled = true) { onDownload(state.info) }
+                    }
+                }
+                is UpdateUiState.Downloading -> {
+                    Text("جارٍ تنزيل التحديث…", color = SemoPalette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(10.dp))
+                    val fraction = if (state.totalBytes > 0) (state.downloadedBytes.toFloat() / state.totalBytes).coerceIn(0f, 1f) else 0f
+                    UpdateProgressBar(indeterminate = state.totalBytes <= 0, progress = fraction)
+                    Spacer(Modifier.height(6.dp))
+                    val downloadedMb = state.downloadedBytes / 1_000_000f
+                    val totalMb = state.totalBytes / 1_000_000f
+                    Text(
+                        if (state.totalBytes > 0) "%.1f/%.1f MB".format(downloadedMb, totalMb) else "%.1f MB".format(downloadedMb),
+                        color = SemoPalette.TextHint,
+                        fontSize = 12.sp
+                    )
+                }
+                is UpdateUiState.ReadyToInstall -> {
+                    Text("التحديث جاهز للتثبيت", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("رح يفتح نظام أندرويد شاشة التثبيت.", color = SemoPalette.TextHint, fontSize = 13.sp)
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        UpdateDialogButton("لاحقًا", modifier = Modifier.weight(1f), onClick = onDismiss)
+                        UpdateDialogButton("تثبيت الآن", modifier = Modifier.weight(1f), filled = true) { onInstall(state.file) }
+                    }
+                }
+                is UpdateUiState.Error -> {
+                    Text("تعذّر التحقق من التحديثات", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(state.message, color = SemoPalette.TextHint, fontSize = 13.sp)
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        UpdateDialogButton("إغلاق", modifier = Modifier.weight(1f), onClick = onDismiss)
+                        UpdateDialogButton("إعادة المحاولة", modifier = Modifier.weight(1f), filled = true, onClick = onRetry)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateDialogButton(text: String, modifier: Modifier = Modifier, filled: Boolean = false, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .background(if (filled) SemoPalette.Accent else SemoPalette.SurfaceHigh, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = if (filled) Color.White else SemoPalette.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun UpdateProgressBar(indeterminate: Boolean, progress: Float = 0f) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .background(SemoPalette.SurfaceHigh, RoundedCornerShape(3.dp))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(if (indeterminate) 1f else progress)
+                .height(6.dp)
+                .background(SemoPalette.AccentText, RoundedCornerShape(3.dp))
+        )
     }
 }

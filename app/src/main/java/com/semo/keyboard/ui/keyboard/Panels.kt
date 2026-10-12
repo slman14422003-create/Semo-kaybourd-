@@ -773,6 +773,8 @@ private fun ClipEmptyState(title: String, hint: String, colors: SemoKeyboardColo
 private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
     val kind = remember(item.text) { ClipClassifier.kindOf(item.text) }
     val shown = remember(item.text) { item.text.clipDisplayText() }
+    val linkUrl = remember(item.text, kind) { if (kind == ClipKind.LINK) ClipClassifier.extractUrl(item.text) else null }
+    val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
@@ -850,6 +852,20 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (linkUrl != null) {
+                    ClipMenuAction(
+                        iconRes = R.drawable.ic_clip_open_link,
+                        label = tr(arabic, "فتح", "Open"),
+                        ink = colors.keyAccent
+                    ) {
+                        menu = false
+                        runCatching {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(linkUrl))
+                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        }
+                    }
+                }
                 ClipMenuAction(
                     iconRes = if (item.pinned) R.drawable.ic_clip_pin_fill else R.drawable.ic_clip_pin,
                     label = if (item.pinned) tr(arabic, "إلغاء التثبيت", "Unpin") else tr(arabic, "تثبيت", "Pin"),

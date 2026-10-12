@@ -15,6 +15,8 @@ object ClipClassifier {
 
     private val linkRegex = Regex("""^(?:https?://|ftp://|www\.)\S+$""", RegexOption.IGNORE_CASE)
     private val bareDomainRegex = Regex("""^[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*\.(?:com|net|org|io|dev|app|me|co|ai|info|tv|sa|ae|eg|jo|iq|sy|ly|dz|ma|tn)(?:[/?#]\S*)?$""", RegexOption.IGNORE_CASE)
+    // بحث عن رابط داخل نص أطول (رابط مرفق بسطر عنوان أو نص مقتبس حوله): غير مرتبط ببداية/نهاية السطر
+    private val embeddedLinkRegex = Regex("""(?:https?://|ftp://|www\.)[^\s"'<>\u0600-\u06FF]+""", RegexOption.IGNORE_CASE)
 
     /** كلمات مفتاحية تدل غالبًا على كود برمجي (تُطابق في بداية سطر) */
     private val codeLineRegex = Regex(
@@ -27,9 +29,29 @@ object ClipClassifier {
         if (stored.isClipImage()) return ClipKind.IMAGE
         val t = stored.clipDisplayText().trim()
         if (t.isEmpty()) return ClipKind.TEXT
+        // الحالة الشائعة: النص كله رابط واحد بلا شيء آخر
         if (!t.contains('\n') && !t.contains(' ') && (linkRegex.matches(t) || bareDomainRegex.matches(t))) return ClipKind.LINK
+        // رابط مرفق بنص قصير حوله (عنوان مُقتبَس، أو "via @user")، طالما الرابط يشكّل جزءًا كبيرًا من النص القصير
+        if (t.length <= 300) {
+            val found = embeddedLinkRegex.find(t)
+            if (found != null && found.value.length >= (t.length * 0.4).toInt().coerceAtLeast(8)) return ClipKind.LINK
+        }
         return if (looksLikeCode(t)) ClipKind.CODE else ClipKind.TEXT
     }
+
+    /** يستخرج أول رابط داخل النص (للفتح بالمتصفح)، أو null لو ما فيه */
+    fun extractUrl(stored: String): String? {
+        val t = stored.clipDisplayText().trim()
+        if (t.isEmpty()) return null
+        if (linkRegex.matches(t)) return normalizeUrl(t)
+        if (bareDomainRegex.matches(t)) return normalizeUrl(t)
+        val found = embeddedLinkRegex.find(t)?.value ?: return null
+        return normalizeUrl(found.trimEnd('.', ',', ')', ']', '؛', '،'))
+    }
+
+    private fun normalizeUrl(url: String): String =
+        if (url.startsWith("http://", true) || url.startsWith("https://", true) || url.startsWith("ftp://", true)) url
+        else "https://$url"
 
     /** كود: عدة أسطر فيها كلمات/رموز برمجية، أو سطر واحد بإشارات برمجية واضحة (=> ; {} () ->) */
     fun looksLikeCode(text: String): Boolean {
