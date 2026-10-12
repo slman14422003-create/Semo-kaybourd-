@@ -164,6 +164,10 @@ class KeyboardViewModel(
     private val learnedBigrams: StateFlow<Map<String, List<String>>> =
         learnedWordsRepository.bigrams.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    /** الكلمات التي رفض المستخدم تصحيحها التلقائي سابقًا (رجع عنها فورًا بالحذف)؛ لا تُصحَّح ثانيةً */
+    private val ignoredCorrections: StateFlow<Set<String>> =
+        learnedWordsRepository.ignoredCorrections.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
     private val shortcuts: StateFlow<List<TextShortcut>> =
         shortcutsRepository.shortcuts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -221,6 +225,7 @@ class KeyboardViewModel(
                 recentEmojis = s.recentEmojis,
                 enabledLanguages = s.enabledLanguages,
                 keyboardScale = s.keyboardScale,
+                animationSpeed = s.animationSpeed,
                 freshClip = t.freshClip,
                 clipEdit = t.clipEdit
             )
@@ -400,6 +405,8 @@ class KeyboardViewModel(
         ) {
             bridge.deleteSurrounding(pendingUndo.fixed.length + 1)
             bridge.commitText(pendingUndo.original)
+            // المستخدم رجع عن التصحيح فورًا: تعلّم ألّا تُصحَّح هذه الكلمة ثانيةً
+            viewModelScope.launch { learnedWordsRepository.ignoreCorrection(pendingUndo.original) }
             return
         }
         if (swipeWord != null && bridge.textBeforeCursor(swipeWord.length + 1) == "$swipeWord ") {
@@ -422,7 +429,7 @@ class KeyboardViewModel(
         if (state.textShortcuts) {
             fixed = shortcuts.value.firstOrNull { it.abbr.equals(word, ignoreCase = true) }?.expansion
         }
-        if (fixed == null && state.autoCorrect) {
+        if (fixed == null && state.autoCorrect && word.lowercase() !in ignoredCorrections.value) {
             fixed = AutoCorrect.fix(word)
             if (fixed == null) {
                 val language = SuggestionEngine.languageOf(word, state.language)

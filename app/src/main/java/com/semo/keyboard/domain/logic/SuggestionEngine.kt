@@ -190,14 +190,17 @@ object SuggestionEngine {
     }
 
     /**
-     * استبدال تلقائي حذر (إنكليزي فقط): يصحّح الكلمة غير المعروفة لكلمة شائعة واحدة واضحة تبعد تعديلًا واحدًا.
-     * لا يلمس الكلمات التي فيها حروف كبيرة أو رموز (أسماء، اختصارات)، ولا يعمل لو الاختيار ملتبس.
+     * استبدال تلقائي حذر (كل اللغات المدعومة): يصحّح الكلمة غير المعروفة لكلمة شائعة واحدة واضحة
+     * تبعد تعديلًا واحدًا (حذف/تبديل/استبدال/إدخال حرف). لا يلمس الكلمات التي فيها حروف كبيرة أو
+     * رموز (أسماء، اختصارات) أو كلمات من أبجدية مختلفة، ولا يعمل لو الاختيار ملتبس (أكثر من مرشّح شائع بنفس القوة).
+     * كان مقتصرًا على الإنكليزية فقط؛ صار يعمل بأي لغة حُمِّل قاموسها (عربي، فرنسي، إسباني...).
      */
     fun smartFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
-        if (language != KeyboardLanguage.ENGLISH || word.length < 4 || word.length > 14) return null
-        if (!word.all { it in 'a'..'z' }) return null
+        if (word.length < 3 || word.length > 14) return null
+        val alphabet = alphabetOf(language)
+        if (!word.all { it in alphabet }) return null
         if (!BigDictionary.isLoaded(language) || isKnown(word, language, learnedKeys)) return null
-        val ranked = edits1(word, EN_ALPHABET.dropLast(1))
+        val ranked = edits1(word, alphabet)
             .filter { it.length >= 3 }
             .mapNotNull { c ->
                 val r = BigDictionary.rankOf(c, language)

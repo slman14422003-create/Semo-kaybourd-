@@ -20,6 +20,9 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import com.semo.keyboard.ui.anim.LocalAnimScale
+import com.semo.keyboard.ui.anim.scaledSpring
+import com.semo.keyboard.ui.anim.scaledTween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -259,14 +262,22 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val swipeEnabled = state.swipeTyping && state.page == KeyboardPage.LETTERS &&
         state.alternates.isEmpty() && !trackpad
 
-    // تلاشٍ ناعم عند تبديل صفحة المفاتيح (حروف/أرقام/رموز) أو اللغة
+    // مضاعِف سرعة الحركة من الإعدادات (0 = إيقاف الحركة تمامًا)
+    val animScale = state.animationSpeed.multiplier
+    // تلاشٍ ناعم عند تبديل صفحة المفاتيح (حروف/أرقام/رموز) أو اللغة.
+    // خفيف ومختصر خصيصًا لتبديل 123↔ABC↔رموز (كان يُحسّ بتقطّع): بداية أقرب للوضوح (0.55 بدل 0.35)
+    // ومدة أقصر (120ms) فتبدو فورية تقريبًا بدل أنيميشن محسوس.
     val pageAlpha = remember { Animatable(1f) }
-    LaunchedEffect(state.page) {
+    LaunchedEffect(state.page, animScale) {
         if (state.page == KeyboardPage.LETTERS || state.page == KeyboardPage.SYMBOLS_1 ||
             state.page == KeyboardPage.SYMBOLS_2 || state.page == KeyboardPage.NUMPAD
         ) {
-            pageAlpha.snapTo(0.35f)
-            pageAlpha.animateTo(1f, tween(200, easing = LinearOutSlowInEasing))
+            if (animScale <= 0.001f) {
+                pageAlpha.snapTo(1f)
+            } else {
+                pageAlpha.snapTo(0.55f)
+                pageAlpha.animateTo(1f, scaledTween(animScale, 120, easing = LinearOutSlowInEasing))
+            }
         }
     }
     // تبديل اللغة: المفاتيح تنزلق من جهة اتجاه الكتابة الجديدة مع تلاشٍ ونابض ناعم بدل وميض الشفافية
@@ -275,15 +286,20 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     LaunchedEffect(state.language) {
         if (state.language != lastLanguage) {
             lastLanguage = state.language
-            val dir = if (state.language.rtl) 1f else -1f
-            coroutineScope {
-                launch {
-                    langShift.snapTo(30f * dir)
-                    langShift.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 420f))
-                }
-                launch {
-                    pageAlpha.snapTo(0.1f)
-                    pageAlpha.animateTo(1f, tween(240, easing = LinearOutSlowInEasing))
+            if (animScale <= 0.001f) {
+                langShift.snapTo(0f)
+                pageAlpha.snapTo(1f)
+            } else {
+                val dir = if (state.language.rtl) 1f else -1f
+                coroutineScope {
+                    launch {
+                        langShift.snapTo(30f * dir)
+                        langShift.animateTo(0f, scaledSpring(animScale, dampingRatio = 0.82f, stiffness = 420f))
+                    }
+                    launch {
+                        pageAlpha.snapTo(0.1f)
+                        pageAlpha.animateTo(1f, scaledTween(animScale, 240, easing = LinearOutSlowInEasing))
+                    }
                 }
             }
         }
@@ -296,7 +312,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Ltr,
         LocalTouchTuning provides tuning,
-        LocalKeyboardScale provides state.keyboardScale
+        LocalKeyboardScale provides state.keyboardScale,
+        LocalAnimScale provides animScale
     ) {
         Row(
             modifier = Modifier
@@ -314,7 +331,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     .padding(horizontal = metrics.sidePadding)
             ) {
                 if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
-                    Crossfade(targetState = state.clipEdit != null, animationSpec = tween(170), label = "strip") { editing ->
+                    Crossfade(targetState = state.clipEdit != null, animationSpec = scaledTween(animScale, 170), label = "strip") { editing ->
                         if (editing) ClipEditBar(state, colors, metrics.stripHeight, viewModel)
                         else TopStrip(state, colors, metrics, viewModel)
                     }
@@ -326,12 +343,12 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     transitionSpec = {
                         if (targetState != KeyboardPage.LETTERS) {
                             // التأخير الصغير يخفي لحظة تركيب اللوحة الجديدة (الأثقل) خلف اللوحة القديمة فلا يظهر تقطيع
-                            (fadeIn(tween(170, delayMillis = 70, easing = LinearOutSlowInEasing)) +
-                                slideInVertically(tween(240, delayMillis = 70, easing = FastOutSlowInEasing)) { it / 24 }) togetherWith
-                                fadeOut(tween(90)) using SizeTransform(clip = false) { _, _ -> snap() }
+                            (fadeIn(scaledTween(animScale, 170, delayMillis = 70, easing = LinearOutSlowInEasing)) +
+                                slideInVertically(scaledTween(animScale, 240, delayMillis = 70, easing = FastOutSlowInEasing)) { it / 24 }) togetherWith
+                                fadeOut(scaledTween(animScale, 90)) using SizeTransform(clip = false) { _, _ -> snap() }
                         } else {
-                            fadeIn(tween(150, delayMillis = 50, easing = LinearOutSlowInEasing)) togetherWith
-                                fadeOut(tween(90)) using
+                            fadeIn(scaledTween(animScale, 150, delayMillis = 50, easing = LinearOutSlowInEasing)) togetherWith
+                                fadeOut(scaledTween(animScale, 90)) using
                                 SizeTransform(clip = false) { _, _ -> snap() }
                         }
                     },
@@ -567,6 +584,7 @@ private fun TopStrip(
     metrics: KeyMetrics,
     viewModel: KeyboardViewModel
 ) {
+    val animScale = LocalAnimScale.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -587,7 +605,7 @@ private fun TopStrip(
                 .weight(1f)
                 .fillMaxHeight(),
             transitionSpec = {
-                fadeIn(tween(180, delayMillis = 40)) togetherWith fadeOut(tween(90)) using
+                fadeIn(scaledTween(animScale, 180, delayMillis = 40)) togetherWith fadeOut(scaledTween(animScale, 90)) using
                     SizeTransform(clip = false) { _, _ -> snap() }
             },
             label = "stripContent"
@@ -629,15 +647,16 @@ private fun StripIconButton(
     popDelay: Int = -1,
     onClick: () -> Unit
 ) {
+    val animScale = LocalAnimScale.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val press by animateFloatAsState(if (pressed) 0.84f else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "stripPress")
-    val rot by animateFloatAsState(rotate, tween(240), label = "stripRotate")
+    val press by animateFloatAsState(if (pressed) 0.84f else 1f, scaledSpring(animScale, dampingRatio = 0.6f, stiffness = 600f), label = "stripPress")
+    val rot by animateFloatAsState(rotate, scaledTween(animScale, 240), label = "stripRotate")
     val pop = remember { Animatable(if (popDelay >= 0) 0.4f else 1f) }
-    LaunchedEffect(popDelay) {
+    LaunchedEffect(popDelay, animScale) {
         if (popDelay >= 0) {
-            delay(popDelay.toLong())
-            pop.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 380f))
+            if (animScale > 0.001f) delay((popDelay * animScale).toLong())
+            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.55f, stiffness = 380f))
         }
     }
     // منطقة اللمس أوسع من الشكل المرئي: حبّة بخلفية مدوّرة (أو أيقونة بلا خلفية للسهم)
@@ -918,7 +937,7 @@ private fun RowScope.KeyButton(
         else -> colors.key
     }
     // آيفون: الضغط لحظي واللون يتلاشى بسلاسة عند الرفع
-    val animBg by animateColorAsState(bg, tween(if (pressed) 0 else 140), label = "keyBg")
+    val animBg by animateColorAsState(bg, scaledTween(LocalAnimScale.current, if (pressed) 0 else 140), label = "keyBg")
     val textColor = when {
         shiftOn -> colors.onShiftActive
         def.isAccent -> colors.textOnAccent
@@ -1087,7 +1106,8 @@ private fun RowScope.KeyButton(
         // بالصف الأول نقصّر الرأس كي لا تقصّه نافذة اللوحة.
         if (showPreview && pressed && isLetterKey && !hideLabels && !popupOpen) {
             val pop = remember { Animatable(0.8f) }
-            LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 900f)) }
+            val previewScale = LocalAnimScale.current
+            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.55f, stiffness = 900f)) }
             val headHeight = if (isTopRow) 40.dp else 56.dp
             val inset = 10.dp
             Box(
@@ -1127,7 +1147,8 @@ private fun RowScope.KeyButton(
         // بدون رفعه يُنقّل التحديد (الحرف المُظلَّل) قبل تحرير الإصبع.
         if (popupOpen && hasAlternates) {
             val altPop = remember { Animatable(0.85f) }
-            LaunchedEffect(Unit) { altPop.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 700f)) }
+            val altScale = LocalAnimScale.current
+            LaunchedEffect(Unit) { altPop.animateTo(1f, scaledSpring(altScale, dampingRatio = 0.6f, stiffness = 700f)) }
             val chars = def.longPressChars
             val gapPx = with(popupDensity) { 6.dp.roundToPx() }
             Row(
@@ -1398,7 +1419,7 @@ private suspend fun PointerInputScope.spaceGestures(
 private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pressed: Boolean) {
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.88f else 1f,
-        animationSpec = tween(durationMillis = 90),
+        animationSpec = scaledTween(LocalAnimScale.current, durationMillis = 90),
         label = "circleKeyScale"
     )
     val top = if (pressed) colors.key else lerp(colors.keySpecial, colors.key, 0.38f)

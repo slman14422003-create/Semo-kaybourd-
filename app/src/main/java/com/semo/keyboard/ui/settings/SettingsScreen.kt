@@ -95,6 +95,7 @@ import com.semo.keyboard.data.ClipboardRepository
 import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
+import com.semo.keyboard.domain.model.AnimationSpeed
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.HideButtonMode
@@ -597,6 +598,20 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     selected = settings.keySpacing,
                     onSelect = { scope.launch { repo.setKeySpacing(it) } }
                 )
+            }
+            Divider()
+            Block("سرعة الحركة", R.drawable.ic_set_hold, IconTeal) {
+                Segmented(
+                    options = listOf(
+                        AnimationSpeed.OFF to "إيقاف",
+                        AnimationSpeed.FAST to "سريعة",
+                        AnimationSpeed.NORMAL to "عادية",
+                        AnimationSpeed.SLOW to "بطيئة"
+                    ),
+                    selected = settings.animationSpeed,
+                    onSelect = { scope.launch { repo.setAnimationSpeed(it) } }
+                )
+                Hint("يتحكم بسرعة كل حركات اللوحة (تبديل الصفحات واللغة وضغط المفاتيح). إيقاف يلغي الحركة تمامًا لأفضل أداء على الأجهزة الضعيفة.")
             }
             Divider()
             Block("زر 123", R.drawable.ic_tool_numpad, IconPurple) {

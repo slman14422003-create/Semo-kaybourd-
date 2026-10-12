@@ -225,6 +225,7 @@ class LearnedWordsRepository(context: Context) {
     private val store = appContext.semoDataStore
     private val key = stringPreferencesKey("learned_words")
     private val pairKey = stringPreferencesKey("learned_bigrams")
+    private val ignoredKey = stringPreferencesKey("ignored_corrections")
 
     /** الأكثر استعمالًا أولًا، ومع التساوي الأحدث أولًا (الترتيب المستقر يحفظ الحداثة) */
     val words: Flow<List<String>> = appContext.credentialPrefsFlow()
@@ -237,6 +238,28 @@ class LearnedWordsRepository(context: Context) {
         .map { p: Preferences -> p[pairKey] }
         .distinctUntilChanged()
         .map { raw -> decodePairs(raw) }
+
+    /**
+     * الكلمات التي رفض المستخدم تصحيحها التلقائي صراحةً (بالرجوع عنه مباشرة بالحذف): اللوحة تتعلّم
+     * من هذا الرفض فلا تعيد "تصحيح" نفس الكلمة ثانيةً. مفاتيح بحث (lowercase) لمطابقة بلا حساسية لحالة الأحرف.
+     */
+    val ignoredCorrections: Flow<Set<String>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> p[ignoredKey] }
+        .distinctUntilChanged()
+        .map { raw -> raw.orEmpty().split(SEP).filter { it.isNotEmpty() }.toSet() }
+
+    /** يسجّل كلمة رفض المستخدم تصحيحها التلقائي (بعد ضغط Backspace فورًا لإرجاعها لأصلها) */
+    suspend fun ignoreCorrection(original: String) {
+        if (!appContext.isUserStorageUnlocked()) return
+        val w = clean(original).lowercase()
+        if (w.isEmpty() || w.length > 30) return
+        store.edit { p ->
+            val list = (p[ignoredKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList()).toMutableSet()
+            list.add(w)
+            while (list.size > MAX_IGNORED) list.remove(list.first())
+            p[ignoredKey] = list.joinToString(SEP)
+        }
+    }
 
     /**
      * يكتب دفعة كلمات وأزواج بعملية تخزين واحدة (بدل كتابة بكل كلمة): فك السجل وترتيبه وإعادة بناء
@@ -328,6 +351,7 @@ class LearnedWordsRepository(context: Context) {
         const val MAX_WORDS = 2500
         const val MAX_PAIRS = 3000
         const val MAX_COUNT = 1000
+        const val MAX_IGNORED = 500
     }
 }
 

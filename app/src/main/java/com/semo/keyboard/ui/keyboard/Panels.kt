@@ -48,6 +48,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.animation.core.tween
+import com.semo.keyboard.ui.anim.LocalAnimScale
+import com.semo.keyboard.ui.anim.scaledSpring
+import com.semo.keyboard.ui.anim.scaledTween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -479,7 +482,7 @@ internal fun EmojiPanel(
     if (pressedCode >= 0) scaleCode = pressedCode
     val pressScale by animateFloatAsState(
         targetValue = if (pressedCode >= 0) 1.22f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = 520f),
+        animationSpec = scaledSpring(LocalAnimScale.current, dampingRatio = 0.5f, stiffness = 520f),
         label = "emojiPress"
     )
     // بعد انتهاء الفلنغ نثبّت على أقرب عمود بنابض ناعم (إحساس صفحات iOS بدل التوقف العشوائي)
@@ -1008,7 +1011,8 @@ private fun BoxScope.ClipActionBubble(
     val context = LocalContext.current
     val cardShape = RoundedCornerShape(18.dp)
     val appear = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f)) }
+    val bubbleScale = LocalAnimScale.current
+    LaunchedEffect(Unit) { appear.animateTo(1f, scaledSpring(bubbleScale, dampingRatio = 0.7f, stiffness = 420f)) }
     Box(
         modifier = Modifier
             .matchParentSize()

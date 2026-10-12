@@ -285,11 +285,15 @@ class SemoKeyboardService :
     private var lastShotId = -1L
 
     /** استطلاع دوري أثناء ظهور اللوحة: بعض الأنظمة (HyperOS/One UI) لا ترسل إشعار تغيّر الحافظة بشكل موثوق */
+    private var pollTick = 0
     private val pollTask = object : Runnable {
         override fun run() {
             if (::viewModel.isInitialized && SystemClock.uptimeMillis() - lastTypeAt > POLL_IDLE_MS) {
                 captureClipboard()
-                captureScreenshot()
+                // فحص الحافظة خفيف (بصمة زمن فقط)، لكن فحص لقطات الشاشة يسأل MediaStore فعليًا
+                // (أثقل)؛ نشغّله كل دورتين بدل كل دورة لتخفيف الحمل على التخزين دون تأخير محسوس
+                pollTick++
+                if (pollTick % 2 == 0) captureScreenshot()
             }
             mainHandler.postDelayed(this, 1500)
         }
@@ -314,7 +318,8 @@ class SemoKeyboardService :
             media,
             arrayOf(android.provider.MediaStore.Images.Media._ID, android.provider.MediaStore.Images.Media.MIME_TYPE),
             sel, arrayOf(cutoff.toString()),
-            "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC"
+            // LIMIT 1: نريد فقط أحدث صورة، فلا داعي أن يفرز المزوّد ويرجع كل الصفوف المطابقة
+            "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC LIMIT 1"
         )?.use { c ->
             if (c.moveToFirst()) {
                 val id = c.getLong(0)
@@ -416,9 +421,10 @@ class SemoKeyboardService :
                 }.getOrNull() ?: 0L
             }
             if (!force && ts != 0L && ts == lastClipTs) return@launch
-            // عند إشعار النسخ ننتظر لحظة قصيرة كي ينتهي النظام من رسم رسالة «تم النسخ» دون أن نزاحمه
+            // نحاول القراءة فورًا أولًا (الحافظة جاهزة غالبًا لحظة الإشعار)، ونؤجّل الانتظار
+            // لمحاولات لاحقة فقط لو فشلت الأولى، بدل انتظار ثابت قبل كل قراءة
             var snap: ClipSnap? = null
-            val delays = if (force) longArrayOf(90L, 80L, 150L, 300L) else longArrayOf(0L, 60L, 150L, 300L)
+            val delays = if (force) longArrayOf(0L, 60L, 120L, 250L) else longArrayOf(0L, 60L, 150L, 300L)
             for (attempt in delays.indices) {
                 if (delays[attempt] > 0L) delay(delays[attempt])
                 snap = withContext(Dispatchers.IO) { runCatching { readClip() }.getOrNull() }

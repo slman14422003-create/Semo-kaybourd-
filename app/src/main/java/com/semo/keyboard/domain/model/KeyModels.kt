@@ -153,6 +153,17 @@ enum class BackspaceSpeed(val firstDelay: Long, val slowRepeat: Long, val fastRe
 /** الضغطة المطوّلة على شريط المسافة: تحريك المؤشر، تبديل اللغة، أو لا شيء */
 enum class SpaceBarAction { CURSOR, SWITCH_LANGUAGE, NONE }
 
+/**
+ * سرعة كل أنيميشن اللوحة (تبديل الصفحات، اللغة، ضغط المفاتيح...): مضاعِف واحد يُطبَّق على كل
+ * مدد الحركة بالتطبيق. OFF يلغي الحركة تمامًا (فورية 0ms) لأضعف الأجهزة أو من لا يريدها إطلاقًا.
+ */
+enum class AnimationSpeed(val multiplier: Float, val label: String) {
+    OFF(0f, "إيقاف"),
+    FAST(0.55f, "سريعة"),
+    NORMAL(1f, "عادية"),
+    SLOW(1.7f, "بطيئة")
+}
+
 /** اختصار نصي: كتابة [abbr] ثم مسافة تحوّله إلى [expansion] */
 data class TextShortcut(val abbr: String, val expansion: String)
 
@@ -259,7 +270,9 @@ data class SemoSettings(
     /** اللغات الظاهرة بدورة الكرة الأرضية بالترتيب (الافتراضي: إنكليزي وعربي) */
     val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
     /** حجم اللوحة كله (ارتفاع المفاتيح والخطوط): 0.8 إلى 1.3، والافتراضي 1.0 */
-    val keyboardScale: Float = 1f
+    val keyboardScale: Float = 1f,
+    /** سرعة كل حركات اللوحة (تبديل الصفحات، اللغة، ضغط المفاتيح)؛ OFF يلغيها تمامًا */
+    val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL
 )
 
 @Immutable
@@ -322,5 +335,6 @@ data class KeyboardUiState(
     val keepSymbolPanel: Boolean = true,
     val recentEmojis: List<String> = emptyList(),
     val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
-    val keyboardScale: Float = 1f
+    val keyboardScale: Float = 1f,
+    val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL
 )

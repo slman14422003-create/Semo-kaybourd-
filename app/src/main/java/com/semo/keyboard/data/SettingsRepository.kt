@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.semo.keyboard.domain.model.AnimationSpeed
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.BackspaceSpeed
@@ -181,6 +182,7 @@ class SettingsRepository(context: Context) {
         val TOOLBAR_ITEMS = stringPreferencesKey("toolbar_items")
         val ENABLED_LANGUAGES = stringPreferencesKey("enabled_languages")
         val KEYBOARD_SCALE = floatPreferencesKey("keyboard_scale")
+        val ANIMATION_SPEED = stringPreferencesKey("animation_speed")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -224,7 +226,8 @@ class SettingsRepository(context: Context) {
                 keepSymbolPanel = p[Keys.KEEP_SYMBOLS] ?: true,
                 recentEmojis = p[Keys.RECENT_EMOJIS].orEmpty().split(' ').filter { it.isNotEmpty() },
                 enabledLanguages = decodeLanguages(p[Keys.ENABLED_LANGUAGES]),
-                keyboardScale = (p[Keys.KEYBOARD_SCALE] ?: 1f).coerceIn(0.8f, 1.3f)
+                keyboardScale = (p[Keys.KEYBOARD_SCALE] ?: 1f).coerceIn(0.8f, 1.3f),
+                animationSpeed = p[Keys.ANIMATION_SPEED].toEnumOr(AnimationSpeed.NORMAL)
             )
         }
         .distinctUntilChanged()
@@ -265,6 +268,7 @@ class SettingsRepository(context: Context) {
     suspend fun setSpaceBarAction(v: SpaceBarAction) { store.edit { it[Keys.SPACE_ACTION] = v.name } }
     suspend fun setKeepSymbolPanel(v: Boolean) { store.edit { it[Keys.KEEP_SYMBOLS] = v } }
     suspend fun setKeyboardScale(v: Float) { store.edit { it[Keys.KEYBOARD_SCALE] = v.coerceIn(0.8f, 1.3f) } }
+    suspend fun setAnimationSpeed(v: AnimationSpeed) { store.edit { it[Keys.ANIMATION_SPEED] = v.name } }
 
     /** اللغات التي تدور عليها الكرة الأرضية؛ لا تُترك القائمة فارغة أبدًا */
     suspend fun setEnabledLanguages(v: List<KeyboardLanguage>) {
