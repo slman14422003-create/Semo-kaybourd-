@@ -25,16 +25,20 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -153,7 +157,7 @@ internal fun SettingsScreen(
         SettingsPage.SHORTCUTS -> ShortcutsPage(repo, shortcutsRepo, settings) { page = SettingsPage.TYPING }
         SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home)
         SettingsPage.TOUCH -> TouchPage(repo, settings, home)
-        SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned.size, home) { page = SettingsPage.LANGUAGES }
+        SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.LANGUAGES }
         SettingsPage.PRIVACY -> PrivacyPage(repo, clipboardRepo, settings, home)
         SettingsPage.ABOUT -> AboutPage(repo, onReplay, home)
     }
@@ -770,8 +774,14 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
 // ---------------- القاموس والكلمات ----------------
 
 @Composable
-private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learnedCount: Int, onBack: () -> Unit, onOpenLanguages: () -> Unit) {
+private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<String>, onBack: () -> Unit, onOpenLanguages: () -> Unit) {
     val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var confirmClearAll by remember { mutableStateOf(false) }
+    val filtered = remember(learned, query) {
+        if (query.isBlank()) learned else learned.filter { it.contains(query.trim()) }
+    }
+
     SubPage("القاموس والكلمات", onBack) {
         Section("القاموس") {
             Text(
@@ -786,15 +796,79 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learnedCount: In
         }
         Section("الكلمات المتعلَّمة") {
             Text(
-                "$learnedCount كلمة تعلّمتها اللوحة من كتابتك. الأكثر استعمالًا بتظهر أول بالاقتراحات، وكمان بتتعلّم أي كلمة بتجي بعد أي كلمة لتوقّع الكلمة التالية.",
+                "${learned.size} كلمة تعلّمتها اللوحة من كتابتك. الأكثر استعمالًا بتظهر أول بالاقتراحات، وكمان بتتعلّم أي كلمة بتجي بعد أي كلمة لتوقّع الكلمة التالية. لو فيه كلمة غلط، احذفها من القائمة تحت.",
                 color = SemoPalette.TextSecondary,
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(14.dp)
             )
+            if (learned.isNotEmpty()) {
+                Divider()
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("ابحث عن كلمة…", color = SemoPalette.TextHint) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = SemoPalette.TextPrimary,
+                        unfocusedTextColor = SemoPalette.TextPrimary,
+                        focusedBorderColor = SemoPalette.Accent,
+                        unfocusedBorderColor = SemoPalette.Stroke,
+                        cursorColor = SemoPalette.Accent
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+                Divider()
+                if (filtered.isEmpty()) {
+                    Text(
+                        "ما في كلمة مطابقة",
+                        color = SemoPalette.TextHint,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp)
+                    ) {
+                        items(filtered, key = { it }) { word ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(word, color = SemoPalette.TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .clickable { scope.launch { learnedRepo.removeWord(word) } },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_clip_trash),
+                                        contentDescription = "حذف",
+                                        tint = DangerRed,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Divider()
+                        }
+                    }
+                }
+            }
             Divider()
-            ActionRow("مسح الكلمات المتعلَّمة وتوقّعات الكلمة التالية", DangerRed) {
-                scope.launch { learnedRepo.clear() }
+            ActionRow(
+                if (confirmClearAll) "اضغط مرة ثانية للتأكيد" else "مسح كل الكلمات المتعلَّمة وتوقّعات الكلمة التالية",
+                DangerRed
+            ) {
+                if (!confirmClearAll) {
+                    confirmClearAll = true
+                } else {
+                    scope.launch { learnedRepo.clear() }
+                    confirmClearAll = false
+                }
             }
         }
         Hint("ما بيتعلّم شي بحقول كلمات المرور. كل شي بيتخزن على جهازك فقط.")

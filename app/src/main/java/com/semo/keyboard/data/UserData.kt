@@ -261,6 +261,22 @@ class LearnedWordsRepository(context: Context) {
         }
     }
 
+    /** يحذف كلمة واحدة فقط (مثلًا كلمة غلط تعلّمتها اللوحة بالخطأ)، مع أي زوج توقّع مرتبط فيها */
+    suspend fun removeWord(word: String) {
+        if (!appContext.isUserStorageUnlocked()) return
+        val w = clean(word)
+        if (w.isEmpty()) return
+        store.edit { p ->
+            val list = decodeWords(p[key]).toMutableList()
+            list.removeAll { it.first == w }
+            p[key] = list.joinToString(SEP) { it.first + FIELD + it.second }
+
+            val pairs = decodeRawPairs(p[pairKey]).toMutableList()
+            pairs.removeAll { it.first == w || it.second == w }
+            p[pairKey] = pairs.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+        }
+    }
+
     private fun clean(s: String): String = s.trim().replace(SEP, "").replace(FIELD, "")
 
     /** الصيغة القديمة (كلمة بلا عدّاد) تُقرأ بعدّاد 1 فلا تضيع الكلمات المتعلَّمة سابقًا */

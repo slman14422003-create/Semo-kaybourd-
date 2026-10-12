@@ -387,6 +387,13 @@ class SemoKeyboardService :
         KeyboardStatusHelper.setImeVisible(this, false)
     }
 
+    override fun onFinishInput() {
+        super.onFinishInput()
+        // لو ما صفّرنا هاد العلم بعد الخروج من حقل كلمة مرور، بيضل عالق true ويمنع التقاط
+        // النسخ من أي تطبيق ثاني لاحقًا (حتى لو مو حقل كلمة مرور إطلاقًا) إلى حين فتح حقل جديد.
+        passwordField = false
+    }
+
     /** صور الإيموجي الجاهزة تأخذ عشرات الميغابايت: نحرّرها لما يطلب النظام ذاكرة (اللوحة مخفية) */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
