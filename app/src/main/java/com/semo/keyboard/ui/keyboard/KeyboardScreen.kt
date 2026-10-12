@@ -23,6 +23,8 @@ import androidx.compose.animation.core.tween
 import com.semo.keyboard.ui.anim.LocalAnimScale
 import com.semo.keyboard.ui.anim.scaledSpring
 import com.semo.keyboard.ui.anim.scaledTween
+import com.semo.keyboard.ui.anim.IosEaseOut
+import com.semo.keyboard.ui.anim.IosPush
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -276,7 +278,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                 pageAlpha.snapTo(1f)
             } else {
                 pageAlpha.snapTo(0.55f)
-                pageAlpha.animateTo(1f, scaledTween(animScale, 120, easing = LinearOutSlowInEasing))
+                pageAlpha.animateTo(1f, scaledTween(animScale, 160, easing = IosEaseOut))
             }
         }
     }
@@ -294,11 +296,11 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                 coroutineScope {
                     launch {
                         langShift.snapTo(30f * dir)
-                        langShift.animateTo(0f, scaledSpring(animScale, dampingRatio = 0.82f, stiffness = 420f))
+                        langShift.animateTo(0f, scaledSpring(animScale, dampingRatio = 0.92f, stiffness = 380f))
                     }
                     launch {
                         pageAlpha.snapTo(0.1f)
-                        pageAlpha.animateTo(1f, scaledTween(animScale, 240, easing = LinearOutSlowInEasing))
+                        pageAlpha.animateTo(1f, scaledTween(animScale, 300, easing = IosEaseOut))
                     }
                 }
             }
@@ -350,11 +352,11 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     transitionSpec = {
                         if (targetState != KeyboardPage.LETTERS) {
                             // التأخير الصغير يخفي لحظة تركيب اللوحة الجديدة (الأثقل) خلف اللوحة القديمة فلا يظهر تقطيع
-                            (fadeIn(scaledTween(animScale, 170, delayMillis = 70, easing = LinearOutSlowInEasing)) +
-                                slideInVertically(scaledTween(animScale, 240, delayMillis = 70, easing = FastOutSlowInEasing)) { it / 24 }) togetherWith
+                            (fadeIn(scaledTween(animScale, 260, delayMillis = 40, easing = IosEaseOut)) +
+                                slideInVertically(scaledTween(animScale, 380, delayMillis = 40, easing = IosPush)) { it / 24 }) togetherWith
                                 fadeOut(scaledTween(animScale, 90)) using SizeTransform(clip = false) { _, _ -> snap() }
                         } else {
-                            fadeIn(scaledTween(animScale, 150, delayMillis = 50, easing = LinearOutSlowInEasing)) togetherWith
+                            fadeIn(scaledTween(animScale, 220, delayMillis = 30, easing = IosEaseOut)) togetherWith
                                 fadeOut(scaledTween(animScale, 90)) using
                                 SizeTransform(clip = false) { _, _ -> snap() }
                         }
@@ -659,13 +661,13 @@ private fun StripIconButton(
     val animScale = LocalAnimScale.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val press by animateFloatAsState(if (pressed) 0.84f else 1f, scaledSpring(animScale, dampingRatio = 0.6f, stiffness = 600f), label = "stripPress")
-    val rot by animateFloatAsState(rotate, scaledTween(animScale, 240), label = "stripRotate")
+    val press by animateFloatAsState(if (pressed) 0.9f else 1f, scaledSpring(animScale, dampingRatio = 0.88f, stiffness = 700f), label = "stripPress")
+    val rot by animateFloatAsState(rotate, scaledTween(animScale, 320, easing = IosPush), label = "stripRotate")
     val pop = remember { Animatable(if (popDelay >= 0) 0.4f else 1f) }
     LaunchedEffect(popDelay, animScale) {
         if (popDelay >= 0) {
             if (animScale > 0.001f) delay((popDelay * animScale).toLong())
-            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.55f, stiffness = 380f))
+            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.8f, stiffness = 380f))
         }
     }
     // منطقة اللمس أوسع من الشكل المرئي: حبّة بخلفية مدوّرة (أو أيقونة بلا خلفية للسهم)
@@ -1116,7 +1118,7 @@ private fun RowScope.KeyButton(
         if (showPreview && pressed && isLetterKey && !hideLabels && !popupOpen) {
             val pop = remember { Animatable(0.8f) }
             val previewScale = LocalAnimScale.current
-            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.55f, stiffness = 900f)) }
+            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.86f, stiffness = 900f)) }
             val headHeight = if (isTopRow) 40.dp else 56.dp
             val inset = 10.dp
             Box(
@@ -1157,7 +1159,7 @@ private fun RowScope.KeyButton(
         if (popupOpen && hasAlternates) {
             val altPop = remember { Animatable(0.85f) }
             val altScale = LocalAnimScale.current
-            LaunchedEffect(Unit) { altPop.animateTo(1f, scaledSpring(altScale, dampingRatio = 0.6f, stiffness = 700f)) }
+            LaunchedEffect(Unit) { altPop.animateTo(1f, scaledSpring(altScale, dampingRatio = 0.84f, stiffness = 700f)) }
             val chars = def.longPressChars
             val gapPx = with(popupDensity) { 6.dp.roundToPx() }
             Row(

@@ -24,5 +24,13 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Translation field replace runs on ioHandler; fieldText() read uses its own 1500ms budget on a background dispatcher.
 - Checked and left as is: clipboard capture, screenshot capture and ClipboardRepository.prepare already run off the main thread.
 
+## iOS motion pass (v3.4.0, versionCode 26)
+- Motion tokens in ui/anim/AnimScale.kt: IosEaseInOut, IosEaseOut, IosPush (cubic-bezier 0.32,0.72,0,1), damping constants. scaledTween default easing is now IosEaseInOut.
+- Springs retuned with little or no overshoot (damping 0.72 to 1.0): key preview, alternates bubble, toolbar icon pop, press scale (0.9), emoji panel, calc pulse and keys, language switch slide.
+- Page transitions in the keyboard use IosPush slides plus IosEaseOut fades; emoji category scroll 450ms IosPush.
+- Settings navigation: 480ms IosPush push/pop with 30% parallax on the page underneath.
+- ui/anim/IosControls.kt: IosIndication (gray press highlight that fades out, replaces Material ripple app-wide via SemoAppTheme) and IosSwitch (51x31 track, spring thumb with press stretch) used by SwitchRow and toolbar rows.
+- Not yet verified by a Gradle build.
+
 ## Ideas for next steps
 - Optional per-app or per-field source language override; swap button; translate selected text only.

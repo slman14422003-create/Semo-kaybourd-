@@ -12,8 +12,8 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 36          // Android 16
-        versionCode = 25
-        versionName = "3.3.1"
+        versionCode = 26
+        versionName = "3.4.0"
     }
 
     // توقيع ثابت للنسختين (release وdebug): بدونه يتولّد مفتاح debug جديد بكل بناء على GitHub فيرفض أندرويد

@@ -280,7 +280,7 @@ private fun CalcDisplay(
     LaunchedEffect(calc.evaluated) {
         if (calc.evaluated) {
             pulse.snapTo(0.9f)
-            pulse.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 500f))
+            pulse.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 500f))
         }
     }
     LaunchedEffect(calc.errorTick) {
@@ -416,7 +416,7 @@ private fun RowScope.CalcKeyView(
             calc.delete()
         }) { pressed ->
             val delBg = if (pressed) colors.keyPressed else colors.keySpecial
-            val delScale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.7f, stiffness = 800f), label = "calcDelScale")
+            val delScale by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = 0.9f, stiffness = 800f), label = "calcDelScale")
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -456,7 +456,7 @@ private fun RowScope.CalcKeyView(
             else -> if (pressed) colors.keyPressed else colors.keySpecial
         }
         val bg = target
-        val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.7f, stiffness = 800f), label = "calcScale")
+        val scale by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = 0.9f, stiffness = 800f), label = "calcScale")
         val ink = when (key.kind) {
             CKind.EQUALS -> colors.textOnAccent
             CKind.SECOND -> if (second) colors.onShiftActive else colors.text

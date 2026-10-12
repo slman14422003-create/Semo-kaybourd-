@@ -256,16 +256,9 @@ internal fun SwitchRow(
                 Text(subtitle, color = SemoPalette.TextHint, fontSize = 12.sp, lineHeight = 17.sp)
             }
         }
-        Switch(
+        com.semo.keyboard.ui.anim.IosSwitch(
             checked = checked,
             onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = SemoPalette.Ok,
-                checkedThumbColor = Color.White,
-                uncheckedTrackColor = SemoPalette.SurfaceHigh,
-                uncheckedThumbColor = SemoPalette.TextHint,
-                uncheckedBorderColor = SemoPalette.Stroke
-            )
         )
     }
 }
@@ -619,17 +612,10 @@ internal fun ToolbarItemRow(
         ToolbarArrow("▲", canUp, onUp)
         ToolbarArrow("▼", canDown, onDown)
         Spacer(Modifier.width(6.dp))
-        Switch(
+        com.semo.keyboard.ui.anim.IosSwitch(
             checked = checked,
             onCheckedChange = { onToggle() },
             enabled = canToggle,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = SemoPalette.Ok,
-                checkedThumbColor = Color.White,
-                uncheckedTrackColor = SemoPalette.SurfaceHigh,
-                uncheckedThumbColor = SemoPalette.TextHint,
-                uncheckedBorderColor = SemoPalette.Stroke
-            )
         )
     }
 }

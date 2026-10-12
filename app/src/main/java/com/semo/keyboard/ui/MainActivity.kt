@@ -167,7 +167,7 @@ private fun Root(
 
     val current = settings ?: return // بانتظار قراءة التفضيلات
     val showOnboarding = !current.onboardingCompleted || forceOnboarding
-    Crossfade(targetState = showOnboarding, animationSpec = tween(320), label = "root") { onboarding ->
+    Crossfade(targetState = showOnboarding, animationSpec = tween(380, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "root") { onboarding ->
     if (onboarding) {
         OnboardingScreen(
             step = step,

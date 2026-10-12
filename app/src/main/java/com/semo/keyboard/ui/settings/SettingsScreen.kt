@@ -161,7 +161,7 @@ internal fun SettingsScreen(
                 (initialState == SettingsPage.SHORTCUTS && targetState == SettingsPage.TYPING)
             val dir = if (back) AnimatedContentTransitionScope.SlideDirection.End
             else AnimatedContentTransitionScope.SlideDirection.Start
-            val spec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+            val spec = tween<IntOffset>(480, easing = com.semo.keyboard.ui.anim.IosPush)
             // انزلاق فقط (بدون شفافية): طبقة واحدة تتحرّك بالـ GPU فلا تقطيع. الصفحة الداخلة تعلو عند الدخول، وتحت عند الرجوع.
             val enter = if (back) slideIntoContainer(dir, spec) { (it * 0.3f).toInt() } else slideIntoContainer(dir, spec)
             val exit = if (back) slideOutOfContainer(dir, spec) else slideOutOfContainer(dir, spec) { (it * 0.3f).toInt() }

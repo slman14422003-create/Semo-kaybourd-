@@ -482,7 +482,7 @@ internal fun EmojiPanel(
     if (pressedCode >= 0) scaleCode = pressedCode
     val pressScale by animateFloatAsState(
         targetValue = if (pressedCode >= 0) 1.22f else 1f,
-        animationSpec = scaledSpring(LocalAnimScale.current, dampingRatio = 0.5f, stiffness = 520f),
+        animationSpec = scaledSpring(LocalAnimScale.current, dampingRatio = 0.76f, stiffness = 520f),
         label = "emojiPress"
     )
     // بعد انتهاء الفلنغ نثبّت على أقرب عمود بنابض ناعم (إحساس صفحات iOS بدل التوقف العشوائي)
@@ -496,7 +496,7 @@ internal fun EmojiPanel(
                 val d = target - offset
                 if (kotlin.math.abs(d) > 0.5f) {
                     var prev = 0f
-                    animate(0f, d, animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f)) { v, _ ->
+                    animate(0f, d, animationSpec = spring(dampingRatio = 1f, stiffness = 320f)) { v, _ ->
                         scrollBy(v - prev)
                         prev = v
                     }
@@ -652,15 +652,15 @@ internal fun EmojiPanel(
                     val selected = index == currentSection
                     val pill by animateColorAsState(
                         if (selected) colors.keyAccent.copy(alpha = 0.20f) else Color.Transparent,
-                        tween(220), label = "catPill"
+                        tween(260, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "catPill"
                     )
                     val tint by animateColorAsState(
                         if (selected) colors.keyAccent else colors.textMuted,
-                        tween(220), label = "catTint"
+                        tween(260, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "catTint"
                     )
                     val iconScale by animateFloatAsState(
                         if (selected) 1.1f else 1f,
-                        spring(dampingRatio = 0.55f, stiffness = 500f), label = "catScale"
+                        spring(dampingRatio = 0.8f, stiffness = 500f), label = "catScale"
                     )
                     PressBox(
                         modifier = Modifier
@@ -669,7 +669,7 @@ internal fun EmojiPanel(
                         onClick = {
                             viewModel.onSelectionTick()
                             val target = ((layout?.startCol?.get(index) ?: 0) * (layout?.cellW ?: 0f)).coerceIn(0f, maxOffset)
-                            scope.launch { scrollState.animateScrollBy(target - offset, tween(380, easing = FastOutSlowInEasing)) }
+                            scope.launch { scrollState.animateScrollBy(target - offset, tween(450, easing = com.semo.keyboard.ui.anim.IosPush)) }
                         }
                     ) { pressed ->
                         Box(
@@ -908,7 +908,7 @@ private fun ClipCard(
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         if (pressed || selected) 0.96f else 1f,
-        spring(dampingRatio = 0.62f, stiffness = 520f),
+        spring(dampingRatio = 0.86f, stiffness = 520f),
         label = "clipScale"
     )
     Box(
@@ -1012,7 +1012,7 @@ private fun BoxScope.ClipActionBubble(
     val cardShape = RoundedCornerShape(18.dp)
     val appear = remember { Animatable(0f) }
     val bubbleScale = LocalAnimScale.current
-    LaunchedEffect(Unit) { appear.animateTo(1f, scaledSpring(bubbleScale, dampingRatio = 0.7f, stiffness = 420f)) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, scaledSpring(bubbleScale, dampingRatio = 0.88f, stiffness = 420f)) }
     Box(
         modifier = Modifier
             .matchParentSize()

@@ -44,7 +44,12 @@ fun SemoAppTheme(content: @Composable () -> Unit) {
             secondaryContainer = SemoPalette.AccentSoft,
             onSecondaryContainer = SemoPalette.AccentText
         ),
-        content = content
+        content = {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.foundation.LocalIndication provides com.semo.keyboard.ui.anim.IosIndication,
+                content = content
+            )
+        }
     )
 }
 
