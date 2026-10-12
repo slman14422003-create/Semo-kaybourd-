@@ -55,8 +55,10 @@ class ClipboardRepository(context: Context) {
      */
     private suspend fun prepare(text: String): String? {
         if (!appContext.isUserStorageUnlocked()) return null
-        val raw = sanitize(text).replace(SEP, " ")
-        val body = if (raw.isClipImage()) raw else raw.trimEnd().trimStart('\n', '\r')
+        val body = withContext(Dispatchers.Default) {
+            val raw = sanitize(text).replace(SEP, " ")
+            if (raw.isClipImage()) raw else raw.trimEnd().trimStart('\n', '\r')
+        }
         if (body.isBlank()) return null
         return when {
             body.isClipImage() -> body

@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -466,7 +467,7 @@ private fun RowScope.CalcKeyView(
             second && key.label2 != null -> key.label2
             else -> key.label
         }
-        val size = when (key.kind) {
+        val labelSize = when (key.kind) {
             CKind.DIGIT -> 22.sp
             CKind.OP, CKind.EQUALS -> 22.sp
             CKind.CLEAR -> 15.sp
@@ -493,7 +494,7 @@ private fun RowScope.CalcKeyView(
             Text(
                 text = label,
                 color = ink,
-                fontSize = size,
+                fontSize = labelSize,
                 fontWeight = if (key.kind == CKind.DIGIT) FontWeight.Normal else FontWeight.Medium,
                 maxLines = 1,
                 softWrap = false,

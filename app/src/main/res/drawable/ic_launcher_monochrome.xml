@@ -3,26 +3,8 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.9"
-        android:scaleY="0.9">
-        <path
-            android:pathData="M32,34 H76 A10,10 0 0 1 86,44 V64 A10,10 0 0 1 76,74 H32 A10,10 0 0 1 22,64 V44 A10,10 0 0 1 32,34 Z"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="3"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M34,46 L34,46 M44,46 L44,46 M54,46 L54,46 M64,46 L64,46 M74,46 L74,46"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="3.4"
-            android:strokeLineCap="round" />
-        <path
-            android:pathData="M38,62 H70"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="3"
-            android:strokeLineCap="round" />
-    </group>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M33,36 H75 A9,9 0 0 1 84,45 V65 A9,9 0 0 1 75,74 H33 A9,9 0 0 1 24,65 V45 A9,9 0 0 1 33,36 Z M30.2,41 H33.8 A2.2,2.2 0 0 1 36,43.2 V46.8 A2.2,2.2 0 0 1 33.8,49 H30.2 A2.2,2.2 0 0 1 28,46.8 V43.2 A2.2,2.2 0 0 1 30.2,41 Z M41.2,41 H44.8 A2.2,2.2 0 0 1 47,43.2 V46.8 A2.2,2.2 0 0 1 44.8,49 H41.2 A2.2,2.2 0 0 1 39,46.8 V43.2 A2.2,2.2 0 0 1 41.2,41 Z M52.2,41 H55.8 A2.2,2.2 0 0 1 58,43.2 V46.8 A2.2,2.2 0 0 1 55.8,49 H52.2 A2.2,2.2 0 0 1 50,46.8 V43.2 A2.2,2.2 0 0 1 52.2,41 Z M63.2,41 H66.8 A2.2,2.2 0 0 1 69,43.2 V46.8 A2.2,2.2 0 0 1 66.8,49 H63.2 A2.2,2.2 0 0 1 61,46.8 V43.2 A2.2,2.2 0 0 1 63.2,41 Z M74.2,41 H77.8 A2.2,2.2 0 0 1 80,43.2 V46.8 A2.2,2.2 0 0 1 77.8,49 H74.2 A2.2,2.2 0 0 1 72,46.8 V43.2 A2.2,2.2 0 0 1 74.2,41 Z M35.7,52 H39.3 A2.2,2.2 0 0 1 41.5,54.2 V57.8 A2.2,2.2 0 0 1 39.3,60 H35.7 A2.2,2.2 0 0 1 33.5,57.8 V54.2 A2.2,2.2 0 0 1 35.7,52 Z M46.7,52 H50.3 A2.2,2.2 0 0 1 52.5,54.2 V57.8 A2.2,2.2 0 0 1 50.3,60 H46.7 A2.2,2.2 0 0 1 44.5,57.8 V54.2 A2.2,2.2 0 0 1 46.7,52 Z M57.7,52 H61.3 A2.2,2.2 0 0 1 63.5,54.2 V57.8 A2.2,2.2 0 0 1 61.3,60 H57.7 A2.2,2.2 0 0 1 55.5,57.8 V54.2 A2.2,2.2 0 0 1 57.7,52 Z M68.7,52 H72.3 A2.2,2.2 0 0 1 74.5,54.2 V57.8 A2.2,2.2 0 0 1 72.3,60 H68.7 A2.2,2.2 0 0 1 66.5,57.8 V54.2 A2.2,2.2 0 0 1 68.7,52 Z M39.2,63 H68.8 A3.2,3.2 0 0 1 72,66.2 V66.3 A3.2,3.2 0 0 1 68.8,69.5 H39.2 A3.2,3.2 0 0 1 36,66.3 V66.2 A3.2,3.2 0 0 1 39.2,63 Z" />
 </vector>

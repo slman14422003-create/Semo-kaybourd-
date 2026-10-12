@@ -128,6 +128,8 @@ import com.semo.keyboard.domain.model.SpaceBarAction
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.clipDisplayText
+import com.semo.keyboard.domain.model.clipLongLength
+import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.ToolbarItem
 import com.semo.keyboard.domain.model.KeyDefinition
@@ -756,7 +758,12 @@ private fun RowScope.SuggestionsRow(
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = if (latestClip.isClipImage()) tr(state.language.rtl, "صورة", "Image")
-                    else latestClip.clipDisplayText().replace('\n', ' ').trim(),
+                    else latestClip.clipDisplayText().replace('\n', ' ').trim().let { t ->
+                        if (latestClip.isClipLong()) {
+                            val n = latestClip.clipLongLength()
+                            t + "  ·  " + (if (n >= 1000) "${n / 1000}K" else "$n")
+                        } else t
+                    },
                     color = colors.suggestion,
                     fontSize = 15.sp,
                     maxLines = 1,

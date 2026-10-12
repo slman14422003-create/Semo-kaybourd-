@@ -72,6 +72,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 
 /** أقصى عدد أحرف بدفعة لصق واحدة (النص الطويل يُلصق على دفعات كي لا يتجاوز حدّ حجم رسالة Binder) */
 private const val COMMIT_CHUNK = 4_000
@@ -279,6 +280,7 @@ class SemoKeyboardService :
     /** حقل كلمة مرور: لا نسجّل الحافظة ولا نتعلّم كلمات */
     private var passwordField = false
     private var lastCapturedClip: String? = null
+    private var lastClipTs = 0L
 
     private var lastShotId = -1L
 
@@ -407,15 +409,22 @@ class SemoKeyboardService :
         if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
         if (!force && clipJob?.isActive == true) return
         clipJob = serviceScope.launch {
-            // محاولة فورية أولًا (أغلب الحالات تنجح من أول مرة)، ثم إعادة محاولة متباعدة
-            // قليلًا فقط لو الحافظة لم تكن جاهزة بعد (رابط تطبيقات مثل X/Twitter أحيانًا يتأخر).
+            // استطلاع دوري: نسأل عن بصمة زمن الحافظة فقط (خفيف) ولا نسحب النص الكامل عبر Binder كل مرة
+            val ts = withContext(Dispatchers.IO) {
+                runCatching {
+                    (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClipDescription?.timestamp
+                }.getOrNull() ?: 0L
+            }
+            if (!force && ts != 0L && ts == lastClipTs) return@launch
+            // عند إشعار النسخ ننتظر لحظة قصيرة كي ينتهي النظام من رسم رسالة «تم النسخ» دون أن نزاحمه
             var snap: ClipSnap? = null
-            val delays = longArrayOf(0L, 60L, 150L, 300L)
+            val delays = if (force) longArrayOf(90L, 80L, 150L, 300L) else longArrayOf(0L, 60L, 150L, 300L)
             for (attempt in delays.indices) {
                 if (delays[attempt] > 0L) delay(delays[attempt])
                 snap = withContext(Dispatchers.IO) { runCatching { readClip() }.getOrNull() }
                 if (snap != null && (snap.text != null || snap.imageMime != null)) break
             }
+            if (ts != 0L && snap != null) lastClipTs = ts
             val s = snap ?: return@launch
             if (s.imageMime != null && s.uri != null) {
                 val id = s.uri.toString()
@@ -427,7 +436,7 @@ class SemoKeyboardService :
                 return@launch
             }
             val text = s.text ?: return@launch
-            val key = clipKey(text)
+            val key = withContext(Dispatchers.Default) { clipKey(text) }
             if (!force && key == lastCapturedClip) return@launch
             lastCapturedClip = key
             var stored = clipboardRepository.add(text)
@@ -636,24 +645,29 @@ class SemoKeyboardService :
                 runCatching { ic.commitText(text, 1) }
                 return
             }
-            var failed = false
-            // النص الطويل (كود مثلًا): الاتصال بالتطبيق الهدف عبر Binder وحجم الرسالة الواحدة محدود (~1MB)،
-            // فنلصقه على دفعات داخل عملية تحرير واحدة (تراجع واحد) بدل رسالة ضخمة تفشل
-            runCatching {
-                ic.beginBatchEdit()
-                var start = 0
-                while (start < text.length) {
-                    var end = minOf(start + COMMIT_CHUNK, text.length)
-                    // لا نقطع زوج surrogate (إيموجي) بين دفعتين
-                    if (end < text.length && text[end - 1].isHighSurrogate()) end--
-                    if (!ic.commitText(text.substring(start, end), 1)) {
-                        failed = true
-                        break
+            // النص الطويل (سجلات، أكواد، مقالات): الاتصال بالتطبيق الهدف عبر Binder وحجم الرسالة الواحدة محدود (~1MB)،
+            // فنلصقه على دفعات داخل عملية تحرير واحدة (تراجع واحد) مع تسليم الخيط للواجهة بين كل دفعة كي لا تتجمّد
+            serviceScope.launch {
+                var failed = false
+                var stale = false
+                runCatching {
+                    ic.beginBatchEdit()
+                    var start = 0
+                    while (start < text.length) {
+                        if (currentInputConnection !== ic) { stale = true; break }
+                        var end = minOf(start + COMMIT_CHUNK, text.length)
+                        // لا نقطع زوج surrogate (إيموجي) بين دفعتين
+                        if (end < text.length && text[end - 1].isHighSurrogate()) end--
+                        if (!ic.commitText(text.substring(start, end), 1)) {
+                            failed = true
+                            break
+                        }
+                        start = end
+                        yield()
                     }
-                    start = end
+                    ic.endBatchEdit()
+                    if (failed && !stale) pasteViaClipboard(ic, text)
                 }
-                ic.endBatchEdit()
-                if (failed) pasteViaClipboard(ic, text)
             }
         }
 
@@ -803,6 +817,7 @@ class SemoKeyboardService :
         runCatching {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             lastCapturedClip = clipKey(text)
+            lastClipTs = 0L
             cm.setPrimaryClip(ClipData.newPlainText("code", text))
             ic.performContextMenuAction(android.R.id.paste)
         }

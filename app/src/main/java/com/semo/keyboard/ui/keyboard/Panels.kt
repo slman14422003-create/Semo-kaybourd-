@@ -696,7 +696,7 @@ internal fun ClipboardPanel(
                     .background(colors.divider)
             )
             Text(
-                text = tr(arabic, "الحافظة", "Clipboard"),
+                text = tr(arabic, "الحافظة", "Clipboard") + if (state.clipItems.isNotEmpty()) "  ·  ${state.clipItems.size}" else "",
                 color = colors.text,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
