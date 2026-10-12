@@ -37,6 +37,8 @@ import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ShiftState
 import com.semo.keyboard.domain.model.TextShortcut
+import com.semo.keyboard.domain.model.TranslateUi
+import com.semo.keyboard.domain.logic.TranslateEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -89,6 +91,10 @@ class KeyboardViewModel(
             if (editing()) editSet(editText() + "\n") else hostBridge.performEnter()
         }
 
+        override fun replaceBeforeCursor(deleteCount: Int, text: String) {
+            if (editing()) editSet(editText().dropLast(deleteCount) + text) else hostBridge.replaceBeforeCursor(deleteCount, text)
+        }
+
         override fun commitImage(fileName: String, mime: String): Boolean =
             if (editing()) false else hostBridge.commitImage(fileName, mime)
 
@@ -110,6 +116,11 @@ class KeyboardViewModel(
             if (!editing()) hostBridge.performEdit(action)
         }
     }
+
+    @Volatile private var lastBefore = ""
+
+    private fun readBefore(length: Int): String =
+        bridge.textBeforeCursorWithin(length, EDIT_READ_MS, false) ?: lastBefore.takeLast(length)
 
     private fun editing(): Boolean = transient.value.clipEdit != null
     private fun editText(): String = transient.value.clipEdit?.text ?: ""
@@ -136,7 +147,8 @@ class KeyboardViewModel(
         val swipeAlternates: List<String> = emptyList(),
         /** نص نُسخ للتو (شريحة اللصق السريع بشريط الاقتراحات) */
         val freshClip: String? = null,
-        val clipEdit: ClipEdit? = null
+        val clipEdit: ClipEdit? = null,
+        val translate: TranslateUi? = null
     )
 
     /** تصحيح تلقائي حصل للتو: الرجوع (Backspace) مباشرة بعده يعيد الكلمة الأصلية */
@@ -227,7 +239,10 @@ class KeyboardViewModel(
                 keyboardScale = s.keyboardScale,
                 animationSpeed = s.animationSpeed,
                 freshClip = t.freshClip,
-                clipEdit = t.clipEdit
+                clipEdit = t.clipEdit,
+                translate = t.translate,
+                translateTarget = s.translateTarget,
+                translateRecents = s.translateRecents
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, KeyboardUiState())
 
@@ -256,6 +271,7 @@ class KeyboardViewModel(
                 swipeAlternates = emptyList(),
                 toolbarOpen = false,
                 clipEdit = null,
+                translate = null,
                 suggestionsAllowed = suggestionsAllowed
             )
         }
@@ -274,6 +290,7 @@ class KeyboardViewModel(
             transient.update { if (it.shift == ShiftState.OFF) it.copy(shift = ShiftState.ON) else it }
         }
         refreshSuggestions()
+        if (transient.value.translate != null) refreshTranslate(false)
     }
 
     // ---------- أحداث من الواجهة ----------
@@ -401,7 +418,7 @@ class KeyboardViewModel(
      */
     private fun handleBackspace(pendingUndo: Correction?, swipeWord: String?) {
         if (pendingUndo != null &&
-            bridge.textBeforeCursor(pendingUndo.fixed.length + 1) == pendingUndo.fixed + " "
+            readBefore(pendingUndo.fixed.length + 1) == pendingUndo.fixed + " "
         ) {
             bridge.deleteSurrounding(pendingUndo.fixed.length + 1)
             bridge.commitText(pendingUndo.original)
@@ -409,7 +426,7 @@ class KeyboardViewModel(
             viewModelScope.launch { learnedWordsRepository.ignoreCorrection(pendingUndo.original) }
             return
         }
-        if (swipeWord != null && bridge.textBeforeCursor(swipeWord.length + 1) == "$swipeWord ") {
+        if (swipeWord != null && readBefore(swipeWord.length + 1) == "$swipeWord ") {
             bridge.deleteSurrounding(swipeWord.length + 1)
             return
         }
@@ -438,8 +455,7 @@ class KeyboardViewModel(
         }
         val result = fixed ?: return null
         if (result == word) return null
-        bridge.deleteSurrounding(word.length)
-        bridge.commitText(result)
+        bridge.replaceBeforeCursor(word.length, result)
         return Correction(word, result)
     }
 
@@ -475,7 +491,7 @@ class KeyboardViewModel(
         val word = styledList.first()
 
         // مسافة قبل الكلمة لو التي قبلها حرف أو رقم
-        val last = bridge.textBeforeCursor(1).lastOrNull()
+        val last = readBefore(1).lastOrNull()
         if (last != null && last.isLetterOrDigit()) bridge.commitText(" ")
         bridge.commitText("$word ")
         consumeOneShotShift()
@@ -511,16 +527,15 @@ class KeyboardViewModel(
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
         undo = null
         val swipeWord = transient.value.swipeWord
-        if (swipeWord != null && bridge.textBeforeCursor(swipeWord.length + 1) == "$swipeWord ") {
-            bridge.deleteSurrounding(swipeWord.length + 1)
+        if (swipeWord != null && readBefore(swipeWord.length + 1) == "$swipeWord ") {
             clearSwipe()
+            bridge.replaceBeforeCursor(swipeWord.length + 1, "$suggestion ")
         } else {
-            val before = bridge.textBeforeCursor(40)
+            val before = readBefore(40)
             val word = SuggestionEngine.currentWord(before)
-            if (word.isNotEmpty()) bridge.deleteSurrounding(word.length)
             learnPair(before, word, suggestion.substringBefore(' '))
+            bridge.replaceBeforeCursor(word.length, "$suggestion ")
         }
-        bridge.commitText("$suggestion ")
         // تتمة من عدة كلمات: نتعلّم كل كلمة وكل زوج متتالٍ فيها (لا نحفظ العبارة كلها ككلمة واحدة)
         val parts = suggestion.split(' ').filter { it.isNotEmpty() }
         parts.forEach { learnWord(it) }
@@ -540,7 +555,7 @@ class KeyboardViewModel(
         val state = uiState.value
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
         undo = null
-        val before = bridge.textBeforeCursor(3).trimEnd(' ')
+        val before = readBefore(3).trimEnd(' ')
         bridge.commitText(if (before.endsWith("=")) result.value else "=" + result.value)
         refreshSuggestions()
     }
@@ -585,6 +600,92 @@ class KeyboardViewModel(
     }
 
     // ---------- شريط الأدوات والصفحات ----------
+
+    // ---------- translation ----------
+
+    private var translateJob: Job? = null
+    private var translateKey = ""
+
+    fun openTranslate() {
+        transient.update { it.copy(translate = TranslateUi(), toolbarOpen = false, page = KeyboardPage.LETTERS, alternates = emptyList()) }
+        translateKey = ""
+        refreshTranslate(true)
+    }
+
+    fun closeTranslate() {
+        translateJob?.cancel()
+        translateKey = ""
+        transient.update {
+            it.copy(translate = null, page = if (it.page == KeyboardPage.TRANSLATE) KeyboardPage.LETTERS else it.page)
+        }
+    }
+
+    fun toggleTranslatePicker() {
+        transient.update {
+            it.copy(page = if (it.page == KeyboardPage.TRANSLATE) KeyboardPage.LETTERS else KeyboardPage.TRANSLATE, alternates = emptyList())
+        }
+    }
+
+    fun setTranslateTarget(code: String) {
+        viewModelScope.launch {
+            settingsRepository.setTranslateTarget(code)
+            transient.update { if (it.page == KeyboardPage.TRANSLATE) it.copy(page = KeyboardPage.LETTERS) else it }
+            translateKey = ""
+            refreshTranslate(true)
+        }
+    }
+
+    fun retryTranslate() {
+        translateKey = ""
+        refreshTranslate(true)
+    }
+
+    fun applyTranslation() {
+        val ui = transient.value.translate ?: return
+        if (ui.result.isEmpty() || ui.loading) return
+        val state = uiState.value
+        hostBridge.keyFeedback(state.soundEnabled, state.hapticEnabled, KeyFeedback.MODIFIER, state.soundVolume)
+        hostBridge.replaceFieldText(ui.result)
+        closeTranslate()
+        refreshSuggestions()
+    }
+
+    private fun refreshTranslate(immediate: Boolean) {
+        translateJob?.cancel()
+        translateJob = viewModelScope.launch {
+            if (!immediate) delay(350)
+            if (transient.value.translate == null) return@launch
+            val target = uiState.value.translateTarget
+            if (!transient.value.suggestionsAllowed) {
+                translateKey = ""
+                transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi()) } ?: st }
+                return@launch
+            }
+            val text = withContext(suggestDispatcher) { hostBridge.fieldText() }.trim()
+            val key = "$target|$text"
+            if (key == translateKey && !transient.value.translate!!.error) return@launch
+            if (text.isEmpty()) {
+                translateKey = key
+                transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi()) } ?: st }
+                return@launch
+            }
+            val cached = TranslateEngine.cached(text, target)
+            if (cached != null) {
+                translateKey = key
+                transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi(text, cached.text, cached.detected)) } ?: st }
+                return@launch
+            }
+            transient.update { st -> st.translate?.let { st.copy(translate = it.copy(source = text, loading = true, error = false)) } ?: st }
+            val result = withContext(Dispatchers.IO) { TranslateEngine.translate(text, target) }
+            if (transient.value.translate == null) return@launch
+            if (result == null) {
+                transient.update { st -> st.translate?.let { st.copy(translate = it.copy(loading = false, error = true)) } ?: st }
+            } else {
+                translateKey = key
+                transient.update { st -> st.copy(translate = TranslateUi(text, result.text, result.detected)) }
+            }
+        }
+    }
 
     fun toggleToolbar() {
         transient.update { it.copy(toolbarOpen = !it.toolbarOpen) }
@@ -851,6 +952,7 @@ class KeyboardViewModel(
 
     private fun computeSuggestions(state: KeyboardUiState, t: LocalState): SuggestionResult? {
         val before = bridge.textBeforeCursorWithin(80, SUGGEST_READ_MS, false) ?: return null
+        lastBefore = before
 
         // ناتج العملية الحسابية له الأولوية بالشريط
         if (state.mathResults) {
@@ -955,6 +1057,7 @@ class KeyboardViewModel(
         const val NON_WORD_END_SYMBOLS = "+×÷=*%^<>~|#"
         const val MAX_RECENT_EMOJIS = 32
         const val HOT_READ_MS = 80L
+        const val EDIT_READ_MS = 120L
         const val SUGGEST_READ_MS = 400L
         const val FRESH_CLIP_MS = 180_000L
         const val CLIP_EDIT_MAX = 200_000

@@ -77,7 +77,9 @@ import kotlinx.coroutines.yield
 /** أقصى عدد أحرف بدفعة لصق واحدة (النص الطويل يُلصق على دفعات كي لا يتجاوز حدّ حجم رسالة Binder) */
 private const val COMMIT_CHUNK = 4_000
 private const val SLOW_BACKOFF_MS = 600L
-private const val EXPLICIT_READ_MS = 1200L
+private const val EXPLICIT_READ_MS = 250L
+private const val FIELD_READ_MS = 1500L
+private const val FIELD_READ_MAX = 4500
 private const val START_READ_MS = 100L
 private const val DELETE_FEEDBACK_GAP_MS = 35L
 private const val POLL_IDLE_MS = 1200L
@@ -769,6 +771,42 @@ class SemoKeyboardService :
 
         override fun textBeforeCursor(length: Int): String =
             textBeforeCursorWithin(length, EXPLICIT_READ_MS, false).orEmpty()
+
+        override fun replaceBeforeCursor(deleteCount: Int, text: String) {
+            lastTypeAt = SystemClock.uptimeMillis()
+            val ic = currentInputConnection ?: return
+            runCatching {
+                ic.beginBatchEdit()
+                if (deleteCount > 0) ic.deleteSurroundingText(deleteCount, 0)
+                ic.commitText(text, 1)
+                ic.endBatchEdit()
+            }
+        }
+
+        override fun fieldText(): String {
+            val ic = currentInputConnection ?: return ""
+            return readWithin(FIELD_READ_MS, false) {
+                val before = ic.getTextBeforeCursor(FIELD_READ_MAX, 0)?.toString().orEmpty()
+                val after = ic.getTextAfterCursor(FIELD_READ_MAX, 0)?.toString().orEmpty()
+                before + after
+            }.orEmpty()
+        }
+
+        override fun replaceFieldText(text: String) {
+            val ic = currentInputConnection ?: return
+            lastTypeAt = SystemClock.uptimeMillis()
+            ioHandler.post {
+                runCatching {
+                    ic.beginBatchEdit()
+                    ic.finishComposingText()
+                    val before = ic.getTextBeforeCursor(FIELD_READ_MAX, 0)?.length ?: 0
+                    val after = ic.getTextAfterCursor(FIELD_READ_MAX, 0)?.length ?: 0
+                    ic.deleteSurroundingText(before, after)
+                    ic.commitText(text, 1)
+                    ic.endBatchEdit()
+                }
+            }
+        }
 
         override fun textBeforeCursorWithin(length: Int, timeoutMs: Long, skipIfSlow: Boolean): String? {
             val ic = currentInputConnection ?: return ""

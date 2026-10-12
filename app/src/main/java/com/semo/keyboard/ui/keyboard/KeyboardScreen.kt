@@ -331,15 +331,22 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     .padding(horizontal = metrics.sidePadding)
             ) {
                 if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
-                    Crossfade(targetState = state.clipEdit != null, animationSpec = scaledTween(animScale, 170), label = "strip") { editing ->
-                        if (editing) ClipEditBar(state, colors, metrics.stripHeight, viewModel)
-                        else TopStrip(state, colors, metrics, viewModel)
+                    Crossfade(
+                        targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else 0,
+                        animationSpec = scaledTween(animScale, 170),
+                        label = "strip"
+                    ) { mode ->
+                        when (mode) {
+                            1 -> ClipEditBar(state, colors, metrics.stripHeight, viewModel)
+                            2 -> TranslateBar(state, colors, metrics.stripHeight, viewModel)
+                            else -> TopStrip(state, colors, metrics, viewModel)
+                        }
                     }
                 }
 
                 AnimatedContent(
                     targetState = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
-                        state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC) state.page else KeyboardPage.LETTERS,
+                        state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE) state.page else KeyboardPage.LETTERS,
                     transitionSpec = {
                         if (targetState != KeyboardPage.LETTERS) {
                             // التأخير الصغير يخفي لحظة تركيب اللوحة الجديدة (الأثقل) خلف اللوحة القديمة فلا يظهر تقطيع
@@ -362,6 +369,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                         bottomReserve, viewModel
                     )
                     KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.TRANSLATE -> TranslatePanel(state, colors, panelHeight - bottomReserve, viewModel)
                     KeyboardPage.CALC -> CalcPanel(
                         state, colors,
                         // نفس ارتفاع صفحة الحروف (الشريط + المفاتيح) كي لا يرتفع الكيبورد عند فتح الحاسبة
@@ -405,7 +413,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                 }
                 }
                 if (bottomReserve > 0.dp &&
-                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC)
+                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE)
                 ) {
                     Spacer(Modifier.height(bottomReserve))
                 }
@@ -626,6 +634,7 @@ private fun TopStrip(
                         ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors, popDelay = index * 28) { viewModel.openPage(KeyboardPage.EDIT) }
                         ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = index * 28) { viewModel.cycleOneHand() }
                         ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28) { viewModel.openSettings() }
+                        ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28) { viewModel.openTranslate() }
                         }
                     }
                 }

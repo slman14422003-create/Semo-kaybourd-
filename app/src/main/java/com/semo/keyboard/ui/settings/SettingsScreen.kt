@@ -223,6 +223,7 @@ private fun toolbarItemInfo(item: ToolbarItem): Triple<String, Int, androidx.com
     ToolbarItem.CURSOR -> Triple("التحرير وتحريك المؤشر", R.drawable.ic_tool_cursor, IconTeal)
     ToolbarItem.ONEHAND -> Triple("وضع اليد الواحدة", R.drawable.ic_tool_onehand, IconGray)
     ToolbarItem.SETTINGS -> Triple("الإعدادات", R.drawable.ic_tool_settings, IconGray)
+    ToolbarItem.TRANSLATE -> Triple("Translate", R.drawable.ic_tool_translate, IconBlue)
 }
 
 private fun holdLabel(d: HoldDelay) = when (d) {
@@ -637,7 +638,9 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             val order = enabled + ToolbarItem.values().filter { it !in enabled }
             order.forEachIndexed { index, item ->
                 val on = item in enabled
-                val info = toolbarItemInfo(item)
+                val info = toolbarItemInfo(item).let {
+                    if (item == ToolbarItem.TRANSLATE) it.copy(first = androidx.compose.ui.res.stringResource(R.string.translate_title)) else it
+                }
                 if (index > 0) Divider()
                 ToolbarItemRow(
                     title = info.first,

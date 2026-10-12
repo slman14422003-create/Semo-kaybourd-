@@ -21,6 +21,9 @@ interface InputBridge {
     /** يلصق صورة من سجل الحافظة (commitContent). يرجع false لو الحقل لا يقبل الصور (فتُنسخ للحافظة بدلها) */
     fun commitImage(fileName: String, mime: String): Boolean
     fun textBeforeCursor(length: Int): String
+    fun replaceBeforeCursor(deleteCount: Int, text: String)
+    fun fieldText(): String
+    fun replaceFieldText(text: String)
     fun textBeforeCursorWithin(length: Int, timeoutMs: Long, skipIfSlow: Boolean): String?
     fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback = KeyFeedback.STANDARD, volume: Float = 1f)
     /** تحريك المؤشر: قيمة موجبة = يمين، سالبة = يسار */

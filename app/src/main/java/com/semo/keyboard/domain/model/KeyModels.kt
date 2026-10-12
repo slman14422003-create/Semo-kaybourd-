@@ -56,7 +56,7 @@ data class KeyDefinition(
 }
 
 enum class ShiftState { OFF, ON, LOCKED }
-enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, NUMPAD, EMOJI, CLIPBOARD, EDIT, CALC }
+enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, NUMPAD, EMOJI, CLIPBOARD, EDIT, CALC, TRANSLATE }
 /** نظام الكتابة: يحدّد الحروف الكبيرة (Shift) واتجاه النص */
 enum class Script { LATIN, ARABIC, CYRILLIC }
 
@@ -124,7 +124,7 @@ enum class KeySpacing(val horizontal: Float, val vertical: Float) {
 }
 
 /** عناصر شريط الأدوات: يختار المستخدم أيها يظهر وبأي ترتيب */
-enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS }
+enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS, TRANSLATE }
 
 /** ماذا يفتح مفتاح «123» بصفحة الحروف: لوحة أرقام 3×4 أو صفحة الرموز القديمة */
 enum class NumKeyTarget { NUMPAD, SYMBOLS }
@@ -272,7 +272,9 @@ data class SemoSettings(
     /** حجم اللوحة كله (ارتفاع المفاتيح والخطوط): 0.8 إلى 1.3، والافتراضي 1.0 */
     val keyboardScale: Float = 1f,
     /** سرعة كل حركات اللوحة (تبديل الصفحات، اللغة، ضغط المفاتيح)؛ OFF يلغيها تمامًا */
-    val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL
+    val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
+    val translateTarget: String = "en",
+    val translateRecents: List<String> = emptyList()
 )
 
 @Immutable
@@ -336,5 +338,17 @@ data class KeyboardUiState(
     val recentEmojis: List<String> = emptyList(),
     val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
     val keyboardScale: Float = 1f,
-    val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL
+    val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
+    val translate: TranslateUi? = null,
+    val translateTarget: String = "en",
+    val translateRecents: List<String> = emptyList()
+)
+
+
+data class TranslateUi(
+    val source: String = "",
+    val result: String = "",
+    val detected: String = "",
+    val loading: Boolean = false,
+    val error: Boolean = false
 )

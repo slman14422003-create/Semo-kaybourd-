@@ -229,7 +229,7 @@ object KeyboardLayoutProvider {
         KeyboardPage.SYMBOLS_1 -> symbolRows(state, firstPage = true)
         KeyboardPage.SYMBOLS_2 -> symbolRows(state, firstPage = false)
         KeyboardPage.NUMPAD -> numpadRows(state)
-        KeyboardPage.EMOJI, KeyboardPage.CLIPBOARD, KeyboardPage.EDIT, KeyboardPage.CALC -> emptyList()
+        KeyboardPage.EMOJI, KeyboardPage.CLIPBOARD, KeyboardPage.EDIT, KeyboardPage.CALC, KeyboardPage.TRANSLATE -> emptyList()
     }
 
     /**

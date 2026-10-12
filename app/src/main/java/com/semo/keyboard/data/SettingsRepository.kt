@@ -26,6 +26,7 @@ import com.semo.keyboard.domain.model.KeyboardStyle
 import com.semo.keyboard.domain.model.KeySpacing
 import com.semo.keyboard.domain.model.NumKeyTarget
 import com.semo.keyboard.domain.model.ToolbarItem
+import com.semo.keyboard.domain.logic.TranslateLanguages
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
@@ -114,12 +115,13 @@ private class LegacySettingsMigration(private val app: Context) : DataMigration<
 }
 
 /** عناصر شريط الأدوات المحفوظة (CSV بالترتيب)؛ لو لا شيء محفوظ أو القائمة فارغة نرجع للكل */
-private fun decodeToolbar(raw: String?): List<ToolbarItem> {
+private fun decodeToolbar(raw: String?, translateSeen: Boolean): List<ToolbarItem> {
     if (raw == null) return ToolbarItem.values().toList()
-    val list = raw.split(',').mapNotNull { n -> runCatching { enumValueOf<ToolbarItem>(n) }.getOrNull() }.distinct()
+    var list = raw.split(',').mapNotNull { n -> runCatching { enumValueOf<ToolbarItem>(n) }.getOrNull() }.distinct()
     if (list.isEmpty()) return ToolbarItem.values().toList()
+    if (!translateSeen && ToolbarItem.TRANSLATE !in list) list = list + ToolbarItem.TRANSLATE
     // عنصر الحاسبة الجديد: يظهر تلقائيًا لمن لم يحذف أي عنصر من شريطه
-    val others = ToolbarItem.values().filter { it != ToolbarItem.CALC }
+    val others = ToolbarItem.values().filter { it != ToolbarItem.CALC && it != ToolbarItem.TRANSLATE }
     if (ToolbarItem.CALC !in list && others.all { it in list }) return list + ToolbarItem.CALC
     return list
 }
@@ -183,6 +185,9 @@ class SettingsRepository(context: Context) {
         val ENABLED_LANGUAGES = stringPreferencesKey("enabled_languages")
         val KEYBOARD_SCALE = floatPreferencesKey("keyboard_scale")
         val ANIMATION_SPEED = stringPreferencesKey("animation_speed")
+        val TRANSLATE_TARGET = stringPreferencesKey("translate_target")
+        val TRANSLATE_RECENTS = stringPreferencesKey("translate_recents")
+        val TOOLBAR_TRANSLATE_SEEN = booleanPreferencesKey("toolbar_translate_seen")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -202,7 +207,7 @@ class SettingsRepository(context: Context) {
                 size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
                 keySpacing = p[Keys.KEY_SPACING].toEnumOr(KeySpacing.NORMAL),
                 numKeyTarget = p[Keys.NUM_KEY_TARGET].toEnumOr(NumKeyTarget.SYMBOLS),
-                toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS]),
+                toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS], p[Keys.TOOLBAR_TRANSLATE_SEEN] ?: false),
                 oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
                 suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,
                 keyPreview = p[Keys.KEY_PREVIEW] ?: true,
@@ -227,7 +232,9 @@ class SettingsRepository(context: Context) {
                 recentEmojis = p[Keys.RECENT_EMOJIS].orEmpty().split(' ').filter { it.isNotEmpty() },
                 enabledLanguages = decodeLanguages(p[Keys.ENABLED_LANGUAGES]),
                 keyboardScale = (p[Keys.KEYBOARD_SCALE] ?: 1f).coerceIn(0.8f, 1.3f),
-                animationSpeed = p[Keys.ANIMATION_SPEED].toEnumOr(AnimationSpeed.NORMAL)
+                animationSpeed = p[Keys.ANIMATION_SPEED].toEnumOr(AnimationSpeed.NORMAL),
+                translateTarget = p[Keys.TRANSLATE_TARGET] ?: TranslateLanguages.defaultTarget(),
+                translateRecents = p[Keys.TRANSLATE_RECENTS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
             )
         }
         .distinctUntilChanged()
@@ -244,7 +251,19 @@ class SettingsRepository(context: Context) {
     suspend fun setSize(v: KeyboardSize) { store.edit { it[Keys.SIZE] = v.name } }
     suspend fun setKeySpacing(v: KeySpacing) { store.edit { it[Keys.KEY_SPACING] = v.name } }
     suspend fun setNumKeyTarget(v: NumKeyTarget) { store.edit { it[Keys.NUM_KEY_TARGET] = v.name } }
-    suspend fun setToolbarItems(v: List<ToolbarItem>) { store.edit { it[Keys.TOOLBAR_ITEMS] = v.joinToString(",") { item -> item.name } } }
+    suspend fun setToolbarItems(v: List<ToolbarItem>) {
+        store.edit {
+            it[Keys.TOOLBAR_ITEMS] = v.joinToString(",") { item -> item.name }
+            it[Keys.TOOLBAR_TRANSLATE_SEEN] = true
+        }
+    }
+    suspend fun setTranslateTarget(code: String) {
+        store.edit {
+            it[Keys.TRANSLATE_TARGET] = code
+            val old = it[Keys.TRANSLATE_RECENTS]?.split(',')?.filter { c -> c.isNotBlank() && c != code } ?: emptyList()
+            it[Keys.TRANSLATE_RECENTS] = (listOf(code) + old).take(6).joinToString(",")
+        }
+    }
     suspend fun setOneHand(v: OneHandMode) { store.edit { it[Keys.ONE_HAND] = v.name } }
     suspend fun setSuggestionsEnabled(v: Boolean) { store.edit { it[Keys.SUGGESTIONS] = v } }
     suspend fun setKeyPreview(v: Boolean) { store.edit { it[Keys.KEY_PREVIEW] = v } }
