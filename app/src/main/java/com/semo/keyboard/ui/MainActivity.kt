@@ -1,5 +1,7 @@
 package com.semo.keyboard.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
@@ -152,15 +154,21 @@ private fun Root(
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
-                isEnabled = KeyboardStatusHelper.isKeyboardEnabled(context)
-                isSelected = KeyboardStatusHelper.isKeyboardSelected(context)
-                delay(600)
+                // استعلام مدير الإدخال (Binder) بخيط خلفي كي لا يقطّع الأنيميشن، ونكتب الحالة فقط لو تغيّرت
+                val (en, sel) = withContext(Dispatchers.IO) {
+                    KeyboardStatusHelper.isKeyboardEnabled(context) to KeyboardStatusHelper.isKeyboardSelected(context)
+                }
+                if (en != isEnabled) isEnabled = en
+                if (sel != isSelected) isSelected = sel
+                delay(900)
             }
         }
     }
 
     val current = settings ?: return // بانتظار قراءة التفضيلات
-    if (!current.onboardingCompleted || forceOnboarding) {
+    val showOnboarding = !current.onboardingCompleted || forceOnboarding
+    Crossfade(targetState = showOnboarding, animationSpec = tween(320), label = "root") { onboarding ->
+    if (onboarding) {
         OnboardingScreen(
             step = step,
             status = OnboardingKeyboardStatus(isEnabled, isSelected),
@@ -187,6 +195,7 @@ private fun Root(
             onPick = { openKeyboardPicker(context) },
             onReplay = { step = OnboardingStep.WELCOME; forceOnboarding = true }
         )
+    }
     }
 }
 

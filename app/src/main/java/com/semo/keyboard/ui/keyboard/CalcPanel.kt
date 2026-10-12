@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
@@ -184,6 +185,10 @@ internal fun CalcPanel(
     state: KeyboardUiState,
     colors: SemoKeyboardColors,
     height: Dp,
+    keyShape: Shape,
+    keyRadius: Dp,
+    hGap: Dp,
+    vGap: Dp,
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language.rtl
@@ -193,22 +198,22 @@ internal fun CalcPanel(
             .fillMaxWidth()
             .height(height)
     ) {
-        CalcDisplay(calc, state.arabicDigits, arabic, colors, viewModel)
-        Spacer(Modifier.height(6.dp))
+        CalcDisplay(calc, state.arabicDigits, arabic, colors, keyRadius, viewModel)
+        Spacer(Modifier.height(vGap))
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            verticalArrangement = Arrangement.spacedBy(vGap)
         ) {
             CalcRows.forEach { row ->
                 Row(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(hGap)
                 ) {
-                    row.forEach { key -> CalcKeyView(key, calc, state.arabicDigits, colors, viewModel) }
+                    row.forEach { key -> CalcKeyView(key, calc, state.arabicDigits, colors, keyShape, keyRadius, viewModel) }
                 }
             }
         }
@@ -265,6 +270,7 @@ private fun CalcDisplay(
     arabicDigits: Boolean,
     arabic: Boolean,
     colors: SemoKeyboardColors,
+    keyRadius: Dp,
     viewModel: KeyboardViewModel
 ) {
     val live = calc.live()
@@ -286,30 +292,26 @@ private fun CalcDisplay(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(76.dp)
-            .background(
-                Brush.verticalGradient(listOf(colors.chip, lerp(colors.chip, colors.panel, 0.4f))),
-                RoundedCornerShape(16.dp)
-            )
-            .border(1.dp, colors.divider, RoundedCornerShape(16.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .height(56.dp)
+            .background(colors.chip, RoundedCornerShape(keyRadius + 2.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            PressBox(modifier = Modifier.height(22.dp), onClick = {
+            PressBox(modifier = Modifier.height(18.dp), onClick = {
                 viewModel.onSelectionTick()
                 calc.degrees = !calc.degrees
             }) { _ ->
                 Box(
                     modifier = Modifier
-                        .background(colors.keySpecial, RoundedCornerShape(7.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                        .background(colors.keySpecial, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 1.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = if (calc.degrees) "DEG" else "RAD",
                         color = colors.text,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -318,16 +320,16 @@ private fun CalcDisplay(
                 Spacer(Modifier.width(6.dp))
                 Box(
                     modifier = Modifier
-                        .background(colors.keyAccent, RoundedCornerShape(7.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .background(colors.keyAccent, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 1.dp)
                 ) {
-                    Text(text = "2nd", color = colors.textOnAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = "2nd", color = colors.textOnAccent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
             Text(
                 text = if (calc.evaluated && exprShown.isNotEmpty()) "$exprShown =" else exprShown,
                 color = colors.textMuted,
-                fontSize = 15.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Clip,
@@ -351,7 +353,7 @@ private fun CalcDisplay(
                 live != null -> colors.text.copy(alpha = 0.78f)
                 else -> colors.textMuted
             },
-            fontSize = if (err != null) 20.sp else 28.sp,
+            fontSize = if (err != null) 17.sp else 26.sp,
             fontWeight = if (calc.evaluated) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
@@ -376,12 +378,13 @@ private fun RowScope.CalcKeyView(
     calc: CalcSession,
     arabicDigits: Boolean,
     colors: SemoKeyboardColors,
+    shape: Shape,
+    radius: Dp,
     viewModel: KeyboardViewModel
 ) {
     val modifier = Modifier
         .weight(1f)
         .fillMaxHeight()
-    val shape = RoundedCornerShape(10.dp)
 
     fun press() {
         when (key.kind) {
@@ -412,7 +415,7 @@ private fun RowScope.CalcKeyView(
             viewModel.onCalcTick(delete = true)
             calc.delete()
         }) { pressed ->
-            val delBg by animateColorAsState(if (pressed) colors.keyPressed else colors.keySpecial, tween(if (pressed) 0 else 160), label = "calcDel")
+            val delBg = if (pressed) colors.keyPressed else colors.keySpecial
             val delScale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.7f, stiffness = 800f), label = "calcDelScale")
             Box(
                 modifier = Modifier
@@ -426,7 +429,7 @@ private fun RowScope.CalcKeyView(
                             color = colors.keyShadow,
                             topLeft = Offset(0f, 1.dp.toPx()),
                             size = size,
-                            cornerRadius = CornerRadius(10.dp.toPx())
+                            cornerRadius = CornerRadius(radius.toPx())
                         )
                     }
                     .background(delBg, shape),
@@ -452,7 +455,7 @@ private fun RowScope.CalcKeyView(
             CKind.OP -> lerp(colors.keySpecial, colors.keyAccent, if (pressed) 0.42f else 0.22f)
             else -> if (pressed) colors.keyPressed else colors.keySpecial
         }
-        val bg by animateColorAsState(target, tween(if (pressed) 0 else 160), label = "calcKey")
+        val bg = target
         val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.7f, stiffness = 800f), label = "calcScale")
         val ink = when (key.kind) {
             CKind.EQUALS -> colors.textOnAccent
@@ -468,10 +471,10 @@ private fun RowScope.CalcKeyView(
             else -> key.label
         }
         val labelSize = when (key.kind) {
-            CKind.DIGIT -> 22.sp
-            CKind.OP, CKind.EQUALS -> 22.sp
-            CKind.CLEAR -> 15.sp
-            else -> if (label.length > 3) 12.sp else 15.sp
+            CKind.DIGIT -> 20.sp
+            CKind.OP, CKind.EQUALS -> 20.sp
+            CKind.CLEAR -> 14.sp
+            else -> if (label.length > 3) 11.sp else 14.sp
         }
         Box(
             modifier = Modifier
@@ -485,7 +488,7 @@ private fun RowScope.CalcKeyView(
                         color = colors.keyShadow,
                         topLeft = Offset(0f, 1.dp.toPx()),
                         size = size,
-                        cornerRadius = CornerRadius(10.dp.toPx())
+                        cornerRadius = CornerRadius(radius.toPx())
                     )
                 }
                 .background(bg, shape),

@@ -1,5 +1,11 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import android.graphics.Paint
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.animateFloatAsState
@@ -346,7 +352,10 @@ private fun DrawScope.drawEmojiPager(
     offset: Float,
     pressedCode: Int,
     highlight: Color,
-    titlePaint: Paint
+    titlePaint: Paint,
+    scaleCode: Int,
+    pressScale: Float,
+    linePaint: Paint
 ) {
     // قراءة رقم النسخة تجعل الرسمة تتجدد تلقائيًا كلما وصلت صور جديدة من الخيط الخلفي
     if (EmojiBitmapCache.version.intValue < 0) return
@@ -365,10 +374,10 @@ private fun DrawScope.drawEmojiPager(
         val pcol = layout.startCol[ps] + pi / rows
         val prow = pi % rows
         drawRoundRect(
-            color = highlight,
-            topLeft = Offset(pcol * cw - offset + 3f, layout.headerH + prow * ch + 2f),
-            size = Size(cw - 6f, ch - 4f),
-            cornerRadius = CornerRadius(ch * 0.26f)
+            color = highlight.copy(alpha = 0.85f),
+            topLeft = Offset(pcol * cw - offset + 2f, layout.headerH + prow * ch + 2f),
+            size = Size(cw - 4f, ch - 4f),
+            cornerRadius = CornerRadius(ch * 0.34f)
         )
     }
 
@@ -386,6 +395,11 @@ private fun DrawScope.drawEmojiPager(
                 val emoji = emojis[index]
                 val cy = layout.headerH + row * ch + ch / 2f
                 val bitmap = EmojiBitmapCache.get(emoji)
+                val popped = scaleCode == s * CODE_BASE + index && pressScale > 1.001f
+                if (popped) {
+                    nc.save()
+                    nc.scale(pressScale, pressScale, cx, cy)
+                }
                 if (bitmap != null) {
                     nc.drawBitmap(bitmap, cx - bitmap.width / 2f, cy - bitmap.height / 2f, null)
                 } else if (EmojiBitmapCache.emPx > 0f) {
@@ -394,6 +408,7 @@ private fun DrawScope.drawEmojiPager(
                     val fm = p.fontMetrics
                     nc.drawText(emoji, cx, cy - (fm.ascent + fm.descent) / 2f, p)
                 }
+                if (popped) nc.restore()
             }
         }
         // عناوين الأقسام: العنوان يلتصق بالحافة اليسرى ما دام قسمه ظاهرًا
@@ -407,6 +422,13 @@ private fun DrawScope.drawEmojiPager(
             var x = max(sectionStart, 0f) + pad
             if (x + textWidth > sectionEnd - pad) x = max(sectionStart + pad, sectionEnd - pad - textWidth)
             nc.drawText(title, x, layout.headerH * 0.72f, titlePaint)
+            // خط رفيع بعد العنوان حتى نهاية القسم (يفصل الأقسام بصريًا)
+            val lineStart = x + textWidth + pad * 0.8f
+            val lineEnd = sectionEnd - pad
+            if (lineEnd - lineStart > pad * 2f) {
+                val ly = layout.headerH * 0.72f - titlePaint.textSize * 0.32f
+                nc.drawLine(lineStart, ly, lineEnd, ly, linePaint)
+            }
             t++
         }
     }
@@ -452,6 +474,34 @@ internal fun EmojiPanel(
         offset = updated
         updated - old
     }
+    // تكبير الإيموجي المضغوط بنبضة ناعمة، مع الاحتفاظ بآخر خلية ليرجع حجمها بسلاسة بعد الرفع
+    var scaleCode by remember { mutableIntStateOf(-1) }
+    if (pressedCode >= 0) scaleCode = pressedCode
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressedCode >= 0) 1.22f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 520f),
+        label = "emojiPress"
+    )
+    // بعد انتهاء الفلنغ نثبّت على أقرب عمود بنابض ناعم (إحساس صفحات iOS بدل التوقف العشوائي)
+    val baseFling = ScrollableDefaults.flingBehavior()
+    val snapFling = remember(layout, baseFling) {
+        object : FlingBehavior {
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                with(baseFling) { performFling(initialVelocity) }
+                val cw = layout?.cellW ?: return 0f
+                val target = (Math.round(offset / cw) * cw).coerceIn(0f, maxOffset)
+                val d = target - offset
+                if (kotlin.math.abs(d) > 0.5f) {
+                    var prev = 0f
+                    animate(0f, d, animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f)) { v, _ ->
+                        scrollBy(v - prev)
+                        prev = v
+                    }
+                }
+                return 0f
+            }
+        }
+    }
     val currentSection by remember(layout) {
         derivedStateOf { layout?.sectionAtOffset(offset) ?: 0 }
     }
@@ -470,6 +520,13 @@ internal fun EmojiPanel(
             textSize = 11.5f * density.fontScale * density.density
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.05f
+        }
+    }
+    val linePaint = remember(colors.divider, density.density) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = colors.divider.toArgb()
+            strokeWidth = 1f * density.density
+            strokeCap = Paint.Cap.ROUND
         }
     }
     val highlight = colors.chip
@@ -493,7 +550,8 @@ internal fun EmojiPanel(
                         .scrollable(
                             state = scrollState,
                             orientation = Orientation.Horizontal,
-                            reverseDirection = true
+                            reverseDirection = true,
+                            flingBehavior = snapFling
                         )
                         .pointerInput(layout, sections) {
                             detectTapGestures(
@@ -526,7 +584,7 @@ internal fun EmojiPanel(
                                 }
                             )
                         }
-                        .drawBehind { drawEmojiPager(layout, sections, offset, pressedCode, highlight, titlePaint) }
+                        .drawBehind { drawEmojiPager(layout, sections, offset, pressedCode, highlight, titlePaint, scaleCode, pressScale, linePaint) }
                 )
             }
 
@@ -589,6 +647,18 @@ internal fun EmojiPanel(
             ) {
                 sections.forEachIndexed { index, section ->
                     val selected = index == currentSection
+                    val pill by animateColorAsState(
+                        if (selected) colors.keyAccent.copy(alpha = 0.20f) else Color.Transparent,
+                        tween(220), label = "catPill"
+                    )
+                    val tint by animateColorAsState(
+                        if (selected) colors.keyAccent else colors.textMuted,
+                        tween(220), label = "catTint"
+                    )
+                    val iconScale by animateFloatAsState(
+                        if (selected) 1.1f else 1f,
+                        spring(dampingRatio = 0.55f, stiffness = 500f), label = "catScale"
+                    )
                     PressBox(
                         modifier = Modifier
                             .weight(1f)
@@ -596,23 +666,25 @@ internal fun EmojiPanel(
                         onClick = {
                             viewModel.onSelectionTick()
                             val target = ((layout?.startCol?.get(index) ?: 0) * (layout?.cellW ?: 0f)).coerceIn(0f, maxOffset)
-                            scope.launch { scrollState.animateScrollBy(target - offset, tween(280)) }
+                            scope.launch { scrollState.animateScrollBy(target - offset, tween(380, easing = FastOutSlowInEasing)) }
                         }
                     ) { pressed ->
                         Box(
                             modifier = Modifier
-                                .size(width = 30.dp, height = 30.dp)
-                                .background(
-                                    if (selected) colors.keySpecial else Color.Transparent,
-                                    RoundedCornerShape(9.dp)
-                                ),
+                                .size(width = 32.dp, height = 30.dp)
+                                .background(pill, RoundedCornerShape(10.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 painter = painterResource(section.iconRes),
                                 contentDescription = section.title,
-                                tint = if (selected || pressed) colors.text else colors.textMuted,
-                                modifier = Modifier.size(19.dp)
+                                tint = if (pressed && !selected) colors.text else tint,
+                                modifier = Modifier
+                                    .size(19.dp)
+                                    .graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    }
                             )
                         }
                     }

@@ -1,5 +1,8 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import android.os.Build
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -258,12 +261,31 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
 
     // تلاشٍ ناعم عند تبديل صفحة المفاتيح (حروف/أرقام/رموز) أو اللغة
     val pageAlpha = remember { Animatable(1f) }
-    LaunchedEffect(state.page, state.language) {
+    LaunchedEffect(state.page) {
         if (state.page == KeyboardPage.LETTERS || state.page == KeyboardPage.SYMBOLS_1 ||
             state.page == KeyboardPage.SYMBOLS_2 || state.page == KeyboardPage.NUMPAD
         ) {
             pageAlpha.snapTo(0.35f)
-            pageAlpha.animateTo(1f, tween(170))
+            pageAlpha.animateTo(1f, tween(200, easing = LinearOutSlowInEasing))
+        }
+    }
+    // تبديل اللغة: المفاتيح تنزلق من جهة اتجاه الكتابة الجديدة مع تلاشٍ ونابض ناعم بدل وميض الشفافية
+    val langShift = remember { Animatable(0f) }
+    var lastLanguage by remember { mutableStateOf(state.language) }
+    LaunchedEffect(state.language) {
+        if (state.language != lastLanguage) {
+            lastLanguage = state.language
+            val dir = if (state.language.rtl) 1f else -1f
+            coroutineScope {
+                launch {
+                    langShift.snapTo(30f * dir)
+                    langShift.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 420f))
+                }
+                launch {
+                    pageAlpha.snapTo(0.1f)
+                    pageAlpha.animateTo(1f, tween(240, easing = LinearOutSlowInEasing))
+                }
+            }
         }
     }
 
@@ -303,10 +325,13 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                         state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC) state.page else KeyboardPage.LETTERS,
                     transitionSpec = {
                         if (targetState != KeyboardPage.LETTERS) {
-                            (fadeIn(tween(210, delayMillis = 40)) + slideInVertically(tween(260)) { it / 12 }) togetherWith
+                            // التأخير الصغير يخفي لحظة تركيب اللوحة الجديدة (الأثقل) خلف اللوحة القديمة فلا يظهر تقطيع
+                            (fadeIn(tween(170, delayMillis = 70, easing = LinearOutSlowInEasing)) +
+                                slideInVertically(tween(240, delayMillis = 70, easing = FastOutSlowInEasing)) { it / 24 }) togetherWith
                                 fadeOut(tween(90)) using SizeTransform(clip = false) { _, _ -> snap() }
                         } else {
-                            fadeIn(tween(170, delayMillis = 30)) togetherWith fadeOut(tween(100)) using
+                            fadeIn(tween(150, delayMillis = 50, easing = LinearOutSlowInEasing)) togetherWith
+                                fadeOut(tween(90)) using
                                 SizeTransform(clip = false) { _, _ -> snap() }
                         }
                     },
@@ -322,13 +347,19 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
                     KeyboardPage.CALC -> CalcPanel(
                         state, colors,
-                        (panelHeight + metrics.stripHeight + 96.dp).coerceAtMost((screenHeightDp * 0.6f).dp) - bottomReserve,
+                        // نفس ارتفاع صفحة الحروف (الشريط + المفاتيح) كي لا يرتفع الكيبورد عند فتح الحاسبة
+                        panelHeight + metrics.stripHeight - bottomReserve,
+                        metrics.keyShape, metrics.keyRadius,
+                        metrics.keySpacing.coerceIn(3.dp, 6.dp), 4.dp,
                         viewModel
                     )
                     else -> Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .graphicsLayer { alpha = pageAlpha.value }
+                            .graphicsLayer {
+                                alpha = pageAlpha.value
+                                translationX = langShift.value * this.density
+                            }
                             .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis) { path ->
                                 viewModel.onSwipeWord(path)
                             }

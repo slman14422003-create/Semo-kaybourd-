@@ -1,5 +1,16 @@
 package com.semo.keyboard.ui.settings
 
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.snap
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
@@ -141,25 +152,43 @@ internal fun SettingsScreen(
     val shortcuts by shortcutsRepo.shortcuts.collectAsState(initial = emptyList())
     val home = { page = SettingsPage.HOME }
 
-    when (page) {
-        SettingsPage.HOME -> HomePage(
-            settings = settings,
-            shortcutCount = shortcuts.size,
-            learnedCount = learned.size,
-            isEnabled = isEnabled,
-            isSelected = isSelected,
-            onEnable = onEnable,
-            onPick = onPick,
-            onOpen = { page = it }
-        )
-        SettingsPage.LANGUAGES -> LanguagesPage(repo, settings, home)
-        SettingsPage.TYPING -> TypingPage(repo, settings, shortcuts.size, home) { page = SettingsPage.SHORTCUTS }
-        SettingsPage.SHORTCUTS -> ShortcutsPage(repo, shortcutsRepo, settings) { page = SettingsPage.TYPING }
-        SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home)
-        SettingsPage.TOUCH -> TouchPage(repo, settings, home)
-        SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.LANGUAGES }
-        SettingsPage.PRIVACY -> PrivacyPage(repo, clipboardRepo, settings, home)
-        SettingsPage.ABOUT -> AboutPage(repo, onReplay, home)
+    AnimatedContent(
+        targetState = page,
+        modifier = Modifier.fillMaxSize().background(SemoPalette.Bg),
+        transitionSpec = {
+            val back = targetState == SettingsPage.HOME ||
+                (initialState == SettingsPage.SHORTCUTS && targetState == SettingsPage.TYPING)
+            val dir = if (back) AnimatedContentTransitionScope.SlideDirection.End
+            else AnimatedContentTransitionScope.SlideDirection.Start
+            val spec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+            // انزلاق فقط (بدون شفافية): طبقة واحدة تتحرّك بالـ GPU فلا تقطيع. الصفحة الداخلة تعلو عند الدخول، وتحت عند الرجوع.
+            val enter = if (back) slideIntoContainer(dir, spec) { (it * 0.3f).toInt() } else slideIntoContainer(dir, spec)
+            val exit = if (back) slideOutOfContainer(dir, spec) else slideOutOfContainer(dir, spec) { (it * 0.3f).toInt() }
+            (enter togetherWith exit).apply { targetContentZIndex = if (back) -1f else 1f } using
+                SizeTransform(clip = false) { _, _ -> snap() }
+        },
+        label = "settingsPage"
+    ) { shown ->
+        when (shown) {
+            SettingsPage.HOME -> HomePage(
+                settings = settings,
+                shortcutCount = shortcuts.size,
+                learnedCount = learned.size,
+                isEnabled = isEnabled,
+                isSelected = isSelected,
+                onEnable = onEnable,
+                onPick = onPick,
+                onOpen = { page = it }
+            )
+            SettingsPage.LANGUAGES -> LanguagesPage(repo, settings, home)
+            SettingsPage.TYPING -> TypingPage(repo, settings, shortcuts.size, home) { page = SettingsPage.SHORTCUTS }
+            SettingsPage.SHORTCUTS -> ShortcutsPage(repo, shortcutsRepo, settings) { page = SettingsPage.TYPING }
+            SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home)
+            SettingsPage.TOUCH -> TouchPage(repo, settings, home)
+            SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.LANGUAGES }
+            SettingsPage.PRIVACY -> PrivacyPage(repo, clipboardRepo, settings, home)
+            SettingsPage.ABOUT -> AboutPage(repo, onReplay, home)
+        }
     }
 }
 
