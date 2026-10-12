@@ -225,7 +225,10 @@ class SemoKeyboardService :
             items.firstNotNullOfOrNull { runCatching { it.coerceToText(this)?.toString() }.getOrNull()?.takeIf { s -> s.isNotBlank() } }
         } else null
         val uri = items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme == "content" } }
-        val mime = if (uri != null && plain == null) resolveImageMime(descImageMime, uri) else null
+        val plainLooksLikeUri = plain == null || plain.trim().let {
+            it.startsWith("content:") || it.startsWith("file:") || it.startsWith("/") || it == uri?.toString()
+        }
+        val mime = if (uri != null && plainLooksLikeUri) resolveImageMime(descImageMime, uri) else null
         // بعض التطبيقات تنسخ الروابط كـ ClipData.Item فيه uri فقط بلا نص (text/uri-list)،
         // فلو ما لقينا نصًا من أي مصدر سابق نأخذ الرابط من أول uri غير content (http/https/mailto...)
         val linkText = if (plain == null && html == null && coerced == null) {
@@ -277,7 +280,14 @@ class SemoKeyboardService :
     private fun resolveImageMime(descMime: String?, uri: android.net.Uri): String? {
         val provider = runCatching { contentResolver.getType(uri) }.getOrNull()
             ?.takeIf { it.startsWith("image/") && !it.endsWith("/*") }
-        return provider ?: descMime
+        if (provider != null) return provider
+        if (descMime != null) return descMime
+        // المزوّد لا يُعلن نوع الملف: نفحص المحتوى فعليًا (لقطات الشاشة من بعض الأنظمة)
+        return runCatching {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+            bounds.outMimeType?.takeIf { it.startsWith("image/") && bounds.outWidth > 0 }
+        }.getOrNull()
     }
 
     override fun onCreateInputView(): View {

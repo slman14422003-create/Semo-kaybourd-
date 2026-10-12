@@ -100,8 +100,7 @@ object UpdateManager {
     }
 
     private fun httpGetString(urlStr: String): String {
-        var connection = openConnection(urlStr)
-        connection.setRequestProperty("Accept", "application/vnd.github+json")
+        var connection = openConnection(urlStr, "application/vnd.github+json")
         try {
             connection = followRedirects(connection)
             if (connection.responseCode !in 200..299) {
@@ -175,13 +174,13 @@ object UpdateManager {
         }
     }
 
-    private fun openConnection(urlStr: String): HttpURLConnection {
+    private fun openConnection(urlStr: String, accept: String? = null): HttpURLConnection {
         val connection = URL(urlStr).openConnection() as HttpURLConnection
         connection.connectTimeout = CONNECT_TIMEOUT
         connection.readTimeout = READ_TIMEOUT
-        connection.instanceFollowRedirects = true
+        connection.instanceFollowRedirects = false
         connection.setRequestProperty("User-Agent", "Semo-Keyboard-Updater")
-        connection.connect()
+        if (accept != null) connection.setRequestProperty("Accept", accept)
         return connection
     }
 
@@ -192,7 +191,7 @@ object UpdateManager {
         while (connection.responseCode in REDIRECT_CODES && redirects < 5) {
             val location = connection.getHeaderField("Location") ?: break
             connection.disconnect()
-            connection = openConnection(location)
+            connection = openConnection(java.net.URL(java.net.URL(connection.url.toString()), location).toString())
             redirects++
         }
         return connection

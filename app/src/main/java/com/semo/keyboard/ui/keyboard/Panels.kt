@@ -844,6 +844,32 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 )
             }
         }
+        if (kind == ClipKind.IMAGE && !menu) {
+            PressBox(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(28.dp),
+                onClick = {
+                    viewModel.onSelectionTick()
+                    viewModel.onClipDelete(item.text)
+                }
+            ) { _ ->
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_clip_trash),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+            }
+        }
         if (menu) {
             Row(
                 modifier = Modifier

@@ -89,10 +89,11 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -748,11 +749,25 @@ private fun RowScope.KeyButton(
     val currentOnTrackpad by rememberUpdatedState(onTrackpad)
     val hasAlternates = def.longPressChars.isNotEmpty()
     var keyBoxWidthPx by remember { mutableStateOf(0) }
+    var keyLeftInWindowPx by remember { mutableStateOf(0f) }
+    val hostView = androidx.compose.ui.platform.LocalView.current
     var popupOpen by remember { mutableStateOf(false) }
     var popupIndex by remember { mutableStateOf(0) }
     val popupDensity = LocalDensity.current
     val chipWidthDp = 40.dp
+    val popupPadDp = 4.dp
     val chipWidthPx = with(popupDensity) { chipWidthDp.toPx() }
+    val popupPadPx = with(popupDensity) { popupPadDp.toPx() }
+    // موضع يسار الفقاعة نسبةً ليسار المفتاح، مع إبقائها داخل عرض اللوحة
+    fun popupLeftPx(): Float {
+        val n = def.longPressChars.size.coerceAtLeast(1)
+        val popupW = chipWidthPx * n + popupPadPx * 2
+        val centered = (keyBoxWidthPx - popupW) / 2f
+        val margin = with(popupDensity) { 4.dp.toPx() }
+        val maxAbs = (hostView.width - popupW - margin).coerceAtLeast(margin)
+        val abs = (keyLeftInWindowPx + centered).coerceIn(margin, maxAbs)
+        return abs - keyLeftInWindowPx
+    }
     val isBackspace = def.action == KeyAction.Backspace
     val isSpace = def.action == KeyAction.Space
     val isLetterKey = def.action is KeyAction.Character
@@ -823,14 +838,14 @@ private fun RowScope.KeyButton(
         // مباشرة (مثل iOS)، وسحب الإصبع فوقها يُغيّر الحرف المُحدَّد قبل الرفع.
         Modifier
             .onSizeChanged { keyBoxWidthPx = it.width }
+            .onGloballyPositioned { keyLeftInWindowPx = it.positionInWindow().x }
             .pointerInput(def, tuning) {
                 alternatesKeyGestures(
                     holdMs = tuning.holdMs,
                     computeIndex = { x ->
                         val n = def.longPressChars.size
                         if (n <= 1) 0 else {
-                            val popupWidthPx = chipWidthPx * n
-                            val left = (keyBoxWidthPx - popupWidthPx) / 2f
+                            val left = popupLeftPx() + popupPadPx
                             (((x - left) / chipWidthPx).toInt()).coerceIn(0, n - 1)
                         }
                     },
@@ -936,7 +951,7 @@ private fun RowScope.KeyButton(
 
         // فقاعة معاينة الحرف بشكل بالون iOS: رأس أعرض من المفتاح يتصل به برقبة، ويغطي المفتاح كله.
         // بالصف الأول نقصّر الرأس كي لا تقصّه نافذة اللوحة.
-        if (showPreview && pressed && isLetterKey && !hideLabels) {
+        if (showPreview && pressed && isLetterKey && !hideLabels && !popupOpen) {
             val headHeight = if (isTopRow) 40.dp else 56.dp
             val inset = 10.dp
             Box(
@@ -971,35 +986,36 @@ private fun RowScope.KeyButton(
         // بدون رفعه يُنقّل التحديد (الحرف المُظلَّل) قبل تحرير الإصبع.
         if (popupOpen && hasAlternates) {
             val chars = def.longPressChars
-            Popup(
-                alignment = Alignment.TopCenter,
-                offset = IntOffset(0, with(popupDensity) { -(metrics.keyHeight + 58.dp).roundToPx() })
-            ) {
-                Row(
-                    modifier = Modifier
-                        .shadow(4.dp, RoundedCornerShape(12.dp))
-                        .background(colors.bubble, RoundedCornerShape(12.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    chars.forEachIndexed { i, ch ->
-                        val selected = i == popupIndex
-                        Box(
-                            modifier = Modifier
-                                .width(chipWidthDp - 4.dp)
-                                .height(44.dp)
-                                .background(
-                                    if (selected) colors.keyAccent else Color.Transparent,
-                                    RoundedCornerShape(8.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = ch,
-                                fontSize = 20.sp,
-                                color = if (selected) colors.textOnAccent else colors.text
-                            )
+            val gapPx = with(popupDensity) { 6.dp.roundToPx() }
+            Row(
+                modifier = Modifier
+                    .layout { measurable, _ ->
+                        val placeable = measurable.measure(Constraints())
+                        layout(0, 0) {
+                            placeable.place(popupLeftPx().toInt(), -(placeable.height + gapPx))
                         }
+                    }
+                    .shadow(6.dp, RoundedCornerShape(14.dp))
+                    .background(colors.bubble, RoundedCornerShape(14.dp))
+                    .padding(popupPadDp)
+            ) {
+                chars.forEachIndexed { i, ch ->
+                    val selected = i == popupIndex
+                    Box(
+                        modifier = Modifier
+                            .width(chipWidthDp)
+                            .height(48.dp)
+                            .background(
+                                if (selected) colors.keyAccent else Color.Transparent,
+                                RoundedCornerShape(10.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = ch,
+                            fontSize = 24.sp,
+                            color = if (selected) colors.textOnAccent else colors.text
+                        )
                     }
                 }
             }
