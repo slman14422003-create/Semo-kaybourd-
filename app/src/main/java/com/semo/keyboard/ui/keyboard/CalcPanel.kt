@@ -1,6 +1,19 @@
 package com.semo.keyboard.ui.keyboard
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +68,7 @@ class CalcSession {
     var shown by mutableStateOf<String?>(null)
     var error by mutableStateOf<Boolean?>(null)
     var evaluated by mutableStateOf(false)
+    var errorTick by mutableStateOf(0)
     private var ans: BigDecimal = BigDecimal.ZERO
 
     /** الناتج الحي أثناء الكتابة (null لو التعبير غير مكتمل) */
@@ -121,6 +135,7 @@ class CalcSession {
             is CalcEngine.Outcome.Fail -> {
                 shown = null
                 error = r.math
+                errorTick++
             }
         }
     }
@@ -253,12 +268,28 @@ private fun CalcDisplay(
 ) {
     val live = calc.live()
     val err = calc.error
+    val pulse = remember { Animatable(1f) }
+    val shake = remember { Animatable(0f) }
+    LaunchedEffect(calc.evaluated) {
+        if (calc.evaluated) {
+            pulse.snapTo(0.9f)
+            pulse.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 500f))
+        }
+    }
+    LaunchedEffect(calc.errorTick) {
+        if (calc.errorTick > 0) {
+            for (v in listOf(12f, -10f, 7f, -4f, 0f)) shake.animateTo(v, tween(45))
+        }
+    }
     val exprShown = displayNumber(calc.expr, arabicDigits).let { if (it.length > 44) "…" + it.takeLast(43) else it }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .height(76.dp)
-            .background(colors.chip, RoundedCornerShape(16.dp))
+            .background(
+                Brush.verticalGradient(listOf(colors.chip, lerp(colors.chip, colors.panel, 0.4f))),
+                RoundedCornerShape(16.dp)
+            )
             .border(1.dp, colors.divider, RoundedCornerShape(16.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween
@@ -326,7 +357,14 @@ private fun CalcDisplay(
             overflow = TextOverflow.Clip,
             textAlign = TextAlign.End,
             style = TextStyle(textDirection = TextDirection.Ltr),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = pulse.value
+                    scaleY = pulse.value
+                    translationX = shake.value * density
+                    transformOrigin = TransformOrigin(1f, 0.5f)
+                }
         )
     }
 }
@@ -373,10 +411,24 @@ private fun RowScope.CalcKeyView(
             viewModel.onCalcTick(delete = true)
             calc.delete()
         }) { pressed ->
+            val delBg by animateColorAsState(if (pressed) colors.keyPressed else colors.keySpecial, tween(if (pressed) 0 else 160), label = "calcDel")
+            val delScale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.7f, stiffness = 800f), label = "calcDelScale")
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(if (pressed) colors.keyPressed else colors.keySpecial, shape),
+                    .graphicsLayer {
+                        scaleX = delScale
+                        scaleY = delScale
+                    }
+                    .drawBehind {
+                        drawRoundRect(
+                            color = colors.keyShadow,
+                            topLeft = Offset(0f, 1.dp.toPx()),
+                            size = size,
+                            cornerRadius = CornerRadius(10.dp.toPx())
+                        )
+                    }
+                    .background(delBg, shape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -392,12 +444,15 @@ private fun RowScope.CalcKeyView(
 
     PressBox(modifier = modifier, onClick = { press() }) { pressed ->
         val second = calc.second
-        val bg = when (key.kind) {
+        val target = when (key.kind) {
             CKind.DIGIT -> if (pressed) colors.keyPressed else colors.key
             CKind.EQUALS -> if (pressed) colors.keyAccent.copy(alpha = 0.8f) else colors.keyAccent
             CKind.SECOND -> if (second) colors.shiftActive else if (pressed) colors.keyPressed else colors.keySpecial
+            CKind.OP -> lerp(colors.keySpecial, colors.keyAccent, if (pressed) 0.42f else 0.22f)
             else -> if (pressed) colors.keyPressed else colors.keySpecial
         }
+        val bg by animateColorAsState(target, tween(if (pressed) 0 else 160), label = "calcKey")
+        val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.7f, stiffness = 800f), label = "calcScale")
         val ink = when (key.kind) {
             CKind.EQUALS -> colors.textOnAccent
             CKind.SECOND -> if (second) colors.onShiftActive else colors.text
@@ -420,6 +475,18 @@ private fun RowScope.CalcKeyView(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .drawBehind {
+                    drawRoundRect(
+                        color = colors.keyShadow,
+                        topLeft = Offset(0f, 1.dp.toPx()),
+                        size = size,
+                        cornerRadius = CornerRadius(10.dp.toPx())
+                    )
+                }
                 .background(bg, shape),
             contentAlignment = Alignment.Center
         ) {

@@ -1,6 +1,20 @@
 package com.semo.keyboard.ui.keyboard
 
 import android.os.Build
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -240,6 +254,17 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val swipeEnabled = state.swipeTyping && state.page == KeyboardPage.LETTERS &&
         state.alternates.isEmpty() && !trackpad
 
+    // تلاشٍ ناعم عند تبديل صفحة المفاتيح (حروف/أرقام/رموز) أو اللغة
+    val pageAlpha = remember { Animatable(1f) }
+    LaunchedEffect(state.page, state.language) {
+        if (state.page == KeyboardPage.LETTERS || state.page == KeyboardPage.SYMBOLS_1 ||
+            state.page == KeyboardPage.SYMBOLS_2 || state.page == KeyboardPage.NUMPAD
+        ) {
+            pageAlpha.snapTo(0.35f)
+            pageAlpha.animateTo(1f, tween(170))
+        }
+    }
+
     val tuning = remember(state.holdDelay, state.backspaceSpeed, state.spaceBarAction) {
         TouchTuning(state.holdDelay.millis, state.backspaceSpeed, state.spaceBarAction)
     }
@@ -265,11 +290,27 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     .padding(horizontal = metrics.sidePadding)
             ) {
                 if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
-                    if (state.clipEdit != null) ClipEditBar(state, colors, metrics.stripHeight, viewModel)
-                    else TopStrip(state, colors, metrics, viewModel)
+                    Crossfade(targetState = state.clipEdit != null, animationSpec = tween(170), label = "strip") { editing ->
+                        if (editing) ClipEditBar(state, colors, metrics.stripHeight, viewModel)
+                        else TopStrip(state, colors, metrics, viewModel)
+                    }
                 }
 
-                when (state.page) {
+                AnimatedContent(
+                    targetState = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
+                        state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC) state.page else KeyboardPage.LETTERS,
+                    transitionSpec = {
+                        if (targetState != KeyboardPage.LETTERS) {
+                            (fadeIn(tween(210, delayMillis = 40)) + slideInVertically(tween(260)) { it / 12 }) togetherWith
+                                fadeOut(tween(90)) using SizeTransform(clip = false) { _, _ -> snap() }
+                        } else {
+                            fadeIn(tween(170, delayMillis = 30)) togetherWith fadeOut(tween(100)) using
+                                SizeTransform(clip = false) { _, _ -> snap() }
+                        }
+                    },
+                    label = "page"
+                ) { shownPage ->
+                when (shownPage) {
                     KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
                     KeyboardPage.CLIPBOARD -> ClipboardPanel(
                         state, colors,
@@ -285,6 +326,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     else -> Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .graphicsLayer { alpha = pageAlpha.value }
                             .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis) { path ->
                                 viewModel.onSwipeWord(path)
                             }
@@ -310,6 +352,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                         }
                         SwipeTrail(trail, colors.keyAccent)
                     }
+                }
                 }
                 if (bottomReserve > 0.dp &&
                     (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC)
@@ -505,27 +548,41 @@ private fun TopStrip(
             filled = false,
             onClick = { viewModel.toggleToolbar() }
         )
-        if (state.toolbarOpen) {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // العناصر والترتيب من إعدادات «شريط الأدوات»
-                state.toolbarItems.forEach { item ->
-                    when (item) {
-                        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors) { viewModel.openPage(KeyboardPage.EMOJI) }
-                        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
-                        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors) { viewModel.openPage(KeyboardPage.NUMPAD) }
-                        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors) { viewModel.openPage(KeyboardPage.CALC) }
-                        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors) { viewModel.openPage(KeyboardPage.EDIT) }
-                        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors) { viewModel.cycleOneHand() }
-                        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors) { viewModel.openSettings() }
+        AnimatedContent(
+            targetState = state.toolbarOpen,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            transitionSpec = {
+                fadeIn(tween(180, delayMillis = 40)) togetherWith fadeOut(tween(90)) using
+                    SizeTransform(clip = false) { _, _ -> snap() }
+            },
+            label = "stripContent"
+        ) { open ->
+            if (open) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // العناصر والترتيب من إعدادات «شريط الأدوات»
+                    state.toolbarItems.forEachIndexed { index, item ->
+                        when (item) {
+                        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors, popDelay = index * 28) { viewModel.openPage(KeyboardPage.EMOJI) }
+                        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors, popDelay = index * 28) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
+                        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors, popDelay = index * 28) { viewModel.openPage(KeyboardPage.NUMPAD) }
+                        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors, popDelay = index * 28) { viewModel.openPage(KeyboardPage.CALC) }
+                        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors, popDelay = index * 28) { viewModel.openPage(KeyboardPage.EDIT) }
+                        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = index * 28) { viewModel.cycleOneHand() }
+                        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28) { viewModel.openSettings() }
+                        }
                     }
                 }
+            } else {
+                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    SuggestionsRow(state, colors, viewModel)
+                }
             }
-        } else {
-            SuggestionsRow(state, colors, viewModel)
         }
     }
 }
@@ -536,18 +593,36 @@ private fun StripIconButton(
     colors: SemoKeyboardColors,
     rotate: Float = 0f,
     filled: Boolean = true,
+    popDelay: Int = -1,
     onClick: () -> Unit
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press by animateFloatAsState(if (pressed) 0.84f else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "stripPress")
+    val rot by animateFloatAsState(rotate, tween(240), label = "stripRotate")
+    val pop = remember { Animatable(if (popDelay >= 0) 0.4f else 1f) }
+    LaunchedEffect(popDelay) {
+        if (popDelay >= 0) {
+            delay(popDelay.toLong())
+            pop.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 380f))
+        }
+    }
     // منطقة اللمس أوسع من الشكل المرئي: حبّة بخلفية مدوّرة (أو أيقونة بلا خلفية للسهم)
     Box(
         modifier = Modifier
             .size(width = 46.dp, height = 40.dp)
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .size(width = 40.dp, height = 32.dp)
+                .graphicsLayer {
+                    val sc = press * pop.value
+                    scaleX = sc
+                    scaleY = sc
+                    alpha = if (popDelay >= 0) ((pop.value - 0.4f) / 0.6f).coerceIn(0f, 1f) else 1f
+                }
                 .then(if (filled) Modifier.background(colors.chip, RoundedCornerShape(10.dp)) else Modifier),
             contentAlignment = Alignment.Center
         ) {
@@ -557,7 +632,7 @@ private fun StripIconButton(
                 tint = if (filled) colors.text else colors.textMuted,
                 modifier = Modifier
                     .size(if (filled) 20.dp else 22.dp)
-                    .rotate(rotate)
+                    .rotate(rot)
             )
         }
     }
@@ -804,6 +879,8 @@ private fun RowScope.KeyButton(
         special -> colors.keySpecial
         else -> colors.key
     }
+    // آيفون: الضغط لحظي واللون يتلاشى بسلاسة عند الرفع
+    val animBg by animateColorAsState(bg, tween(if (pressed) 0 else 140), label = "keyBg")
     val textColor = when {
         shiftOn -> colors.onShiftActive
         def.isAccent -> colors.textOnAccent
@@ -944,7 +1021,7 @@ private fun RowScope.KeyButton(
                         )
                     }
                 }
-                .background(bg, if (def.plain) RoundedCornerShape(50) else metrics.keyShape),
+                .background(animBg, if (def.plain) RoundedCornerShape(50) else metrics.keyShape),
             contentAlignment = Alignment.Center
         ) {
             if (!hideLabels) {
@@ -971,6 +1048,8 @@ private fun RowScope.KeyButton(
         // فقاعة معاينة الحرف بشكل بالون iOS: رأس أعرض من المفتاح يتصل به برقبة، ويغطي المفتاح كله.
         // بالصف الأول نقصّر الرأس كي لا تقصّه نافذة اللوحة.
         if (showPreview && pressed && isLetterKey && !hideLabels && !popupOpen) {
+            val pop = remember { Animatable(0.8f) }
+            LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 900f)) }
             val headHeight = if (isTopRow) 40.dp else 56.dp
             val inset = 10.dp
             Box(
@@ -986,6 +1065,11 @@ private fun RowScope.KeyButton(
                         layout(keyW, metrics.keyHeight.roundToPx()) {
                             placeable.place(-insetPx, -headPx)
                         }
+                    }
+                    .graphicsLayer {
+                        scaleX = pop.value
+                        scaleY = pop.value
+                        transformOrigin = TransformOrigin(0.5f, 1f)
                     }
                     .shadow(3.dp, balloonShape)
                     .background(colors.bubble, balloonShape)
@@ -1004,6 +1088,8 @@ private fun RowScope.KeyButton(
         // فقاعة الأحرف البديلة: تظهر فوق المفتاح مباشرة (مثل iOS)، وسحب الإصبع فوقها
         // بدون رفعه يُنقّل التحديد (الحرف المُظلَّل) قبل تحرير الإصبع.
         if (popupOpen && hasAlternates) {
+            val altPop = remember { Animatable(0.85f) }
+            LaunchedEffect(Unit) { altPop.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 700f)) }
             val chars = def.longPressChars
             val gapPx = with(popupDensity) { 6.dp.roundToPx() }
             Row(
@@ -1013,6 +1099,12 @@ private fun RowScope.KeyButton(
                         layout(0, 0) {
                             placeable.place(popupLeftPx().toInt(), -(placeable.height + gapPx))
                         }
+                    }
+                    .graphicsLayer {
+                        scaleX = altPop.value
+                        scaleY = altPop.value
+                        alpha = ((altPop.value - 0.85f) / 0.15f).coerceIn(0f, 1f)
+                        transformOrigin = TransformOrigin(0.5f, 1f)
                     }
                     .shadow(6.dp, RoundedCornerShape(14.dp))
                     .background(colors.bubble, RoundedCornerShape(14.dp))

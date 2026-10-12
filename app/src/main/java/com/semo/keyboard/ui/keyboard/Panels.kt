@@ -1,6 +1,10 @@
 package com.semo.keyboard.ui.keyboard
 
 import android.graphics.Paint
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Animatable
 import android.graphics.Typeface
 import android.util.Patterns
 import androidx.compose.foundation.Image
@@ -749,7 +753,7 @@ internal fun ClipboardPanel(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(shownItems, key = { it.text }) { item ->
-                        ClipCard(item, colors, item.text == menuKey, { menuKey = item.text }, viewModel)
+                        ClipCard(item, colors, item.text == menuKey, { menuKey = item.text }, viewModel, Modifier.animateItem())
                     }
                 }
             }
@@ -821,19 +825,43 @@ private fun ClipCard(
     colors: SemoKeyboardColors,
     selected: Boolean,
     onMenu: () -> Unit,
-    viewModel: KeyboardViewModel
+    viewModel: KeyboardViewModel,
+    modifier: Modifier = Modifier
 ) {
     val kind = remember(item.text) { ClipClassifier.kindOf(item.text) }
     val shape = RoundedCornerShape(16.dp)
+    var pressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        if (pressed || selected) 0.96f else 1f,
+        spring(dampingRatio = 0.62f, stiffness = 520f),
+        label = "clipScale"
+    )
     Box(
-        modifier = Modifier
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .fillMaxWidth()
             .height(112.dp)
+            .drawBehind {
+                drawRoundRect(
+                    color = colors.keyShadow.copy(alpha = 0.55f),
+                    topLeft = Offset(0f, 1.5.dp.toPx()),
+                    size = size,
+                    cornerRadius = CornerRadius(16.dp.toPx())
+                )
+            }
             .background(colors.key, shape)
             .border(if (selected) 1.5.dp else 1.dp, if (selected) colors.keyAccent else colors.divider, shape)
             .clip(shape)
             .pointerInput(item.text) {
                 detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        tryAwaitRelease()
+                        pressed = false
+                    },
                     onTap = {
                         viewModel.onSelectionTick()
                         viewModel.onClipPaste(item.text)
@@ -907,15 +935,23 @@ private fun BoxScope.ClipActionBubble(
     val linkUrl = remember(item.text, kind) { if (kind == ClipKind.LINK) ClipClassifier.extractUrl(item.text) else null }
     val context = LocalContext.current
     val cardShape = RoundedCornerShape(18.dp)
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f)) }
     Box(
         modifier = Modifier
             .matchParentSize()
-            .background(Color.Black.copy(alpha = 0.5f))
+            .drawBehind { drawRect(Color.Black.copy(alpha = 0.5f * appear.value.coerceIn(0f, 1f))) }
             .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
+                .graphicsLayer {
+                    val sc = 0.84f + 0.16f * appear.value
+                    scaleX = sc
+                    scaleY = sc
+                    alpha = appear.value.coerceIn(0f, 1f)
+                }
                 .padding(bottom = bottomInset)
                 .width(236.dp)
                 .pointerInput(Unit) { detectTapGestures(onTap = { }) },
