@@ -111,6 +111,16 @@ object NextWordModel {
         "الله" to listOf("يعطيك", "يسلمك", "يخليك", "يحفظك", "يرحمه", "يعافيك")
     ).mapKeys { BigDictionary.key(it.key) }
 
+    private fun seedFor(language: KeyboardLanguage): Map<String, List<String>> = when (language) {
+        KeyboardLanguage.ARABIC -> arabicSeed
+        KeyboardLanguage.ENGLISH -> englishSeed
+        else -> emptyMap()
+    }
+
+    /**
+     * أفضل الكلمات التالية بعد [prev] (و[prev2] قبلها). الترتيب: ما تعلّمته اللوحة من كتابتك (ثلاثي ثم ثنائي)،
+     * ثم نموذج الجمل (مدمج أو منزَّل من مكتبة اللغات)، ثم القائمة الصغيرة المدمجة.
+     */
     fun predict(
         prev: String,
         language: KeyboardLanguage,
@@ -126,8 +136,63 @@ object NextWordModel {
             if (k2.isNotEmpty()) learned["$k2 $k"]?.forEach { if (out.size < limit) out.add(it) }
         }
         learned[k]?.forEach { if (out.size < limit) out.add(it) }
-        val seed = if (language == KeyboardLanguage.ARABIC) arabicSeed else englishSeed
-        seed[k]?.forEach { if (out.size < limit) out.add(it) }
+        if (out.size < limit) {
+            for (w in NgramModel.next(language, prev2, prev, limit)) {
+                if (out.size >= limit) break
+                if (out.none { it.equals(w, ignoreCase = true) }) out.add(w)
+            }
+        }
+        if (out.size < limit) {
+            seedFor(language)[k]?.forEach {
+                if (out.size < limit && out.none { o -> o.equals(it, ignoreCase = true) }) out.add(it)
+            }
+        }
         return out.toList()
+    }
+
+    /**
+     * تتمة الجملة: تبدأ من [seed] (الكلمة التي اختارتها أو كتبتها) وتكمل كلمة بكلمة بأرجح كلمة تالية حتى [maxWords]،
+     * وتتوقف عند نهاية الجملة أو لما تضعف الثقة أو تتكرر الكلمات. تقرأ من كلماتك المتعلَّمة أولًا ثم من نموذج الجمل
+     * ثم من القائمة المدمجة. ترجع الكلمات المولَّدة (تبدأ بـ [seed] لو أُعطي)، أو أقل من كلمتين لو ما في تتمة واثقة.
+     */
+    fun phrase(
+        language: KeyboardLanguage,
+        learned: Map<String, List<String>>,
+        context: List<String>,
+        seed: String?,
+        maxWords: Int = 4
+    ): List<String> {
+        val out = ArrayList<String>()
+        val ctx = ArrayList<String>(context)
+        if (!seed.isNullOrEmpty()) {
+            out.add(seed)
+            ctx.add(seed)
+        }
+        var guard = 0
+        while (out.size < maxWords && guard < maxWords) {
+            guard++
+            val prev = ctx.lastOrNull() ?: break
+            val prev2 = if (ctx.size >= 2) ctx[ctx.size - 2] else ""
+            val k = BigDictionary.key(prev)
+            if (k.isEmpty()) break
+            val tri = if (prev2.isNotEmpty()) learned[BigDictionary.key(prev2) + " " + k]?.firstOrNull() else null
+            val bi = learned[k]?.firstOrNull()
+            var next: String? = tri ?: bi
+            if (next == null) {
+                val best = NgramModel.best(language, prev2, prev)
+                if (best != null) {
+                    if (best.eos) break
+                    // أول كلمة نقبلها بثقة أقل، وما بعدها نطلب ثقة أعلى كي لا تتولّد جمل عشوائية
+                    val need = if (out.isEmpty()) 0.12f else 0.3f
+                    if (best.confidence >= need) next = best.word
+                }
+            }
+            if (next == null) next = seedFor(language)[k]?.firstOrNull()
+            val n = next ?: break
+            if (n.isEmpty() || out.any { it.equals(n, ignoreCase = true) } || n.equals(prev, ignoreCase = true)) break
+            out.add(n)
+            ctx.addAll(n.split(' ').filter { it.isNotEmpty() })
+        }
+        return out
     }
 }

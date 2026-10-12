@@ -270,66 +270,85 @@ internal fun SwitchRow(
     }
 }
 
-/** تنزيل القاموس الكبير (إنكليزي + عربي) ودمجه بالإكمال التلقائي والكتابة بالسحب */
+/**
+ * مكتبة اللغات: كل لغة تُفعَّل لتظهر بدورة الكرة الأرضية، وتُنزَّل لها قاموس شيوع ونموذج جمل
+ * (للإكمال وتوقّع الكلمة التالية وتتمة الجمل). العربي والإنكليزي مدمجان، والتنزيل يزيدهما قوة.
+ */
 @Composable
-internal fun DictionaryBlock() {
+internal fun LanguageLibraryBlock(repo: SettingsRepository, settings: SemoSettings) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var downloaded by remember { mutableStateOf(DictionaryManager.hasDownloaded(context)) }
-    var counts by remember {
-        mutableStateOf(BigDictionary.size(KeyboardLanguage.ENGLISH) to BigDictionary.size(KeyboardLanguage.ARABIC))
-    }
-    LaunchedEffect(Unit) {
-        if (counts.first == 0 && counts.second == 0) {
-            withContext(Dispatchers.IO) { DictionaryManager.loadAll(context) }
-            counts = BigDictionary.size(KeyboardLanguage.ENGLISH) to BigDictionary.size(KeyboardLanguage.ARABIC)
-        }
-    }
-    Block("قاموس الاقتراحات الكبير", R.drawable.ic_ios_emoji, IconBlue) {
+    var busy by remember { mutableStateOf<KeyboardLanguage?>(null) }
+    var refresh by remember { mutableStateOf(0) }
+    Section("مكتبة اللغات") {
         Text(
-            "اللوحة فيها قاموس مدمج يشتغل بدون إنترنت (كلمات عربية وإنكليزية شائعة + نحو 114 ألف كلمة إنكليزية للتدقيق الإملائي). هالزر بينزّل كمان قائمتين مرتبتين حسب الشيوع (حتى 100 ألف كلمة لكل لغة، من FrequencyWords / OpenSubtitles، رخصة CC-BY-SA 4.0) وبيدمجهم مع الاقتراحات والكتابة بالسحب. التنزيل مرة واحدة بضغطتك فقط.",
+            "فعّل اللغات اللي بدك إياها بدورة زر الكرة الأرضية، ونزّل لكل لغة قاموسها ونموذج جملها (بيشتغلوا بعدها بدون إنترنت). " +
+                "القواميس من FrequencyWords (CC-BY-SA 4.0) والجمل من Tatoeba (CC-BY 2.0 FR).",
             color = SemoPalette.TextHint,
             fontSize = 12.sp,
-            lineHeight = 18.sp
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(14.dp)
         )
-        val summary = when {
-            status.isNotEmpty() -> status
-            downloaded -> "القاموس الفعّال: ${counts.first} كلمة إنكليزية · ${counts.second} كلمة عربية"
-            else -> "غير منزَّل (يعمل القاموس المدمج: ${counts.first} إنكليزي · ${counts.second} عربي)"
-        }
-        Text(summary, color = SemoPalette.TextSecondary, fontSize = 13.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SolidButton(
-                text = if (downloaded) "تحديث القاموس" else "تنزيل القاموس",
-                enabled = !busy,
-                modifier = Modifier.weight(1f)
+        KeyboardLanguage.values().forEach { lang ->
+            Divider()
+            val on = lang in settings.enabledLanguages
+            val hasWords = remember(refresh, busy) { DictionaryManager.hasWords(context, lang) }
+            val hasModel = remember(refresh, busy) { DictionaryManager.hasModel(context, lang) }
+            val state = when {
+                hasWords && hasModel -> "منزَّلة: قاموس + نموذج جمل"
+                hasWords -> "منزَّلة: قاموس فقط"
+                lang.builtIn -> "مدمجة (تنزيل القاموس الكامل اختياري)"
+                else -> "غير منزَّلة"
+            }
+            SwitchRow(lang.nativeName, R.drawable.ic_ios_globe, if (lang.rtl) IconGreen else IconBlue, on, subtitle = state) { v ->
+                val list = if (v) settings.enabledLanguages + lang else settings.enabledLanguages - lang
+                if (list.isNotEmpty()) {
+                    scope.launch {
+                        repo.setEnabledLanguages(list)
+                        withContext(Dispatchers.IO) { if (v) DictionaryManager.load(context, lang) else DictionaryManager.unload(lang) }
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 14.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                scope.launch {
-                    busy = true
-                    status = "جاري الاتصال..."
-                    val result = withContext(Dispatchers.IO) {
-                        DictionaryManager.download(context) { message -> status = message }
+                SolidButton(
+                    text = if (busy == lang) "جاري التنزيل..." else if (hasWords) "تحديث" else "تنزيل",
+                    enabled = busy == null,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    scope.launch {
+                        busy = lang
+                        status = "جاري الاتصال..."
+                        val result = withContext(Dispatchers.IO) {
+                            DictionaryManager.download(context, lang) { message -> status = message }
+                        }
+                        result.onSuccess { info ->
+                            status = "تم تنزيل ${lang.nativeName}: ${info.words} كلمة" +
+                                if (info.sentences > 0) " + نموذج من ${info.sentences} جملة" else " (تعذّر نموذج الجمل، القاموس يعمل)"
+                            if (lang !in settings.enabledLanguages) repo.setEnabledLanguages(settings.enabledLanguages + lang)
+                        }.onFailure {
+                            status = "فشل التنزيل، تأكد من الاتصال بالإنترنت ثم أعد المحاولة"
+                        }
+                        busy = null
+                        refresh++
                     }
-                    result.onSuccess { (en, ar) ->
-                        counts = en to ar
-                        downloaded = true
-                        status = "تم التنزيل: $en كلمة إنكليزية · $ar كلمة عربية (مدموجة مع المدمج)"
-                    }.onFailure {
-                        status = "فشل التنزيل، تأكد من الاتصال بالإنترنت ثم أعد المحاولة"
+                }
+                if (hasWords) {
+                    SolidButton(text = "حذف", enabled = busy == null, modifier = Modifier.weight(1f)) {
+                        scope.launch {
+                            withContext(Dispatchers.IO) { DictionaryManager.delete(context, lang) }
+                            status = "حُذف ما نُزِّل للغة ${lang.nativeName}"
+                            refresh++
+                        }
                     }
-                    busy = false
                 }
             }
-            if (downloaded) {
-                SolidButton(text = "حذف", enabled = !busy, modifier = Modifier.weight(1f)) {
-                    DictionaryManager.delete(context)
-                    downloaded = false
-                    counts = BigDictionary.size(KeyboardLanguage.ENGLISH) to BigDictionary.size(KeyboardLanguage.ARABIC)
-                    status = "حُذف القاموس المنزّل (بقي القاموس المدمج)"
-                }
-            }
+        }
+        if (status.isNotEmpty()) {
+            Text(status, color = SemoPalette.TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(14.dp))
         }
     }
 }

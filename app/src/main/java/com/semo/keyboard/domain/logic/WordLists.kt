@@ -1,7 +1,34 @@
 package com.semo.keyboard.domain.logic
 
+import com.semo.keyboard.domain.model.KeyboardLanguage
+
 /** قوائم كلمات صغيرة مدمجة للإكمال التلقائي، مرتبة تقريبًا حسب الشيوع. لا اتصال بالإنترنت. */
 object WordLists {
+
+    /** القائمة المدمجة الصغيرة للغة (للعربي والإنكليزي فقط؛ باقي اللغات تعتمد قاموسها المنزَّل) */
+    fun forLanguage(language: KeyboardLanguage): List<String> = when (language) {
+        KeyboardLanguage.ENGLISH -> english
+        KeyboardLanguage.ARABIC -> arabic
+        else -> emptyList()
+    }
+
+    /** كلمات تظهر بالشريط عند بداية الجملة قبل أن يتعلّم النموذج شيئًا */
+    fun startersFor(language: KeyboardLanguage): List<String> = when (language) {
+        KeyboardLanguage.ENGLISH -> englishStarters
+        KeyboardLanguage.ARABIC -> arabicStarters
+        KeyboardLanguage.FRENCH -> listOf("Je", "Le", "Bonjour")
+        KeyboardLanguage.SPANISH -> listOf("Hola", "Yo", "El")
+        KeyboardLanguage.GERMAN -> listOf("Ich", "Der", "Hallo")
+        KeyboardLanguage.TURKISH -> listOf("Ben", "Merhaba", "Bu")
+        KeyboardLanguage.RUSSIAN -> listOf("Я", "Привет", "Как")
+        KeyboardLanguage.PERSIAN -> listOf("من", "سلام", "این")
+        KeyboardLanguage.PORTUGUESE -> listOf("Eu", "Olá", "O")
+        KeyboardLanguage.ITALIAN -> listOf("Io", "Ciao", "Il")
+        KeyboardLanguage.INDONESIAN -> listOf("Saya", "Halo", "Apa")
+        KeyboardLanguage.DUTCH -> listOf("Ik", "Hallo", "De")
+        KeyboardLanguage.POLISH -> listOf("Ja", "Cześć", "To")
+        KeyboardLanguage.UKRAINIAN -> listOf("Я", "Привіт", "Як")
+    }
 
     val englishStarters = listOf("I", "The", "I'm")
     val arabicStarters = listOf("أنا", "كيف", "مرحبا")

@@ -23,11 +23,10 @@ object BigDictionary {
         val buckets: HashMap<Int, IntArray>
     )
 
-    @Volatile private var english: Index? = null
-    @Volatile private var arabic: Index? = null
+    /** فهرس لكل لغة محمَّلة (تُحمَّل اللغات المفعّلة فقط كي لا تتضخّم الذاكرة) */
+    private val indices = java.util.concurrent.ConcurrentHashMap<KeyboardLanguage, Index>()
 
-    private fun indexOf(language: KeyboardLanguage): Index? =
-        if (language == KeyboardLanguage.ARABIC) arabic else english
+    private fun indexOf(language: KeyboardLanguage): Index? = indices[language]
 
     fun size(language: KeyboardLanguage): Int = indexOf(language)?.words?.size ?: 0
 
@@ -52,19 +51,37 @@ object BigDictionary {
     fun wordAt(rank: Int, language: KeyboardLanguage): String? = indexOf(language)?.words?.getOrNull(rank)
 
     fun clear(language: KeyboardLanguage) {
-        if (language == KeyboardLanguage.ARABIC) arabic = null else english = null
+        indices.remove(language)
     }
 
     /** يبني الفهرس من قائمة مرتبة حسب الشيوع (ثقيل نسبيًا: يُستدعى بخيط خلفي) */
     fun setWords(language: KeyboardLanguage, words: List<String>) {
-        val index = build(words)
-        if (language == KeyboardLanguage.ARABIC) arabic = index else english = index
+        indices[language] = build(words)
     }
 
-    private fun normChar(c: Char): Char = when (c) {
+    /**
+     * توحيد الحرف لمفتاح البحث: أحرف صغيرة، توحيد الهمزات العربية والياء والكاف الفارسيتين،
+     * وإزالة التشكيل اللاتيني (café ← cafe) كي تُقترح الكلمة بحروفها الصحيحة حتى لو كُتبت بلا تشكيل.
+     */
+    fun normChar(c: Char): Char = when (c) {
         'أ', 'إ', 'آ', 'ٱ' -> 'ا'
         'ؤ' -> 'و'
-        'ئ' -> 'ي'
+        'ئ', 'ي' -> 'ی'
+        'ك' -> 'ک'
+        'à', 'á', 'â', 'ä', 'ã', 'å', 'ā', 'ą', 'À', 'Á', 'Â', 'Ä', 'Ã', 'Å', 'Ą' -> 'a'
+        'ç', 'ć', 'č', 'Ç', 'Ć', 'Č' -> 'c'
+        'è', 'é', 'ê', 'ë', 'ē', 'ę', 'ě', 'È', 'É', 'Ê', 'Ë', 'Ę' -> 'e'
+        'ì', 'í', 'î', 'ï', 'Ì', 'Í', 'Î', 'Ï' -> 'i'
+        'ñ', 'ń', 'Ñ', 'Ń' -> 'n'
+        'ò', 'ó', 'ô', 'ö', 'õ', 'ø', 'ő', 'Ò', 'Ó', 'Ô', 'Ö', 'Õ', 'Ø' -> 'o'
+        'ù', 'ú', 'û', 'ü', 'ů', 'Ù', 'Ú', 'Û', 'Ü' -> 'u'
+        'ý', 'ÿ', 'Ý' -> 'y'
+        'ś', 'š', 'Ś', 'Š' -> 's'
+        'ź', 'ż', 'ž', 'Ź', 'Ż', 'Ž' -> 'z'
+        'ł', 'Ł' -> 'l'
+        'ё', 'Ё' -> 'е'
+        'ґ', 'Ґ' -> 'г'
+        'İ' -> 'i'
         else -> c.lowercaseChar()
     }
 

@@ -121,6 +121,7 @@ import com.semo.keyboard.domain.model.ThemeMode
 import com.semo.keyboard.ui.theme.KeyMetrics
 import com.semo.keyboard.ui.theme.SemoKeyboardColors
 import com.semo.keyboard.ui.theme.keyMetrics
+import com.semo.keyboard.ui.theme.LocalKeyboardScale
 import com.semo.keyboard.ui.theme.semoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -161,10 +162,10 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
-    val metrics = remember(state.style, state.size, state.keySpacing, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow) {
+    val metrics = remember(state.style, state.size, state.keySpacing, state.keyboardScale, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow) {
         // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
         val width = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
-        val base = keyMetrics(state.style, state.size, width, state.keySpacing)
+        val base = keyMetrics(state.style, state.size, width, state.keySpacing, state.keyboardScale)
         if (screenWidthDp > screenHeightDp) {
             // الوضع الأفقي: العرض كبير فكانت المفاتيح تطلع بأقصى ارتفاع وتغطي معظم الشاشة.
             // نحصر ارتفاع اللوحة بحوالي نصف الشاشة كي يبقى الحقل النصي ظاهرًا.
@@ -240,7 +241,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
 
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Ltr,
-        LocalTouchTuning provides tuning
+        LocalTouchTuning provides tuning,
+        LocalKeyboardScale provides state.keyboardScale
     ) {
         Row(
             modifier = Modifier
@@ -447,7 +449,7 @@ private fun RowScope.OneHandSide(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_tool_chevron),
-                contentDescription = tr(state.language == KeyboardLanguage.ARABIC, "توسيع", "Expand"),
+                contentDescription = tr(state.language.rtl, "توسيع", "Expand"),
                 tint = colors.text,
                 modifier = Modifier
                     .size(22.dp)
@@ -684,7 +686,7 @@ private fun RowScope.SuggestionsRow(
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    text = if (latestClip.isClipImage()) tr(state.language == KeyboardLanguage.ARABIC, "صورة", "Image")
+                    text = if (latestClip.isClipImage()) tr(state.language.rtl, "صورة", "Image")
                     else latestClip.clipDisplayText().replace('\n', ' ').trim(),
                     color = colors.suggestion,
                     fontSize = 15.sp,
@@ -1179,12 +1181,13 @@ private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
         KeyAction.Enter -> R.drawable.ic_ios_return
         else -> null
     }
+    val kScale = 0.6f + 0.4f * LocalKeyboardScale.current
     if (iconRes != null) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = def.label,
             tint = textColor,
-            modifier = Modifier.size(iconSize)
+            modifier = Modifier.size(iconSize * kScale)
         )
     } else {
         val isLetter = def.action is KeyAction.Character
@@ -1201,7 +1204,7 @@ private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
         Text(
             text = def.label,
             color = textColor,
-            fontSize = (labelSize / fontScale).sp,
+            fontSize = (labelSize * kScale / fontScale).sp,
             textAlign = TextAlign.Center,
             maxLines = 1
         )

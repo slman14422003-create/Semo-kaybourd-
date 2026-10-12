@@ -11,12 +11,8 @@ import kotlin.math.ln
  */
 object SwipeDecoder {
 
-    private fun norm(c: Char): Char = when (c) {
-        'أ', 'إ', 'آ', 'ٱ' -> 'ا'
-        'ؤ' -> 'و'
-        'ئ' -> 'ي'
-        else -> c.lowercaseChar()
-    }
+    /** نفس توحيد مفاتيح القاموس (الهمزات والتشكيل اللاتيني) كي تتطابق الكلمة مع حروف المسار */
+    private fun norm(c: Char): Char = BigDictionary.normChar(c)
 
     private fun collapse(s: String): String {
         val sb = StringBuilder()

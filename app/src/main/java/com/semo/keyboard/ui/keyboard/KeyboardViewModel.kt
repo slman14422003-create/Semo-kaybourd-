@@ -10,6 +10,8 @@ import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.logic.AutoCorrect
 import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.logic.NextWordModel
+import com.semo.keyboard.domain.logic.NgramModel
+import com.semo.keyboard.data.DictionaryManager
 import com.semo.keyboard.domain.logic.EmojiSuggestions
 import com.semo.keyboard.domain.logic.MathEvaluator
 import com.semo.keyboard.domain.logic.SuggestionEngine
@@ -115,7 +117,7 @@ class KeyboardViewModel(
         ) { t: LocalState, s: SemoSettings, clips: List<ClipItem> ->
             KeyboardUiState(
                 page = t.page,
-                shiftState = if (s.language == KeyboardLanguage.ENGLISH) t.shift else ShiftState.OFF,
+                shiftState = if (s.language.cased) t.shift else ShiftState.OFF,
                 language = s.language,
                 themeMode = s.themeMode,
                 soundEnabled = s.soundEnabled,
@@ -159,6 +161,8 @@ class KeyboardViewModel(
                 spaceBarAction = s.spaceBarAction,
                 keepSymbolPanel = s.keepSymbolPanel,
                 recentEmojis = s.recentEmojis,
+                enabledLanguages = s.enabledLanguages,
+                keyboardScale = s.keyboardScale,
                 freshClip = t.freshClip
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, KeyboardUiState())
@@ -304,9 +308,15 @@ class KeyboardViewModel(
             KeyAction.SwitchToNumpad -> setPage(KeyboardPage.NUMPAD)
             KeyAction.Emoji -> setPage(KeyboardPage.EMOJI)
             KeyAction.SwitchLanguage -> {
-                val next = if (state.language == KeyboardLanguage.ENGLISH) KeyboardLanguage.ARABIC else KeyboardLanguage.ENGLISH
+                // دورة اللغات المفعّلة بالإعدادات (الافتراضي إنكليزي ↔ عربي)
+                val cycle = state.enabledLanguages.ifEmpty { listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC) }
+                val next = cycle[(cycle.indexOf(state.language) + 1) % cycle.size]
                 setPage(KeyboardPage.LETTERS)
-                viewModelScope.launch { settingsRepository.setLanguage(next) }
+                viewModelScope.launch {
+                    // قاموس اللغة ونموذج جملها يُحمَّلان بالخلفية لو لم يكونا محمَّلين
+                    withContext(Dispatchers.IO) { DictionaryManager.ensureLoaded(next) }
+                    settingsRepository.setLanguage(next)
+                }
             }
             KeyAction.Globe -> bridge.switchKeyboard()
             KeyAction.Mic -> bridge.startVoiceInput()
@@ -367,7 +377,7 @@ class KeyboardViewModel(
     fun onSwipeWord(path: List<String>) {
         val state = uiState.value
         val lang = state.language
-        val dictionary = if (lang == KeyboardLanguage.ARABIC) WordLists.arabic else WordLists.english
+        val dictionary = WordLists.forLanguage(lang)
         val learned = learnedWords.value.filter { SuggestionEngine.languageOf(it, lang) == lang }
         // فك المسار على خيط خلفي: مع القاموس الكبير قد يأخذ عشرات الميلي ثانية
         viewModelScope.launch {
@@ -383,7 +393,7 @@ class KeyboardViewModel(
         val lang = state.language
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
         undo = null
-        val shift = if (lang == KeyboardLanguage.ENGLISH) state.shiftState else ShiftState.OFF
+        val shift = if (lang.cased) state.shiftState else ShiftState.OFF
         fun styled(w: String): String = when (shift) {
             ShiftState.OFF -> w
             ShiftState.ON -> w.replaceFirstChar { it.uppercase() }
@@ -437,10 +447,18 @@ class KeyboardViewModel(
             val before = bridge.textBeforeCursor(40)
             val word = SuggestionEngine.currentWord(before)
             if (word.isNotEmpty()) bridge.deleteSurrounding(word.length)
-            learnPair(before, word, suggestion)
+            learnPair(before, word, suggestion.substringBefore(' '))
         }
         bridge.commitText("$suggestion ")
-        learnWord(suggestion)
+        // تتمة من عدة كلمات: نتعلّم كل كلمة وكل زوج متتالٍ فيها (لا نحفظ العبارة كلها ككلمة واحدة)
+        val parts = suggestion.split(' ').filter { it.isNotEmpty() }
+        parts.forEach { learnWord(it) }
+        if (parts.size > 1 && canLearn()) {
+            for (i in 1 until parts.size) {
+                if (parts[i].length >= 2) pendingPairs.add(BigDictionary.key(parts[i - 1]) to normalizeForLearning(parts[i]))
+            }
+            scheduleLearnFlush()
+        }
         consumeOneShotShift()
         refreshSuggestions()
     }
@@ -588,7 +606,7 @@ class KeyboardViewModel(
     }
 
     private fun autoCapitalize(language: KeyboardLanguage) {
-        if (language != KeyboardLanguage.ENGLISH || !uiState.value.autoCapitalize) return
+        if (!language.cased || !uiState.value.autoCapitalize) return
         transient.update { if (it.shift == ShiftState.OFF) it.copy(shift = ShiftState.ON) else it }
     }
 
@@ -730,35 +748,76 @@ class KeyboardViewModel(
             val prevWord = if (!atStart && before.endsWith(" ")) SuggestionEngine.currentWord(trimmed) else ""
             val emoji = if (state.suggestEmojis && prevWord.isNotEmpty()) EmojiSuggestions.forWord(prevWord) else null
             val base = when {
-                atStart -> SuggestionEngine.starters(state.language)
-                // لو ما في توقّع للكلمة السابقة نعرض كلمات بداية شائعة بدل أن يبقى الشريط فارغًا
+                atStart -> {
+                    val lang = state.language
+                    (NgramModel.starters(lang, 3) + SuggestionEngine.starters(lang))
+                        .distinctBy { it.lowercase() }.take(3)
+                }
                 state.nextWord -> {
                     val lang = if (prevWord.isNotEmpty()) SuggestionEngine.languageOf(prevWord, state.language) else state.language
-                    val predicted =
-                        if (prevWord.isNotEmpty()) {
-                            val head = trimmed.dropLast(prevWord.length).trimEnd(' ')
-                            val prev2 = if (head.length < trimmed.length - prevWord.length) SuggestionEngine.currentWord(head) else ""
-                            NextWordModel.predict(prevWord, lang, learnedBigrams.value, 3, prev2)
-                        } else emptyList()
-                    predicted.ifEmpty { SuggestionEngine.starters(lang) }
+                    if (prevWord.isNotEmpty()) {
+                        val ctx = lastWords(trimmed, 3)
+                        val prev2 = if (ctx.size >= 2) ctx[ctx.size - 2] else ""
+                        val words = NextWordModel.predict(prevWord, lang, learnedBigrams.value, 3, prev2)
+                        val withPhrase = if (words.isNotEmpty()) {
+                            val phrase = fitPhrase(NextWordModel.phrase(lang, learnedBigrams.value, ctx, words[0], 4))
+                            if (phrase != null) listOfNotNull(words[0], phrase, words.getOrNull(1)) else words
+                        } else words
+                        withPhrase.ifEmpty { SuggestionEngine.starters(lang) }
+                    } else SuggestionEngine.starters(lang)
                 }
                 else -> emptyList()
             }
             return SuggestionResult(if (emoji != null) listOf(emoji) + base.take(2) else base.take(3), "", null, clear)
         }
         val language = SuggestionEngine.languageOf(word, state.language)
-        val ctxPrev = run {
-            val head = before.dropLast(word.length)
-            if (head.endsWith(' ')) SuggestionEngine.currentWord(head.trimEnd(' ')) else ""
+        val ctxWords = lastWords(before.dropLast(word.length), 2)
+        val ctxPrev = ctxWords.lastOrNull() ?: ""
+        val ctxPrev2 = if (ctxWords.size >= 2) ctxWords[0] else ""
+        var completions = SuggestionEngine.suggest(
+            word, language, learnedWords.value, limit = 3,
+            context = ctxPrev, bigrams = learnedBigrams.value, context2 = ctxPrev2
+        ).filter { !it.equals(word, ignoreCase = true) }
+        // الكلمة غير معروفة وما كفت الإكمالات: نكمّل بتصحيحات «هل تقصد»
+        if (completions.size < 2 && state.spellCheck) {
+            completions = (completions + SuggestionEngine.corrections(word, language, learnedKeys.value, limit = 2))
+                .distinctBy { it.lowercase() }
         }
-        var completions = SuggestionEngine.suggest(word, language, learnedWords.value, limit = 2, context = ctxPrev, bigrams = learnedBigrams.value)
-            .filter { !it.equals(word, ignoreCase = true) }
-        // لا إكمال للكلمة ولا هي معروفة: نقترح تصحيحها («هل تقصد»)
-        if (completions.isEmpty() && state.spellCheck) {
-            completions = SuggestionEngine.corrections(word, language, learnedKeys.value, limit = 2)
+        // تتمة الجملة: من أفضل إكمال نكمل بكلمات مرجّحة (الخانة الثانية) بدل إكمال ثانٍ
+        var list = completions.take(2)
+        if (completions.isNotEmpty() && state.nextWord) {
+            val phrase = fitPhrase(NextWordModel.phrase(language, learnedBigrams.value, ctxWords, completions[0], 4))
+            if (phrase != null) list = listOf(completions[0], phrase)
         }
         val emoji = if (state.suggestEmojis) EmojiSuggestions.forWord(word) else null
-        return SuggestionResult(if (emoji != null) completions.take(1) + emoji else completions, word, null, clear)
+        return SuggestionResult(if (emoji != null) list.take(1) + emoji else list, word, null, clear)
+    }
+
+    /** آخر [n] كلمات من [text] (بلا تجاوز علامات الترقيم) */
+    private fun lastWords(text: String, n: Int): List<String> {
+        val out = ArrayList<String>()
+        var rest = text.trimEnd(' ')
+        while (out.size < n && rest.isNotEmpty()) {
+            val w = SuggestionEngine.currentWord(rest)
+            if (w.isEmpty()) break
+            out.add(0, w)
+            rest = rest.dropLast(w.length).trimEnd(' ')
+        }
+        return out
+    }
+
+    /** يقصّ التتمة لتتسع بخانة الشريط (حتى 24 حرفًا)؛ null لو أقل من كلمتين */
+    private fun fitPhrase(words: List<String>): String? {
+        val out = StringBuilder()
+        var count = 0
+        for (w in words) {
+            val add = if (out.isEmpty()) w.length else w.length + 1
+            if (out.length + add > 24) break
+            if (out.isNotEmpty()) out.append(' ')
+            out.append(w)
+            count++
+        }
+        return if (count >= 2) out.toString() else null
     }
 
     private companion object {

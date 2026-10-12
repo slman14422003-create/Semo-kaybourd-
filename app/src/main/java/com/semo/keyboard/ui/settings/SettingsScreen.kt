@@ -148,7 +148,7 @@ internal fun SettingsScreen(
         SettingsPage.SHORTCUTS -> ShortcutsPage(repo, shortcutsRepo, settings) { page = SettingsPage.TYPING }
         SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home)
         SettingsPage.TOUCH -> TouchPage(repo, settings, home)
-        SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned.size, home)
+        SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned.size, home) { page = SettingsPage.LANGUAGES }
         SettingsPage.PRIVACY -> PrivacyPage(repo, clipboardRepo, settings, home)
         SettingsPage.ABOUT -> AboutPage(repo, onReplay, home)
     }
@@ -278,7 +278,7 @@ private fun HomePage(
             Divider()
             NavRow(
                 "المظهر والحجم",
-                "${themeLabel(settings.themeMode)} · ارتفاع ${sizeLabel(settings.size)}",
+                "${themeLabel(settings.themeMode)} · حجم ${(settings.keyboardScale * 100).roundToInt()}% · ارتفاع ${sizeLabel(settings.size)}",
                 R.drawable.ic_tool_settings, IconGray
             ) { onOpen(SettingsPage.APPEARANCE) }
             Divider()
@@ -316,6 +316,7 @@ private fun HomePage(
 private fun LanguagesPage(repo: SettingsRepository, settings: SemoSettings, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     SubPage("اللغات والتخطيط", onBack) {
+        LanguageLibraryBlock(repo, settings)
         Section("ترتيب المفاتيح") {
             Block("الإنكليزي", R.drawable.ic_ios_globe, IconBlue) {
                 Segmented(
@@ -527,6 +528,20 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     selected = settings.themeMode,
                     onSelect = { scope.launch { repo.setThemeMode(it) } }
                 )
+            }
+            Divider()
+            var scaleDraft by remember(settings.keyboardScale) { mutableStateOf(settings.keyboardScale) }
+            SliderRow(
+                title = "حجم الكيبورد",
+                valueLabel = "${(scaleDraft * 100).roundToInt()}%",
+                value = scaleDraft,
+                range = 0.8f..1.3f,
+                steps = 9,
+                onChange = { scaleDraft = it },
+                onFinish = { scope.launch { repo.setKeyboardScale(scaleDraft) } }
+            )
+            if (settings.keyboardScale != 1f) {
+                ActionRow("إعادة الحجم إلى 100%") { scope.launch { repo.setKeyboardScale(1f) } }
             }
             Divider()
             Block("ارتفاع المفاتيح", R.drawable.ic_tool_cursor, IconTeal) {
@@ -749,11 +764,19 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
 // ---------------- القاموس والكلمات ----------------
 
 @Composable
-private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learnedCount: Int, onBack: () -> Unit) {
+private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learnedCount: Int, onBack: () -> Unit, onOpenLanguages: () -> Unit) {
     val scope = rememberCoroutineScope()
     SubPage("القاموس والكلمات", onBack) {
         Section("القاموس") {
-            DictionaryBlock()
+            Text(
+                "القاموس ونموذج الجمل لكل لغة (إنكليزي، عربي، وغيرهم) بيتنزّلوا من مكتبة اللغات.",
+                color = SemoPalette.TextSecondary,
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(14.dp)
+            )
+            Divider()
+            ActionRow("فتح مكتبة اللغات والتنزيل", onClick = onOpenLanguages)
         }
         Section("الكلمات المتعلَّمة") {
             Text(

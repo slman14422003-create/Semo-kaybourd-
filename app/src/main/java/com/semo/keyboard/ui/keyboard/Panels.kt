@@ -421,7 +421,7 @@ internal fun EmojiPanel(
     panelHeight: Dp,
     viewModel: KeyboardViewModel
 ) {
-    val arabic = state.language == KeyboardLanguage.ARABIC
+    val arabic = state.language.rtl
     val density = LocalDensity.current
     // "المستخدمة مؤخرًا" تُلتقط مرة عند فتح اللوحة كي لا تتحرك الخلايا تحت الإصبع أثناء الاستعمال
     val recents = remember { state.recentEmojis }
@@ -648,7 +648,7 @@ internal fun ClipboardPanel(
     bottomInset: Dp,
     viewModel: KeyboardViewModel
 ) {
-    val arabic = state.language == KeyboardLanguage.ARABIC
+    val arabic = state.language.rtl
     var pinnedOnly by remember { mutableStateOf(false) }
     val hasPinned = remember(state.clipItems) { state.clipItems.any { it.pinned } }
     val hasUnpinned = remember(state.clipItems) { state.clipItems.any { !it.pinned } }
@@ -931,7 +931,7 @@ internal fun EditPanel(
     panelHeight: Dp,
     viewModel: KeyboardViewModel
 ) {
-    val arabic = state.language == KeyboardLanguage.ARABIC
+    val arabic = state.language.rtl
     Column(
         modifier = Modifier
             .fillMaxWidth()

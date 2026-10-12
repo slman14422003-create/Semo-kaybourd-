@@ -67,22 +67,22 @@ data class SemoKeyboardColors(
     val suggestion: Color
 )
 
-/** ألوان مقيسة بالبكسل من صورة كيبورد آيفون (iOS 18 داكن) */
+/** ألوان iOS 18 الداكنة المقيسة من صورة مرجعية، مع تغميق خفيف بنسبة 8% */
 private val Ios18Dark = SemoKeyboardColors(
-    panel = Color(0xFF222325),
-    key = Color(0xFF646567),
-    keyPressed = Color(0xFF7B7C7E),
-    keySpecial = Color(0xFF3F4042),
+    panel = Color(0xFF1F2022),
+    key = Color(0xFF5C5D5F),
+    keyPressed = Color(0xFF717274),
+    keySpecial = Color(0xFF3A3B3D),
     keyAccent = Color(0xFF0A84FF),
     text = Color(0xFFFFFFFF),
     textMuted = Color(0xFF9B9C9F),
     textOnAccent = Color.White,
-    keyShadow = Color(0xFF0C0C0D),
-    chip = Color(0xFF646567),
+    keyShadow = Color(0xFF0A0A0B),
+    chip = Color(0xFF5C5D5F),
     shiftActive = Color(0xFFD2D3D5),
     onShiftActive = Color(0xFF000000),
-    bubble = Color(0xFF6F7072),
-    divider = Color(0xFF48494B),
+    bubble = Color(0xFF666769),
+    divider = Color(0xFF424345),
     suggestion = Color(0xFFE9EAEC)
 )
 
@@ -132,8 +132,10 @@ fun keyMetrics(
     style: KeyboardStyle,
     size: KeyboardSize,
     widthDp: Float = 411f,
-    spacing: KeySpacing = KeySpacing.NORMAL
+    spacing: KeySpacing = KeySpacing.NORMAL,
+    scale: Float = 1f
 ): KeyMetrics {
+    val sc = scale.coerceIn(0.8f, 1.3f)
     val pitch = (widthDp - 6f) / 10f
     val keyWidth = pitch * 0.82f
     val factor = when (size) {
@@ -141,10 +143,13 @@ fun keyMetrics(
         KeyboardSize.MEDIUM -> 1f
         KeyboardSize.LARGE -> 1.09f
     }
-    val height = (keyWidth * 1.27f * factor).coerceIn(37f, 52f)
+    val height = (keyWidth * 1.27f * factor * sc).coerceIn(32f, 66f)
     // المسافة بين المفاتيح حسب اختيار المستخدم (ضيّق/عادي/واسع)
-    val rowSpacing = ((keyWidth * 0.41f).coerceIn(10f, 16f) * spacing.vertical).coerceIn(7f, 19f)
+    val rowSpacing = ((keyWidth * 0.41f).coerceIn(10f, 16f) * spacing.vertical * (0.6f + 0.4f * sc)).coerceIn(6f, 21f)
     val keySpacing = ((pitch * 0.18f).coerceIn(5f, 9f) * spacing.horizontal).coerceIn(3.5f, 12f)
     val radius = (keyWidth * 0.2f).coerceIn(5.5f, 9f)
-    return KeyMetrics(height.dp, keySpacing.dp, rowSpacing.dp, 3.dp, radius.dp, 0.dp, 54.dp, 46.dp)
+    return KeyMetrics(height.dp, keySpacing.dp, rowSpacing.dp, 3.dp, radius.dp, 0.dp, 54.dp, (46f * (0.85f + 0.15f * sc)).dp)
 }
+
+/** مقياس حجم اللوحة الحالي (0.8–1.3): يكبّر الخطوط والأيقونات مع ارتفاع المفاتيح */
+val LocalKeyboardScale = androidx.compose.runtime.compositionLocalOf { 1f }

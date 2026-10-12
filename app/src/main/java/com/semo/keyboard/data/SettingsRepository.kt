@@ -119,6 +119,14 @@ private fun decodeToolbar(raw: String?): List<ToolbarItem> {
     return if (list.isEmpty()) ToolbarItem.values().toList() else list
 }
 
+/** اللغات المفعّلة المحفوظة (CSV بالترتيب)؛ لو لا شيء محفوظ نرجع للإنكليزي والعربي */
+private fun decodeLanguages(raw: String?): List<KeyboardLanguage> {
+    val default = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC)
+    if (raw == null) return default
+    val list = raw.split(',').mapNotNull { n -> runCatching { enumValueOf<KeyboardLanguage>(n) }.getOrNull() }.distinct()
+    return if (list.isEmpty()) default else list
+}
+
 private inline fun <reified T : Enum<T>> String?.toEnumOr(default: T): T =
     this?.let { s -> runCatching { enumValueOf<T>(s) }.getOrNull() } ?: default
 
@@ -167,6 +175,8 @@ class SettingsRepository(context: Context) {
         val KEY_SPACING = stringPreferencesKey("key_spacing")
         val NUM_KEY_TARGET = stringPreferencesKey("num_key_target")
         val TOOLBAR_ITEMS = stringPreferencesKey("toolbar_items")
+        val ENABLED_LANGUAGES = stringPreferencesKey("enabled_languages")
+        val KEYBOARD_SCALE = floatPreferencesKey("keyboard_scale")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -208,7 +218,9 @@ class SettingsRepository(context: Context) {
                 backspaceSpeed = p[Keys.BACKSPACE_SPEED].toEnumOr(BackspaceSpeed.NORMAL),
                 spaceBarAction = p[Keys.SPACE_ACTION].toEnumOr(SpaceBarAction.CURSOR),
                 keepSymbolPanel = p[Keys.KEEP_SYMBOLS] ?: true,
-                recentEmojis = p[Keys.RECENT_EMOJIS].orEmpty().split(' ').filter { it.isNotEmpty() }
+                recentEmojis = p[Keys.RECENT_EMOJIS].orEmpty().split(' ').filter { it.isNotEmpty() },
+                enabledLanguages = decodeLanguages(p[Keys.ENABLED_LANGUAGES]),
+                keyboardScale = (p[Keys.KEYBOARD_SCALE] ?: 1f).coerceIn(0.8f, 1.3f)
             )
         }
         .distinctUntilChanged()
@@ -248,6 +260,18 @@ class SettingsRepository(context: Context) {
     suspend fun setBackspaceSpeed(v: BackspaceSpeed) { store.edit { it[Keys.BACKSPACE_SPEED] = v.name } }
     suspend fun setSpaceBarAction(v: SpaceBarAction) { store.edit { it[Keys.SPACE_ACTION] = v.name } }
     suspend fun setKeepSymbolPanel(v: Boolean) { store.edit { it[Keys.KEEP_SYMBOLS] = v } }
+    suspend fun setKeyboardScale(v: Float) { store.edit { it[Keys.KEYBOARD_SCALE] = v.coerceIn(0.8f, 1.3f) } }
+
+    /** اللغات التي تدور عليها الكرة الأرضية؛ لا تُترك القائمة فارغة أبدًا */
+    suspend fun setEnabledLanguages(v: List<KeyboardLanguage>) {
+        val list = v.distinct().ifEmpty { listOf(KeyboardLanguage.ENGLISH) }
+        store.edit { p ->
+            p[Keys.ENABLED_LANGUAGES] = list.joinToString(",") { it.name }
+            // لو اللغة الحالية انحذفت من القائمة ننتقل لأولى اللغات المفعّلة
+            val current = p[Keys.LANGUAGE].toEnumOr(KeyboardLanguage.ENGLISH)
+            if (current !in list) p[Keys.LANGUAGE] = list.first().name
+        }
+    }
 
     /** يعيد كل الإعدادات للافتراضي، ويُبقي إكمال الدليل واللغة الحالية والإيموجي الأخيرة */
     suspend fun resetToDefaults() {

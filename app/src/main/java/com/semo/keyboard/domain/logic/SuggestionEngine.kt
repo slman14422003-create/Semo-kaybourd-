@@ -1,6 +1,8 @@
 package com.semo.keyboard.domain.logic
 
 import com.semo.keyboard.domain.model.KeyboardLanguage
+import com.semo.keyboard.domain.model.Script
+import kotlin.math.ln
 
 /** إكمال الكلمات: كلمات المستخدم المتعلَّمة أولًا ثم القوائم المدمجة. منطق بحت بلا Android. */
 object SuggestionEngine {
@@ -14,63 +16,103 @@ object SuggestionEngine {
 
     private fun isWordChar(c: Char): Boolean = c.isLetter() || c == '\'' || c == '’'
 
-    private fun isArabicChar(c: Char): Boolean = c in '\u0600'..'\u06FF'
-
-    /** لغة الكلمة حسب أول حرف فيها، وإلا نرجع للغة اللوحة الحالية */
-    fun languageOf(word: String, fallback: KeyboardLanguage): KeyboardLanguage {
-        val first = word.firstOrNull() ?: return fallback
-        return if (isArabicChar(first)) KeyboardLanguage.ARABIC else KeyboardLanguage.ENGLISH
+    private fun scriptOf(c: Char): Script? = when {
+        c in '\u0600'..'\u06FF' || c in '\u0750'..'\u077F' -> Script.ARABIC
+        c in '\u0400'..'\u04FF' -> Script.CYRILLIC
+        c.isLetter() -> Script.LATIN
+        else -> null
     }
 
-    fun starters(language: KeyboardLanguage): List<String> =
-        if (language == KeyboardLanguage.ARABIC) WordLists.arabicStarters else WordLists.englishStarters
+    /** لغة الكلمة حسب نظام كتابة أول حرف فيها، وإلا نرجع للغة اللوحة الحالية */
+    fun languageOf(word: String, fallback: KeyboardLanguage): KeyboardLanguage {
+        val first = word.firstOrNull { it.isLetter() } ?: return fallback
+        val script = scriptOf(first) ?: return fallback
+        if (fallback.script == script) return fallback
+        return when (script) {
+            Script.ARABIC -> KeyboardLanguage.ARABIC
+            Script.CYRILLIC -> KeyboardLanguage.RUSSIAN
+            Script.LATIN -> KeyboardLanguage.ENGLISH
+        }
+    }
 
+    fun starters(language: KeyboardLanguage): List<String> = WordLists.startersFor(language)
+
+    private class Cand(val word: String, var score: Double)
+
+    /**
+     * إكمال الكلمة الجارية. كل مرشّح ياخذ درجة من عدة مصادر وتُجمع الدرجات: كلمات كتبتها بعد الكلمة السابقة
+     * (ثلاثي ثم ثنائي) الأعلى، ثم نموذج الجمل بحسب احتمال الكلمة بهالسياق، ثم الكلمات المتعلَّمة، ثم القاموس
+     * (الأشيع أولًا). بهذا "ar" بعد "how" تعطي "are" قبل "area"، و"ha" بعد "I" تعطي "have" قبل "hair".
+     */
     fun suggest(
         prefix: String,
         language: KeyboardLanguage,
         learned: List<String>,
         limit: Int = 3,
         context: String = "",
-        bigrams: Map<String, List<String>> = emptyMap()
+        bigrams: Map<String, List<String>> = emptyMap(),
+        context2: String = ""
     ): List<String> {
         if (prefix.isEmpty()) return emptyList()
-        val arabic = language == KeyboardLanguage.ARABIC
-        val builtIn = if (arabic) WordLists.arabic else WordLists.english
+        val pk = BigDictionary.key(prefix)
+        if (pk.isEmpty()) return listOf(prefix)
         val p = prefix.lowercase()
-        val out = LinkedHashSet<String>()
+        val cands = LinkedHashMap<String, Cand>()
 
-        // الكلمات التي تعلّمتها اللوحة بعد الكلمة السابقة تتقدّم على غيرها
+        fun matches(w: String): Boolean {
+            val k = BigDictionary.key(w)
+            return k.startsWith(pk) && (k.length > pk.length || !w.lowercase().equals(p))
+        }
+
+        fun add(w: String, score: Double) {
+            if (w.isEmpty() || !matches(w)) return
+            val k = BigDictionary.key(w)
+            val old = cands[k]
+            if (old == null) cands[k] = Cand(w, score) else {
+                // نفس الكلمة من مصدرين: نجمع الدرجتين (كل مصدر يؤكد الآخر) ونبقي الصيغة الأصلية الأولى
+                old.score += score * 0.35
+            }
+        }
+
+        // 1) ما تعلّمته اللوحة من كتابتك بعد الكلمة السابقة (أعلى أولوية)
         if (context.isNotEmpty()) {
-            bigrams[BigDictionary.key(context)]?.forEach { w ->
-                if (out.size < limit && w.length > p.length && w.startsWith(p, ignoreCase = true)) out.add(w)
+            val ck = BigDictionary.key(context)
+            if (context2.isNotEmpty()) {
+                bigrams[BigDictionary.key(context2) + " " + ck]?.forEachIndexed { i, w -> add(w, 140.0 - i * 3) }
             }
+            bigrams[ck]?.forEachIndexed { i, w -> add(w, 110.0 - i * 3) }
+            // 2) نموذج الجمل: احتمال الكلمة بعد السياق
+            for ((w, prob) in NgramModel.scored(language, context2, context)) add(w, 40.0 + prob * 70.0)
+        } else {
+            // بداية جملة: كلمات تبدأ بها الجمل عادة
+            for (w in NgramModel.starters(language, 12)) add(w, 35.0)
         }
 
+        // 3) كلمات المستخدم المتعلَّمة (الأكثر استعمالًا أولًا)
+        var i = 0
         for (w in learned) {
-            if (out.size >= limit) break
-            val sameScript = w.firstOrNull()?.let { isArabicChar(it) == arabic } ?: false
-            if (sameScript && w.length > p.length && w.startsWith(p, ignoreCase = true)) out.add(w)
-        }
-        for (w in builtIn) {
-            if (out.size >= limit) break
-            if (w.length > p.length && w.startsWith(p, ignoreCase = true)) out.add(w)
-        }
-        // القاموس الكبير (إن نُزِّل من الإعدادات) يكمّل ما لم تغطّه القائمة المدمجة
-        if (out.size < limit) {
-            for (w in BigDictionary.complete(p, language, limit)) {
-                if (out.size >= limit) break
-                out.add(w)
-            }
+            val sameScript = w.firstOrNull { it.isLetter() }?.let { scriptOf(it) == language.script } ?: false
+            if (!sameScript) continue
+            add(w, (60.0 - i * 0.6).coerceAtLeast(22.0))
+            if (++i > 400) break
         }
 
-        // قائمة الكلمات الإنكليزية الصالحة (نحو 114 ألف) تكمّل بالكلمات الأقصر لو لسا ما اكتملت الاقتراحات
-        if (out.size < limit && !arabic) {
-            ValidWords.english?.withPrefix(p, limit)?.forEach { w ->
-                if (out.size < limit) out.add(w)
-            }
+        // 4) القائمة المدمجة الصغيرة (عربي/إنكليزي)
+        val builtIn = WordLists.forLanguage(language)
+        for ((j, w) in builtIn.withIndex()) add(w, (30.0 - j * 0.05).coerceAtLeast(18.0))
+
+        // 5) القاموس الكبير: الأشيع أولًا بدرجة تنزل مع الرتبة
+        for (w in BigDictionary.complete(prefix, language, 14)) {
+            val rank = BigDictionary.rankOf(w, language)
+            add(w, 24.0 - ln(rank.coerceAtLeast(0) + 2.0) * 1.4)
         }
 
-        val result = out.map { matchCase(prefix, it) }
+        // 6) قائمة الكلمات الإنكليزية الصالحة (نحو 114 ألف) تكمّل لو لسا ما اكتملت الاقتراحات
+        if (cands.size < limit && language == KeyboardLanguage.ENGLISH) {
+            ValidWords.english?.withPrefix(p, limit)?.forEach { w -> add(w, 1.0) }
+        }
+
+        val result = cands.values.sortedByDescending { it.score }.take(limit).map { matchCase(prefix, it.word) }
         return if (result.isEmpty()) listOf(prefix) else result
     }
 
@@ -78,6 +120,18 @@ object SuggestionEngine {
 
     private const val EN_ALPHABET = "abcdefghijklmnopqrstuvwxyz'"
     private val AR_ALPHABET: String = ('\u0621'..'\u064A').joinToString("")
+    private val CYR_ALPHABET: String = ('\u0430'..'\u044F').joinToString("")
+
+    /** حروف التعديل بحسب اللغة (الحروف الأساسية؛ التشكيل اللاتيني يُوحَّد بمفتاح البحث) */
+    private fun alphabetOf(language: KeyboardLanguage): String = when (language.script) {
+        Script.ARABIC -> if (language == KeyboardLanguage.PERSIAN) AR_ALPHABET + "پچژگکی" else AR_ALPHABET
+        Script.CYRILLIC -> if (language == KeyboardLanguage.UKRAINIAN) CYR_ALPHABET + "іїєґ" else CYR_ALPHABET + "ё"
+        Script.LATIN -> EN_ALPHABET + when (language) {
+            KeyboardLanguage.TURKISH -> "ışğ"
+            KeyboardLanguage.POLISH -> "ąćęłńóśźż"
+            else -> ""
+        }
+    }
 
     /** رتبة الكلمة الشائعة التي نسمح للاستبدال التلقائي بالتصحيح إليها (الأشيع فقط، حذرًا من تغيير كلمات سليمة) */
     private const val COMMON_RANK = 15_000
@@ -115,7 +169,7 @@ object SuggestionEngine {
         if (word.length < 3 || word.length > 20) return emptyList()
         if (isKnown(word, language, learnedKeys)) return emptyList()
         val lower = word.lowercase()
-        val alphabet = if (language == KeyboardLanguage.ARABIC) AR_ALPHABET else EN_ALPHABET
+        val alphabet = alphabetOf(language)
         val scored = ArrayList<Pair<Int, String>>()
         for (c in edits1(lower, alphabet)) {
             if (c.length < 2 || !c.any { it.isLetter() }) continue

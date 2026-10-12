@@ -73,4 +73,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    // فك ضغط bz2 أثناء تنزيل جمل مكتبة اللغات (Tatoeba)
+    implementation("org.apache.commons:commons-compress:1.27.1")
 }

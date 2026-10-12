@@ -57,7 +57,48 @@ data class KeyDefinition(
 
 enum class ShiftState { OFF, ON, LOCKED }
 enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, NUMPAD, EMOJI, CLIPBOARD, EDIT }
-enum class KeyboardLanguage { ENGLISH, ARABIC }
+/** نظام الكتابة: يحدّد الحروف الكبيرة (Shift) واتجاه النص */
+enum class Script { LATIN, ARABIC, CYRILLIC }
+
+/**
+ * لغات اللوحة. العربي والإنكليزي مدمجان (قاموسهما الأساسي بالتطبيق)، وباقي اللغات تُنزَّل من «مكتبة اللغات»
+ * بالإعدادات (قاموس شيوع + نموذج جمل) مثل باقي لوحات المفاتيح. تخطيط الأحرف نفسه مدمج صغير لكل لغة.
+ *
+ * [code] رمز قوائم FrequencyWords، [tatoeba] رمز ملفات جمل Tatoeba، [badge] شارة الكرة الأرضية.
+ */
+enum class KeyboardLanguage(
+    val code: String,
+    val tatoeba: String,
+    val nativeName: String,
+    val badge: String,
+    val script: Script,
+    val spaceLabel: String,
+    val returnLabel: String
+) {
+    ENGLISH("en", "eng", "English", "EN", Script.LATIN, "space", "return"),
+    ARABIC("ar", "ara", "العربية", "ع", Script.ARABIC, "مسافة", "إدخال"),
+    FRENCH("fr", "fra", "Français", "FR", Script.LATIN, "espace", "retour"),
+    SPANISH("es", "spa", "Español", "ES", Script.LATIN, "espacio", "intro"),
+    GERMAN("de", "deu", "Deutsch", "DE", Script.LATIN, "Leerzeichen", "Return"),
+    TURKISH("tr", "tur", "Türkçe", "TR", Script.LATIN, "boşluk", "return"),
+    RUSSIAN("ru", "rus", "Русский", "RU", Script.CYRILLIC, "пробел", "ввод"),
+    PERSIAN("fa", "pes", "فارسی", "فا", Script.ARABIC, "فاصله", "ورود"),
+    PORTUGUESE("pt", "por", "Português", "PT", Script.LATIN, "espaço", "retorno"),
+    ITALIAN("it", "ita", "Italiano", "IT", Script.LATIN, "spazio", "invio"),
+    INDONESIAN("id", "ind", "Indonesia", "ID", Script.LATIN, "spasi", "return"),
+    DUTCH("nl", "nld", "Nederlands", "NL", Script.LATIN, "spatie", "return"),
+    POLISH("pl", "pol", "Polski", "PL", Script.LATIN, "spacja", "enter"),
+    UKRAINIAN("uk", "ukr", "Українська", "UK", Script.CYRILLIC, "пробіл", "ввід");
+
+    /** اللغة مدمجة بالتطبيق (العربي والإنكليزي) فلا تحتاج تنزيلًا لتعمل */
+    val builtIn: Boolean get() = this == ENGLISH || this == ARABIC
+
+    /** اتجاه الكتابة من اليمين لليسار (واجهة اللوحة تعرض نصوصًا عربية معها) */
+    val rtl: Boolean get() = script == Script.ARABIC
+
+    /** للغة حروف كبيرة وصغيرة فيعمل معها Shift */
+    val cased: Boolean get() = script != Script.ARABIC
+}
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /** ترتيبات المفاتيح الإنكليزية */
@@ -210,7 +251,11 @@ data class SemoSettings(
     /** تبقى لوحة الرموز مفتوحة بعد كتابة رمز (لو متوقف ترجع للحروف) */
     val keepSymbolPanel: Boolean = true,
     /** الإيموجي المستخدمة مؤخرًا (محفوظة بين الجلسات) */
-    val recentEmojis: List<String> = emptyList()
+    val recentEmojis: List<String> = emptyList(),
+    /** اللغات الظاهرة بدورة الكرة الأرضية بالترتيب (الافتراضي: إنكليزي وعربي) */
+    val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
+    /** حجم اللوحة كله (ارتفاع المفاتيح والخطوط): 0.8 إلى 1.3، والافتراضي 1.0 */
+    val keyboardScale: Float = 1f
 )
 
 @Immutable
@@ -270,5 +315,7 @@ data class KeyboardUiState(
     val spaceBarAction: SpaceBarAction = SpaceBarAction.CURSOR,
     /** تبقى لوحة الرموز مفتوحة بعد كتابة رمز (لو متوقف ترجع للحروف) */
     val keepSymbolPanel: Boolean = true,
-    val recentEmojis: List<String> = emptyList()
+    val recentEmojis: List<String> = emptyList(),
+    val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
+    val keyboardScale: Float = 1f
 )
