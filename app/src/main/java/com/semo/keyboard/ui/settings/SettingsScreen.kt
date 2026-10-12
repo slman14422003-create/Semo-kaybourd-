@@ -288,19 +288,19 @@ private fun HomePage(
             NavRow(
                 "المظهر والحجم",
                 "${themeLabel(settings.themeMode)} · حجم ${(settings.keyboardScale * 100).roundToInt()}% · ارتفاع ${sizeLabel(settings.size)}",
-                R.drawable.ic_tool_settings, IconGray
+                R.drawable.ic_set_theme, IconGray
             ) { onOpen(SettingsPage.APPEARANCE) }
             Divider()
             NavRow(
                 "اللمس والصوت والاهتزاز",
                 "ضغط مطوّل ${holdLabel(settings.holdDelay)} · حذف ${backspaceLabel(settings.backspaceSpeed)}",
-                R.drawable.ic_tool_cursor, IconOrange
+                R.drawable.ic_set_hold, IconOrange
             ) { onOpen(SettingsPage.TOUCH) }
             Divider()
             NavRow(
                 "القاموس والكلمات",
                 "$learnedCount كلمة متعلَّمة · قاموس مدمج + تنزيل اختياري",
-                R.drawable.ic_ios_backspace, IconPurple
+                R.drawable.ic_set_dictionary, IconPurple
             ) { onOpen(SettingsPage.DICTIONARY) }
             Divider()
             NavRow(
@@ -311,7 +311,7 @@ private fun HomePage(
         }
 
         Section {
-            NavRow("حول وإعادة الضبط", "الإصدار والدليل وإعادة الإعدادات للافتراضي", R.drawable.ic_tool_settings, IconPink) {
+            NavRow("حول وإعادة الضبط", "الإصدار والدليل وإعادة الإعدادات للافتراضي", R.drawable.ic_set_info, IconPink) {
                 onOpen(SettingsPage.ABOUT)
             }
         }
@@ -355,12 +355,12 @@ private fun LanguagesPage(repo: SettingsRepository, settings: SemoSettings, onBa
             }
         }
         Section("الأرقام") {
-            SwitchRow("أرقام عربية هندية (١٢٣)", R.drawable.ic_ios_shift, IconOrange, settings.arabicDigits) {
+            SwitchRow("أرقام عربية هندية (١٢٣)", R.drawable.ic_set_number, IconOrange, settings.arabicDigits) {
                 scope.launch { repo.setArabicDigits(it) }
             }
             Divider()
             SwitchRow(
-                "صف الأرقام فوق الحروف", R.drawable.ic_ios_shift, IconPurple, settings.numberRow,
+                "صف الأرقام فوق الحروف", R.drawable.ic_set_number, IconPurple, settings.numberRow,
                 subtitle = "يضيف صفًا للأرقام دائمًا فوق الحروف"
             ) { scope.launch { repo.setNumberRow(it) } }
         }
@@ -386,17 +386,17 @@ private fun TypingPage(
             ) { scope.launch { repo.setSuggestionsEnabled(it) } }
             Divider()
             SwitchRow(
-                "توقّع الكلمة التالية", R.drawable.ic_tool_cursor, IconGreen, settings.nextWord,
+                "توقّع الكلمة التالية", R.drawable.ic_set_text, IconGreen, settings.nextWord,
                 subtitle = "يقترح الكلمة المتوقعة بعد ما تكتب، ويتعلّم من أسلوبك بالكتابة"
             ) { scope.launch { repo.setNextWord(it) } }
             Divider()
             SwitchRow(
-                "استبدال تلقائي", R.drawable.ic_ios_backspace, IconTeal, settings.autoCorrect,
+                "استبدال تلقائي", R.drawable.ic_set_spell, IconTeal, settings.autoCorrect,
                 subtitle = "يصحّح الأخطاء الشائعة (dont ← don't، الى ← إلى) والأخطاء الإملائية الواضحة بالإنكليزي"
             ) { scope.launch { repo.setAutoCorrect(it) } }
             Divider()
             SwitchRow(
-                "تدقيق إملائي", R.drawable.ic_ios_shift, IconOrange, settings.spellCheck,
+                "تدقيق إملائي", R.drawable.ic_set_spell, IconOrange, settings.spellCheck,
                 subtitle = "يقترح الكلمة الصحيحة بالشريط لو الكلمة غير موجودة بالقاموس (مثل recieve)"
             ) { scope.launch { repo.setSpellCheck(it) } }
             Divider()
@@ -409,7 +409,7 @@ private fun TypingPage(
             NavRow(
                 "اختصارات النص",
                 if (shortcutCount == 0) "أضف اختصارًا يتحوّل لعبارة كاملة (omw ← On my way!)" else "$shortcutCount اختصار",
-                R.drawable.ic_tool_clipboard, IconPurple,
+                R.drawable.ic_set_shortcut, IconPurple,
                 onOpenShortcuts
             )
         }
@@ -418,12 +418,12 @@ private fun TypingPage(
                 scope.launch { repo.setAutoCapitalize(it) }
             }
             Divider()
-            SwitchRow("مسافتان = نقطة ومسافة", R.drawable.ic_tool_cursor, IconOrange, settings.doubleSpacePeriod) {
+            SwitchRow("مسافتان = نقطة ومسافة", R.drawable.ic_set_spacing, IconOrange, settings.doubleSpacePeriod) {
                 scope.launch { repo.setDoubleSpacePeriod(it) }
             }
             Divider()
             SwitchRow(
-                "ناتج العمليات الحسابية", R.drawable.ic_tool_settings, IconPink, settings.mathResults,
+                "ناتج العمليات الحسابية", R.drawable.ic_set_number, IconPink, settings.mathResults,
                 subtitle = "اكتب 60*30+20 فيظهر الناتج بالشريط"
             ) { scope.launch { repo.setMathResults(it) } }
         }
@@ -447,7 +447,7 @@ private fun ShortcutsPage(
     SubPage("اختصارات النص", onBack) {
         Section {
             SwitchRow(
-                "تفعيل اختصارات النص", R.drawable.ic_tool_clipboard, IconPurple, settings.textShortcuts,
+                "تفعيل اختصارات النص", R.drawable.ic_set_shortcut, IconPurple, settings.textShortcuts,
                 subtitle = "اكتب الاختصار ثم مسافة فيتحوّل للنص الكامل. تقدر تتراجع بزر الحذف مباشرة"
             ) { scope.launch { repo.setTextShortcuts(it) } }
         }
@@ -531,7 +531,7 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
     val scope = rememberCoroutineScope()
     SubPage("المظهر والحجم", onBack) {
         Section("الشكل") {
-            Block("الثيم", R.drawable.ic_tool_settings, IconGray) {
+            Block("الثيم", R.drawable.ic_set_theme, IconGray) {
                 Segmented(
                     options = listOf(ThemeMode.SYSTEM to "حسب النظام", ThemeMode.LIGHT to "فاتح", ThemeMode.DARK to "داكن"),
                     selected = settings.themeMode,
@@ -553,7 +553,7 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 ActionRow("إعادة الحجم إلى 100%") { scope.launch { repo.setKeyboardScale(1f) } }
             }
             Divider()
-            Block("ارتفاع المفاتيح", R.drawable.ic_tool_cursor, IconTeal) {
+            Block("ارتفاع المفاتيح", R.drawable.ic_set_height, IconTeal) {
                 Segmented(
                     options = listOf(KeyboardSize.SMALL to "صغير", KeyboardSize.MEDIUM to "متوسط", KeyboardSize.LARGE to "كبير"),
                     selected = settings.size,
@@ -561,7 +561,7 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 )
             }
             Divider()
-            Block("المسافة بين المفاتيح", R.drawable.ic_tool_cursor, IconBlue) {
+            Block("المسافة بين المفاتيح", R.drawable.ic_set_spacing, IconBlue) {
                 Segmented(
                     options = listOf(KeySpacing.TIGHT to "ضيّقة", KeySpacing.NORMAL to "عادية", KeySpacing.WIDE to "واسعة"),
                     selected = settings.keySpacing,
@@ -678,7 +678,7 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
     SubPage("اللمس والصوت والاهتزاز", onBack) {
         Section("الكتابة والإيماءات") {
             SwitchRow(
-                "الكتابة بالسحب على الحروف", R.drawable.ic_tool_cursor, IconPurple, settings.swipeTyping,
+                "الكتابة بالسحب على الحروف", R.drawable.ic_set_swipe, IconPurple, settings.swipeTyping,
                 subtitle = "مرّر إصبعك على الحروف لكتابة الكلمة بحركة وحدة"
             ) { scope.launch { repo.setSwipeTyping(it) } }
             Divider()
@@ -692,7 +692,7 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             ) { scope.launch { repo.setKeepSymbolPanel(it) } }
         }
         Section("الضغط المطوّل") {
-            Block("مهلة الضغط المطوّل", R.drawable.ic_tool_cursor, IconTeal) {
+            Block("مهلة الضغط المطوّل", R.drawable.ic_set_hold, IconTeal) {
                 Segmented(
                     options = listOf(
                         HoldDelay.SHORT to "قصيرة 0.2ث",
@@ -722,7 +722,7 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 )
             }
             Divider()
-            Block("ضغطة مطوّلة على المسافة", R.drawable.ic_tool_cursor, IconPurple) {
+            Block("ضغطة مطوّلة على المسافة", R.drawable.ic_set_hold, IconPurple) {
                 Segmented(
                     options = listOf(
                         SpaceBarAction.CURSOR to "تحريك المؤشر",
@@ -735,7 +735,7 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             }
         }
         Section("الصوت والاهتزاز") {
-            SwitchRow("صوت الضغط على المفاتيح", R.drawable.ic_ios_mic, IconPink, settings.soundEnabled) {
+            SwitchRow("صوت الضغط على المفاتيح", R.drawable.ic_set_sound, IconPink, settings.soundEnabled) {
                 scope.launch { repo.setSoundEnabled(it) }
             }
             Divider()
@@ -764,7 +764,7 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 PillButton("مسافة", Modifier.weight(1f)) { player.play(KeyFeedback.MODIFIER, volume) }
             }
             Divider()
-            SwitchRow("الاهتزاز عند الضغط", R.drawable.ic_tool_onehand, IconOrange, settings.hapticEnabled) {
+            SwitchRow("الاهتزاز عند الضغط", R.drawable.ic_set_vibrate, IconOrange, settings.hapticEnabled) {
                 scope.launch { repo.setHapticEnabled(it) }
             }
         }
@@ -885,10 +885,25 @@ private fun PrivacyPage(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val mediaPerm = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_IMAGES
+    else android.Manifest.permission.READ_EXTERNAL_STORAGE
+    var mediaGranted by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, mediaPerm) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val mediaLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { mediaGranted = it }
     SubPage("الحافظة والخصوصية", onBack) {
         Section("الحافظة") {
             SwitchRow("حفظ سجل الحافظة", R.drawable.ic_tool_clipboard, IconBlue, settings.clipboardEnabled) {
                 scope.launch { repo.setClipboardEnabled(it) }
+            }
+            Divider()
+            ActionRow(if (mediaGranted) "التقاط لقطات الشاشة تلقائيًا: مفعّل" else "السماح بالتقاط لقطات الشاشة تلقائيًا") {
+                if (!mediaGranted) mediaLauncher.launch(mediaPerm)
             }
             Divider()
             ActionRow("مسح سجل الحافظة (مع المثبّت)", DangerRed) { scope.launch { clipboardRepo.clearAll() } }

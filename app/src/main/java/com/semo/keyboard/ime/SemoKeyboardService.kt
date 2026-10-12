@@ -176,6 +176,62 @@ class SemoKeyboardService :
     private var passwordField = false
     private var lastCapturedClip: String? = null
 
+    private var lastShotId = -1L
+
+    /** استطلاع دوري أثناء ظهور اللوحة: بعض الأنظمة (HyperOS/One UI) لا ترسل إشعار تغيّر الحافظة بشكل موثوق */
+    private val pollTask = object : Runnable {
+        override fun run() {
+            if (::viewModel.isInitialized) {
+                captureClipboard()
+                captureScreenshot()
+            }
+            mainHandler.postDelayed(this, 1500)
+        }
+    }
+
+    private fun hasMediaPermission(): Boolean {
+        val perm = if (Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_IMAGES
+        else android.Manifest.permission.READ_EXTERNAL_STORAGE
+        return androidx.core.content.ContextCompat.checkSelfPermission(this, perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private class Shot(val id: Long, val uri: android.net.Uri, val mime: String)
+
+    private fun latestScreenshot(): Shot? {
+        val media = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val cutoff = System.currentTimeMillis() / 1000 - 180
+        val like = if (Build.VERSION.SDK_INT >= 29)
+            "(${android.provider.MediaStore.Images.Media.DISPLAY_NAME} LIKE '%creenshot%' OR ${android.provider.MediaStore.Images.Media.RELATIVE_PATH} LIKE '%creenshot%')"
+        else "${android.provider.MediaStore.Images.Media.DATA} LIKE '%creenshot%'"
+        val sel = "${android.provider.MediaStore.Images.Media.DATE_ADDED} >= ? AND $like"
+        contentResolver.query(
+            media,
+            arrayOf(android.provider.MediaStore.Images.Media._ID, android.provider.MediaStore.Images.Media.MIME_TYPE),
+            sel, arrayOf(cutoff.toString()),
+            "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC"
+        )?.use { c ->
+            if (c.moveToFirst()) {
+                val id = c.getLong(0)
+                val mime = c.getString(1) ?: "image/png"
+                return Shot(id, android.content.ContentUris.withAppendedId(media, id), mime)
+            }
+        }
+        return null
+    }
+
+    /** لقطات الشاشة التي لا تُنسخ للحافظة تلقائيًا: نلتقط أحدث لقطة (آخر 3 دقائق) لو مُنح إذن الصور */
+    private fun captureScreenshot() {
+        if (passwordField || !viewModel.uiState.value.clipboardEnabled || !hasMediaPermission()) return
+        serviceScope.launch {
+            val shot = withContext(Dispatchers.IO) { runCatching { latestScreenshot() }.getOrNull() } ?: return@launch
+            if (shot.id == lastShotId) return@launch
+            lastShotId = shot.id
+            val name = withContext(Dispatchers.IO) { runCatching { imageStore.saveFromUri(shot.uri, shot.mime) }.getOrNull() } ?: return@launch
+            val stored = clipboardRepository.add(clipImageKey(name, shot.mime)) ?: return@launch
+            viewModel.onClipboardCopied(stored)
+        }
+    }
+
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard(force = true) }
 
     override fun onCreate() {
@@ -388,11 +444,14 @@ class SemoKeyboardService :
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         KeyboardStatusHelper.setImeVisible(this, true)
         captureClipboard()
+        mainHandler.removeCallbacks(pollTask)
+        mainHandler.postDelayed(pollTask, 600)
     }
 
     override fun onWindowHidden() {
         super.onWindowHidden()
         if (::viewModel.isInitialized) viewModel.flushLearning()
+        mainHandler.removeCallbacks(pollTask)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         KeyboardStatusHelper.setImeVisible(this, false)
     }

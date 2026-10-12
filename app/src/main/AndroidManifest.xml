@@ -8,6 +8,8 @@
 
     <!-- الاهتزاز الخفيف عند الضغط على المفاتيح (الصلاحية الوحيدة المطلوبة، وهي عادية ولا تُسأل من المستخدم) -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <!-- للزر اليدوي «تنزيل القاموس الكبير» وللتحقق من التحديثات بإعدادات التطبيق فقط؛ خدمة لوحة المفاتيح نفسها لا تتصل بالإنترنت -->
     <uses-permission android:name="android.permission.INTERNET" />

@@ -44,7 +44,7 @@ sealed class DownloadState {
  */
 object UpdateManager {
 
-    private const val REPO = "slman14422003-create/Semo-kaybourd"
+    private const val REPO = "slman14422003-create/Semo-kaybourd-"
     private const val API_URL = "https://api.github.com/repos/$REPO/releases/latest"
     private const val CONNECT_TIMEOUT = 15_000
     private const val READ_TIMEOUT = 20_000
@@ -104,6 +104,7 @@ object UpdateManager {
         try {
             connection = followRedirects(connection)
             if (connection.responseCode !in 200..299) {
+                if (connection.responseCode == 404) throw IOException("لا يوجد إصدار منشور بالمستودع بعد (HTTP 404)")
                 throw IOException("HTTP ${connection.responseCode}")
             }
             return connection.inputStream.bufferedReader().use { it.readText() }
