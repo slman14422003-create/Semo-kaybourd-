@@ -277,7 +277,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     else -> Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .swipeTyping(swipeEnabled, rows, rowHeights, trail) { path ->
+                            .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis) { path ->
                                 viewModel.onSwipeWord(path)
                             }
                     ) {
@@ -347,10 +347,17 @@ private fun Modifier.swipeTyping(
     rows: List<List<KeyDefinition>>,
     rowHeights: List<Dp>,
     trail: SnapshotStateList<Offset>,
+    holdMs: Long,
     onWord: (List<String>) -> Unit
 ): Modifier {
     if (!enabled) return this
-    return pointerInput(rows, rowHeights) {
+    return pointerInput(rows, rowHeights, holdMs) {
+        val holdLimit = if (holdMs > 0L) holdMs else viewConfiguration.longPressTimeoutMillis
+        // الحروف التي لها أحرف بديلة: الإمساك عليها = ضغط مطوّل، فلا نحوّله لكتابة بالسحب
+        val altLetters = rows.flatten()
+            .filter { it.longPressChars.isNotEmpty() }
+            .mapNotNull { (it.action as? KeyAction.Character)?.char }
+            .toSet()
         val heightsPx = rowHeights.map { it.toPx() }
         val minStep = 3.dp.toPx()
         val startDistance = 18.dp.toPx()
@@ -386,6 +393,7 @@ private fun Modifier.swipeTyping(
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val first = letterAt(down.position) ?: return@awaitEachGesture
+            val holdable = first in altLetters
             val letters = ArrayList<String>()
             letters.add(first)
             var swiping = false
@@ -403,6 +411,8 @@ private fun Modifier.swipeTyping(
                     }
                     // إصبع ثانٍ (كتابة سريعة بإصبعين): نترك الكتابة العادية
                     if (!swiping && event.changes.size > 1) break
+                    // إمساك على حرف له بدائل لمدة الضغط المطوّل: نتوقف كي تعمل فقاعة الأحرف البديلة
+                    if (!swiping && holdable && change.uptimeMillis - down.uptimeMillis >= holdLimit) break
 
                     val pos = change.position
                     val letter = letterAt(pos)
