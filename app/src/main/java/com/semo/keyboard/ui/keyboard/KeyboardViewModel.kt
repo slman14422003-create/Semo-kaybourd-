@@ -420,7 +420,6 @@ class KeyboardViewModel(
         if (key.longPressChars.isEmpty()) return
         val state = uiState.value
         bridge.keyFeedback(false, state.hapticEnabled, KeyFeedback.LONG_PRESS)
-        transient.update { it.copy(alternates = key.longPressChars) }
     }
 
     fun onAlternateChosen(char: String) {
