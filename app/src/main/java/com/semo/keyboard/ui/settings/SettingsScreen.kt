@@ -189,6 +189,7 @@ private fun toolbarItemInfo(item: ToolbarItem): Triple<String, Int, androidx.com
     ToolbarItem.EMOJI -> Triple("الإيموجي", R.drawable.ic_ios_emoji, IconOrange)
     ToolbarItem.CLIPBOARD -> Triple("الحافظة", R.drawable.ic_tool_clipboard, IconBlue)
     ToolbarItem.NUMPAD -> Triple("لوحة الأرقام", R.drawable.ic_tool_numpad, IconPurple)
+    ToolbarItem.CALC -> Triple("الحاسبة العلمية", R.drawable.ic_tool_calc, IconGreen)
     ToolbarItem.CURSOR -> Triple("التحرير وتحريك المؤشر", R.drawable.ic_tool_cursor, IconTeal)
     ToolbarItem.ONEHAND -> Triple("وضع اليد الواحدة", R.drawable.ic_tool_onehand, IconGray)
     ToolbarItem.SETTINGS -> Triple("الإعدادات", R.drawable.ic_tool_settings, IconGray)

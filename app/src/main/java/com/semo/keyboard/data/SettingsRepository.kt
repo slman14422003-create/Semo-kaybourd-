@@ -116,7 +116,11 @@ private class LegacySettingsMigration(private val app: Context) : DataMigration<
 private fun decodeToolbar(raw: String?): List<ToolbarItem> {
     if (raw == null) return ToolbarItem.values().toList()
     val list = raw.split(',').mapNotNull { n -> runCatching { enumValueOf<ToolbarItem>(n) }.getOrNull() }.distinct()
-    return if (list.isEmpty()) ToolbarItem.values().toList() else list
+    if (list.isEmpty()) return ToolbarItem.values().toList()
+    // عنصر الحاسبة الجديد: يظهر تلقائيًا لمن لم يحذف أي عنصر من شريطه
+    val others = ToolbarItem.values().filter { it != ToolbarItem.CALC }
+    if (ToolbarItem.CALC !in list && others.all { it in list }) return list + ToolbarItem.CALC
+    return list
 }
 
 /** اللغات المفعّلة المحفوظة (CSV بالترتيب)؛ لو لا شيء محفوظ نرجع للإنكليزي والعربي */

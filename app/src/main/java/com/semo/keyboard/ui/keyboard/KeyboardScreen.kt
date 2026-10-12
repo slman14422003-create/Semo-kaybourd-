@@ -264,7 +264,10 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     .weight(if (oneHanded) 0.84f else 1f)
                     .padding(horizontal = metrics.sidePadding)
             ) {
-                if (state.page != KeyboardPage.CLIPBOARD) TopStrip(state, colors, metrics, viewModel)
+                if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
+                    if (state.clipEdit != null) ClipEditBar(state, colors, metrics.stripHeight, viewModel)
+                    else TopStrip(state, colors, metrics, viewModel)
+                }
 
                 when (state.page) {
                     KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
@@ -274,6 +277,11 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                         bottomReserve, viewModel
                     )
                     KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.CALC -> CalcPanel(
+                        state, colors,
+                        (panelHeight + metrics.stripHeight + 96.dp).coerceAtMost((screenHeightDp * 0.6f).dp) - bottomReserve,
+                        viewModel
+                    )
                     else -> Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -304,7 +312,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     }
                 }
                 if (bottomReserve > 0.dp &&
-                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT)
+                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC)
                 ) {
                     Spacer(Modifier.height(bottomReserve))
                 }
@@ -509,6 +517,7 @@ private fun TopStrip(
                         ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors) { viewModel.openPage(KeyboardPage.EMOJI) }
                         ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
                         ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors) { viewModel.openPage(KeyboardPage.NUMPAD) }
+                        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors) { viewModel.openPage(KeyboardPage.CALC) }
                         ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors) { viewModel.openPage(KeyboardPage.EDIT) }
                         ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors) { viewModel.cycleOneHand() }
                         ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors) { viewModel.openSettings() }

@@ -22,6 +22,7 @@ import com.semo.keyboard.domain.model.clipImageName
 import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.NumKeyTarget
+import com.semo.keyboard.domain.model.ClipEdit
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
@@ -38,6 +39,7 @@ import com.semo.keyboard.domain.model.ShiftState
 import com.semo.keyboard.domain.model.TextShortcut
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -57,8 +59,63 @@ class KeyboardViewModel(
     private val clipboardRepository: ClipboardRepository,
     private val learnedWordsRepository: LearnedWordsRepository,
     private val shortcutsRepository: ShortcutsRepository,
-    private val bridge: InputBridge
+    private val hostBridge: InputBridge
 ) : ViewModel() {
+
+    /** حالة الحاسبة العلمية (تبقى عند التنقل بين الصفحات) */
+    val calc = CalcSession()
+
+    /**
+     * الجسر الفعلي للكتابة: أثناء تعديل عنصر حافظة تذهب الكتابة والحذف لنص التعديل بدل حقل التطبيق،
+     * وبغير ذلك تمرّ مباشرة للجسر الحقيقي.
+     */
+    private val bridge: InputBridge = object : InputBridge by hostBridge {
+        override fun commitText(text: String) {
+            if (editing()) editSet(editText() + text) else hostBridge.commitText(text)
+        }
+
+        override fun deleteBackward() {
+            if (editing()) {
+                val t = editText()
+                editSet(if (t.length >= 2 && t.last().isLowSurrogate() && t[t.length - 2].isHighSurrogate()) t.dropLast(2) else t.dropLast(1))
+            } else hostBridge.deleteBackward()
+        }
+
+        override fun deleteSurrounding(count: Int) {
+            if (editing()) editSet(editText().dropLast(count)) else hostBridge.deleteSurrounding(count)
+        }
+
+        override fun performEnter() {
+            if (editing()) editSet(editText() + "\n") else hostBridge.performEnter()
+        }
+
+        override fun commitImage(fileName: String, mime: String): Boolean =
+            if (editing()) false else hostBridge.commitImage(fileName, mime)
+
+        override fun textBeforeCursor(length: Int): String =
+            if (editing()) editText().takeLast(length) else hostBridge.textBeforeCursor(length)
+
+        override fun textBeforeCursorWithin(length: Int, timeoutMs: Long, skipIfSlow: Boolean): String? =
+            if (editing()) editText().takeLast(length) else hostBridge.textBeforeCursorWithin(length, timeoutMs, skipIfSlow)
+
+        override fun moveCursor(delta: Int) {
+            if (!editing()) hostBridge.moveCursor(delta)
+        }
+
+        override fun moveCursorVertical(lines: Int) {
+            if (!editing()) hostBridge.moveCursorVertical(lines)
+        }
+
+        override fun performEdit(action: EditAction) {
+            if (!editing()) hostBridge.performEdit(action)
+        }
+    }
+
+    private fun editing(): Boolean = transient.value.clipEdit != null
+    private fun editText(): String = transient.value.clipEdit?.text ?: ""
+    private fun editSet(text: String) {
+        transient.update { st -> st.clipEdit?.let { st.copy(clipEdit = it.copy(text = text.takeLast(CLIP_EDIT_MAX))) } ?: st }
+    }
 
     private data class LocalState(
         val page: KeyboardPage = KeyboardPage.LETTERS,
@@ -78,7 +135,8 @@ class KeyboardViewModel(
         val swipeWord: String? = null,
         val swipeAlternates: List<String> = emptyList(),
         /** نص نُسخ للتو (شريحة اللصق السريع بشريط الاقتراحات) */
-        val freshClip: String? = null
+        val freshClip: String? = null,
+        val clipEdit: ClipEdit? = null
     )
 
     /** تصحيح تلقائي حصل للتو: الرجوع (Backspace) مباشرة بعده يعيد الكلمة الأصلية */
@@ -163,7 +221,8 @@ class KeyboardViewModel(
                 recentEmojis = s.recentEmojis,
                 enabledLanguages = s.enabledLanguages,
                 keyboardScale = s.keyboardScale,
-                freshClip = t.freshClip
+                freshClip = t.freshClip,
+                clipEdit = t.clipEdit
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, KeyboardUiState())
 
@@ -191,6 +250,7 @@ class KeyboardViewModel(
                 swipeWord = null,
                 swipeAlternates = emptyList(),
                 toolbarOpen = false,
+                clipEdit = null,
                 suggestionsAllowed = suggestionsAllowed
             )
         }
@@ -261,8 +321,8 @@ class KeyboardViewModel(
                 // الأرقام ورموز العمليات لا تُنهي كلمة: نتجنّب قراءة النص من التطبيق (استدعاء بين عمليتين) بكل ضغطة رقم
                 if (!ch.isLetter() && !ch.isDigit() && ch != '\'' && ch != '’' && ch !in NON_WORD_END_SYMBOLS) {
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
-                    val before = bridge.textBeforeCursor(40)
-                    if (!(ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null)) learnWord(SuggestionEngine.currentWord(before))
+                    val before = bridge.textBeforeCursorWithin(40, HOT_READ_MS, true)
+                    if (before != null && !(ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null)) learnWord(SuggestionEngine.currentWord(before))
                 }
                 bridge.commitText(action.char)
                 consumeOneShotShift()
@@ -274,23 +334,28 @@ class KeyboardViewModel(
                 refreshSuggestions()
             }
             KeyAction.Space -> {
-                // قراءة واحدة من التطبيق بدل ثلاث (كل قراءة استدعاء بين عمليتين قد يتأخر)
-                val before = bridge.textBeforeCursor(40)
-                val corrected = applyAutoCorrect(before)
-                val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
-                learnWord(finalWord)
-                learnPair(before, corrected?.original ?: finalWord, finalWord)
-                val tail = if (corrected == null) before else before.dropLast(corrected.original.length) + corrected.fixed
-                handleSpace(state.language, state.doubleSpacePeriod, tail.takeLast(2))
-                undo = corrected
+                val before = bridge.textBeforeCursorWithin(40, HOT_READ_MS, true)
+                if (before == null) {
+                    handleSpace(state.language, state.doubleSpacePeriod, "")
+                } else {
+                    val corrected = applyAutoCorrect(before)
+                    val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
+                    learnWord(finalWord)
+                    learnPair(before, corrected?.original ?: finalWord, finalWord)
+                    val tail = if (corrected == null) before else before.dropLast(corrected.original.length) + corrected.fixed
+                    handleSpace(state.language, state.doubleSpacePeriod, tail.takeLast(2))
+                    undo = corrected
+                }
                 refreshSuggestions()
             }
             KeyAction.Enter -> {
-                val before = bridge.textBeforeCursor(40)
-                val corrected = applyAutoCorrect(before)
-                val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
-                learnWord(finalWord)
-                learnPair(before, corrected?.original ?: finalWord, finalWord)
+                val before = bridge.textBeforeCursorWithin(40, HOT_READ_MS, true)
+                if (before != null) {
+                    val corrected = applyAutoCorrect(before)
+                    val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
+                    learnWord(finalWord)
+                    learnPair(before, corrected?.original ?: finalWord, finalWord)
+                }
                 bridge.performEnter()
                 autoCapitalize(state.language)
                 refreshSuggestions()
@@ -565,6 +630,52 @@ class KeyboardViewModel(
         viewModelScope.launch { clipboardRepository.remove(text) }
     }
 
+    /** بدء تعديل عنصر: يُحمَّل نصه الكامل ويُكتب تعديله بلوحة المفاتيح نفسها ثم يُحفظ بالضغط على ✓ */
+    fun onClipEditStart(stored: String) {
+        if (stored.isClipImage()) return
+        viewModelScope.launch {
+            val full = clipboardRepository.fullText(stored) ?: return@launch
+            transient.update {
+                it.copy(
+                    clipEdit = ClipEdit(stored, full),
+                    page = KeyboardPage.LETTERS,
+                    toolbarOpen = false,
+                    alternates = emptyList(),
+                    suggestions = emptyList(),
+                    literal = "",
+                    mathResult = null,
+                    freshClip = null
+                )
+            }
+            refreshSuggestions()
+        }
+    }
+
+    fun onClipEditSave() {
+        val edit = transient.value.clipEdit ?: return
+        transient.update { it.copy(clipEdit = null, page = KeyboardPage.CLIPBOARD, suggestions = emptyList(), literal = "", mathResult = null) }
+        viewModelScope.launch { clipboardRepository.replace(edit.key, edit.text) }
+    }
+
+    fun onClipEditCancel() {
+        transient.update { it.copy(clipEdit = null, page = KeyboardPage.CLIPBOARD, suggestions = emptyList(), literal = "", mathResult = null) }
+    }
+
+    /** صوت/اهتزاز ضغطة مفتاح بلوحة الحاسبة */
+    fun onCalcTick(delete: Boolean = false) {
+        val state = uiState.value
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, if (delete) KeyFeedback.DELETE else KeyFeedback.STANDARD, state.soundVolume)
+    }
+
+    /** إدراج ناتج الحاسبة (أو المعادلة كاملة) بحقل الكتابة */
+    fun onCalcInsert(text: String) {
+        if (text.isEmpty()) return
+        val state = uiState.value
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, KeyFeedback.MODIFIER, state.soundVolume)
+        bridge.commitText(text)
+        refreshSuggestions()
+    }
+
     fun onClipClearUnpinned() {
         viewModelScope.launch { clipboardRepository.clearUnpinned() }
     }
@@ -691,6 +802,16 @@ class KeyboardViewModel(
 
     private var refreshJob: Job? = null
 
+    private val suggestExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "semo-suggest").apply { priority = Thread.NORM_PRIORITY - 1 }
+    }
+    private val suggestDispatcher = suggestExecutor.asCoroutineDispatcher()
+
+    override fun onCleared() {
+        suggestExecutor.shutdown()
+        super.onCleared()
+    }
+
     /**
      * تحديث الاقتراحات يحتاج قراءة النص من التطبيق (استدعاء بين عمليتين وهو أبطأ شيء بالكتابة)،
      * وكان يُنفَّذ مرتين أو أكثر لكل ضغطة. هلأ نجمع الطلبات المتتالية بتحديث واحد بعد لحظة قصيرة،
@@ -708,7 +829,7 @@ class KeyboardViewModel(
             }
             // قراءة النص من التطبيق (استدعاء بين عمليتين قد يتأخر) وحساب الاقتراحات بخيط خلفي،
             // فلا تتجمد الواجهة حتى لو كان التطبيق ثقيلًا أو القاموس كبيرًا
-            val result = withContext(Dispatchers.Default) { computeSuggestions(state, t) }
+            val result = withContext(suggestDispatcher) { computeSuggestions(state, t) } ?: return@launch
             if (result.clearSwipe) clearSwipe()
             setSuggestions(result.list, result.literal, result.math)
         }
@@ -721,8 +842,8 @@ class KeyboardViewModel(
         val clearSwipe: Boolean
     )
 
-    private fun computeSuggestions(state: KeyboardUiState, t: LocalState): SuggestionResult {
-        val before = bridge.textBeforeCursor(80)
+    private fun computeSuggestions(state: KeyboardUiState, t: LocalState): SuggestionResult? {
+        val before = bridge.textBeforeCursorWithin(80, SUGGEST_READ_MS, false) ?: return null
 
         // ناتج العملية الحسابية له الأولوية بالشريط
         if (state.mathResults) {
@@ -826,7 +947,10 @@ class KeyboardViewModel(
         /** رموز العمليات الحسابية: كتابتها لا تشغّل التصحيح ولا تعلّم الكلمة السابقة */
         const val NON_WORD_END_SYMBOLS = "+×÷=*%^<>~|#"
         const val MAX_RECENT_EMOJIS = 32
+        const val HOT_READ_MS = 80L
+        const val SUGGEST_READ_MS = 400L
         const val FRESH_CLIP_MS = 180_000L
+        const val CLIP_EDIT_MAX = 200_000
         const val DOUBLE_TAP_MS = 350L
     }
 }

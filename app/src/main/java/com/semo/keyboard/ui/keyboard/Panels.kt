@@ -657,11 +657,15 @@ internal fun ClipboardPanel(
         else state.clipItems.sortedByDescending { it.pinned }
     }
 
-    Column(
+    var menuKey by remember { mutableStateOf<String?>(null) }
+    val menuItem = menuKey?.let { k -> state.clipItems.firstOrNull { it.text == k } }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(panelHeight)
     ) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -744,10 +748,16 @@ internal fun ClipboardPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(shownItems, key = { it.text }) { item -> ClipCard(item, arabic, colors, viewModel) }
+                    items(shownItems, key = { it.text }) { item ->
+                        ClipCard(item, colors, item.text == menuKey, { menuKey = item.text }, viewModel)
+                    }
                 }
             }
         }
+    }
+    if (menuItem != null) {
+        ClipActionBubble(menuItem, arabic, colors, bottomInset, { menuKey = null }, viewModel)
+    }
     }
 }
 
@@ -770,30 +780,67 @@ private fun ClipEmptyState(title: String, hint: String, colors: SemoKeyboardColo
 }
 
 @Composable
-private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors, viewModel: KeyboardViewModel) {
-    val kind = remember(item.text) { ClipClassifier.kindOf(item.text) }
+private fun ClipBody(item: ClipItem, kind: ClipKind, colors: SemoKeyboardColors, maxTextLines: Int) {
     val shown = remember(item.text) { item.text.clipDisplayText() }
-    val linkUrl = remember(item.text, kind) { if (kind == ClipKind.LINK) ClipClassifier.extractUrl(item.text) else null }
-    val context = LocalContext.current
-    var menu by remember { mutableStateOf(false) }
+    when (kind) {
+        ClipKind.IMAGE -> ClipImageThumb(item.text.clipImageName(), colors)
+        ClipKind.CODE -> Text(
+            text = shown,
+            color = colors.text,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            fontFamily = FontFamily.Monospace,
+            maxLines = maxTextLines + 1,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(textDirection = TextDirection.Ltr)
+        )
+        ClipKind.LINK -> Text(
+            text = shown.trim(),
+            color = colors.keyAccent,
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+            maxLines = maxTextLines - 2,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(textDirection = TextDirection.Ltr)
+        )
+        ClipKind.TEXT -> Text(
+            text = shown,
+            color = colors.text,
+            fontSize = 15.sp,
+            lineHeight = 20.sp,
+            maxLines = maxTextLines,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(textDirection = TextDirection.Content)
+        )
+    }
+}
+
+@Composable
+private fun ClipCard(
+    item: ClipItem,
+    colors: SemoKeyboardColors,
+    selected: Boolean,
+    onMenu: () -> Unit,
+    viewModel: KeyboardViewModel
+) {
+    val kind = remember(item.text) { ClipClassifier.kindOf(item.text) }
+    val shape = RoundedCornerShape(16.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(112.dp)
-            .background(colors.key, RoundedCornerShape(16.dp))
-            .border(1.dp, colors.divider, RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .pointerInput(item.text, menu) {
+            .background(colors.key, shape)
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) colors.keyAccent else colors.divider, shape)
+            .clip(shape)
+            .pointerInput(item.text) {
                 detectTapGestures(
                     onTap = {
-                        if (menu) menu = false else {
-                            viewModel.onSelectionTick()
-                            viewModel.onClipPaste(item.text)
-                        }
+                        viewModel.onSelectionTick()
+                        viewModel.onClipPaste(item.text)
                     },
                     onLongPress = {
                         viewModel.onSelectionTick()
-                        menu = true
+                        onMenu()
                     }
                 )
             }
@@ -803,37 +850,7 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            when (kind) {
-                ClipKind.IMAGE -> ClipImageThumb(item.text.clipImageName(), colors)
-                ClipKind.CODE -> Text(
-                    text = shown,
-                    color = colors.text,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 5,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(textDirection = TextDirection.Ltr)
-                )
-                ClipKind.LINK -> Text(
-                    text = shown.trim(),
-                    color = colors.keyAccent,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(textDirection = TextDirection.Ltr)
-                )
-                ClipKind.TEXT -> Text(
-                    text = shown,
-                    color = colors.text,
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(textDirection = TextDirection.Content)
-                )
-            }
+            ClipBody(item, kind, colors, 4)
             if (item.pinned) {
                 Spacer(Modifier.height(4.dp))
                 Icon(
@@ -844,7 +861,7 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 )
             }
         }
-        if (kind == ClipKind.IMAGE && !menu) {
+        if (kind == ClipKind.IMAGE) {
             PressBox(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -870,21 +887,73 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                 }
             }
         }
-        if (menu) {
-            Row(
+    }
+}
+
+/**
+ * فقاعة الضغطة المطوّلة على عنصر الحافظة (بنمط قائمة iOS): خلفية معتمة، بطاقة معاينة العنصر بحدّ أزرق،
+ * وتحتها فقاعة إجراءات: لصق، تعديل، فتح (للروابط)، تثبيت/إلغاء التثبيت، حذف.
+ */
+@Composable
+private fun BoxScope.ClipActionBubble(
+    item: ClipItem,
+    arabic: Boolean,
+    colors: SemoKeyboardColors,
+    bottomInset: Dp,
+    onDismiss: () -> Unit,
+    viewModel: KeyboardViewModel
+) {
+    val kind = remember(item.text) { ClipClassifier.kindOf(item.text) }
+    val linkUrl = remember(item.text, kind) { if (kind == ClipKind.LINK) ClipClassifier.extractUrl(item.text) else null }
+    val context = LocalContext.current
+    val cardShape = RoundedCornerShape(18.dp)
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(bottom = bottomInset)
+                .width(236.dp)
+                .pointerInput(Unit) { detectTapGestures(onTap = { }) },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
                 modifier = Modifier
-                    .matchParentSize()
-                    .background(colors.keyPressed.copy(alpha = 0.97f), RoundedCornerShape(16.dp)),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth()
+                    .height(84.dp)
+                    .shadow(14.dp, cardShape)
+                    .background(colors.key, cardShape)
+                    .border(1.5.dp, colors.keyAccent, cardShape)
+                    .clip(cardShape)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
+                ClipBody(item, kind, colors, 3)
+            }
+            Spacer(Modifier.height(8.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(14.dp, cardShape)
+                    .background(colors.bubble, cardShape)
+                    .clip(cardShape)
+            ) {
+                ClipBubbleRow(R.drawable.ic_clip_paste, tr(arabic, "لصق", "Paste"), colors.text, arabic, colors, true) {
+                    onDismiss()
+                    viewModel.onClipPaste(item.text)
+                }
+                if (kind != ClipKind.IMAGE) {
+                    ClipBubbleRow(R.drawable.ic_clip_edit, tr(arabic, "تعديل", "Edit"), colors.text, arabic, colors, true) {
+                        onDismiss()
+                        viewModel.onClipEditStart(item.text)
+                    }
+                }
                 if (linkUrl != null) {
-                    ClipMenuAction(
-                        iconRes = R.drawable.ic_clip_open_link,
-                        label = tr(arabic, "فتح", "Open"),
-                        ink = colors.keyAccent
-                    ) {
-                        menu = false
+                    ClipBubbleRow(R.drawable.ic_clip_open_link, tr(arabic, "فتح الرابط", "Open link"), colors.text, arabic, colors, true) {
+                        onDismiss()
                         runCatching {
                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(linkUrl))
                             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -892,20 +961,16 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
                         }
                     }
                 }
-                ClipMenuAction(
-                    iconRes = if (item.pinned) R.drawable.ic_clip_pin_fill else R.drawable.ic_clip_pin,
-                    label = if (item.pinned) tr(arabic, "إلغاء التثبيت", "Unpin") else tr(arabic, "تثبيت", "Pin"),
-                    ink = colors.keyAccent
+                ClipBubbleRow(
+                    if (item.pinned) R.drawable.ic_clip_pin_fill else R.drawable.ic_clip_pin,
+                    if (item.pinned) tr(arabic, "إلغاء التثبيت", "Unpin") else tr(arabic, "تثبيت", "Pin"),
+                    colors.text, arabic, colors, true
                 ) {
-                    menu = false
+                    onDismiss()
                     viewModel.onClipTogglePin(item.text)
                 }
-                ClipMenuAction(
-                    iconRes = R.drawable.ic_clip_trash,
-                    label = tr(arabic, "حذف", "Delete"),
-                    ink = DeleteRed
-                ) {
-                    menu = false
+                ClipBubbleRow(R.drawable.ic_clip_trash, tr(arabic, "حذف", "Delete"), DeleteRed, arabic, colors, false) {
+                    onDismiss()
                     viewModel.onClipDelete(item.text)
                 }
             }
@@ -914,11 +979,132 @@ private fun ClipCard(item: ClipItem, arabic: Boolean, colors: SemoKeyboardColors
 }
 
 @Composable
-private fun ClipMenuAction(iconRes: Int, label: String, ink: Color, onClick: () -> Unit) {
-    PressBox(modifier = Modifier.size(width = 64.dp, height = 44.dp), onClick = onClick) { _ ->
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
-            Icon(painter = painterResource(iconRes), contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
-            Text(text = label, color = ink, fontSize = 11.sp, maxLines = 1)
+private fun ClipBubbleRow(
+    iconRes: Int,
+    label: String,
+    ink: Color,
+    arabic: Boolean,
+    colors: SemoKeyboardColors,
+    divider: Boolean,
+    onClick: () -> Unit
+) {
+    PressBox(modifier = Modifier.fillMaxWidth().height(46.dp), onClick = onClick) { pressed ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (pressed) colors.keyPressed else Color.Transparent)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val icon = @Composable {
+                    Icon(
+                        painter = painterResource(iconRes),
+                        contentDescription = null,
+                        tint = ink,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                val text = @Composable {
+                    Text(text = label, color = ink, fontSize = 16.sp, maxLines = 1)
+                }
+                if (arabic) {
+                    icon()
+                    Spacer(Modifier.weight(1f))
+                    text()
+                } else {
+                    text()
+                    Spacer(Modifier.weight(1f))
+                    icon()
+                }
+            }
+            if (divider) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(colors.divider)
+                )
+            }
+        }
+    }
+}
+
+/** شريط التعديل بدل شريط الاقتراحات: ✕ إلغاء | النص قيد التعديل | ✓ حفظ (الكتابة تذهب لنص التعديل لا لحقل التطبيق) */
+@Composable
+internal fun ClipEditBar(
+    state: KeyboardUiState,
+    colors: SemoKeyboardColors,
+    stripHeight: Dp,
+    viewModel: KeyboardViewModel
+) {
+    val arabic = state.language.rtl
+    val text = state.clipEdit?.text ?: ""
+    val preview = remember(text) {
+        val t = text.replace("\n", "↵")
+        if (t.length > 60) "…" + t.takeLast(59) else t
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(stripHeight)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PressBox(modifier = Modifier.size(width = 44.dp, height = 40.dp), onClick = {
+            viewModel.onSelectionTick()
+            viewModel.onClipEditCancel()
+        }) { pressed ->
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(if (pressed) colors.keyPressed else colors.keySpecial, RoundedCornerShape(50)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "✕", color = colors.text, fontSize = 14.sp)
+            }
+        }
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(32.dp)
+                .background(colors.chip, RoundedCornerShape(10.dp))
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = tr(arabic, "تعديل", "Edit"),
+                color = colors.keyAccent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (preview.isEmpty()) tr(arabic, "اكتب النص المعدّل…", "Type the edited text…") else preview,
+                color = if (preview.isEmpty()) colors.textMuted else colors.text,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(textDirection = TextDirection.Content),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        PressBox(modifier = Modifier.size(width = 44.dp, height = 40.dp), onClick = {
+            viewModel.onSelectionTick()
+            viewModel.onClipEditSave()
+        }) { pressed ->
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(if (pressed) colors.keyAccent.copy(alpha = 0.8f) else colors.keyAccent, RoundedCornerShape(50)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "✓", color = colors.textOnAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

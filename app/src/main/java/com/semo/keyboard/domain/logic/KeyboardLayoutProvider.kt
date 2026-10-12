@@ -229,7 +229,7 @@ object KeyboardLayoutProvider {
         KeyboardPage.SYMBOLS_1 -> symbolRows(state, firstPage = true)
         KeyboardPage.SYMBOLS_2 -> symbolRows(state, firstPage = false)
         KeyboardPage.NUMPAD -> numpadRows(state)
-        KeyboardPage.EMOJI, KeyboardPage.CLIPBOARD, KeyboardPage.EDIT -> emptyList()
+        KeyboardPage.EMOJI, KeyboardPage.CLIPBOARD, KeyboardPage.EDIT, KeyboardPage.CALC -> emptyList()
     }
 
     /**
@@ -377,13 +377,13 @@ object KeyboardLayoutProvider {
             op("−", "-", alts = listOf("_", "–", "—")),
             op(")", alts = listOf("]", "}", ">")),
             digit(3), digit(4), digit(5),
-            KeyDefinition("⌫", KeyAction.Backspace)
+            enterKey(state.enterKind, state.language).copy(weight = 1f)
         )
         val r3 = listOf(
             op("×", alts = listOf("*", "⋅", "x")),
             op("/", alts = listOf("\\", "|", ":")),
             digit(6), digit(7), digit(8),
-            enterKey(state.enterKind, state.language).copy(weight = 1f)
+            KeyDefinition("⌫", KeyAction.Backspace)
         )
         val r4 = listOf(
             KeyDefinition(if (arabic) "أبج" else "ABC", KeyAction.SwitchToLetters),

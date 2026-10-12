@@ -53,12 +53,12 @@ class ClipboardRepository(context: Context) {
      * يضيف نصًا (أو مفتاح صورة) للسجل ويرجع المفتاح المخزَّن بالسجل (للصق السريع)، أو null لو رُفض.
      * النص الطويل يُحفظ كاملًا بملف ويُخزَّن بالسجل مفتاح بمعاينة أوله. المسافات البادئة تبقى كما هي (الأكواد).
      */
-    suspend fun add(text: String): String? {
+    private suspend fun prepare(text: String): String? {
         if (!appContext.isUserStorageUnlocked()) return null
         val raw = sanitize(text).replace(SEP, " ")
         val body = if (raw.isClipImage()) raw else raw.trimEnd().trimStart('\n', '\r')
         if (body.isBlank()) return null
-        val stored: String = when {
+        return when {
             body.isClipImage() -> body
             body.length > INLINE_MAX -> {
                 if (body.length > MAX_TEXT_LENGTH) return null
@@ -67,6 +67,10 @@ class ClipboardRepository(context: Context) {
             }
             else -> body
         }
+    }
+
+    suspend fun add(text: String): String? {
+        val stored = prepare(text) ?: return null
         store.edit { p ->
             val list = decode(p[key]).toMutableList()
             val index = list.indexOfFirst { it.text == stored }
@@ -79,6 +83,28 @@ class ClipboardRepository(context: Context) {
             p[key] = encode(kept)
         }
         return stored
+    }
+
+    /** يستبدل عنصرًا بنص معدَّل في موضعه نفسه مع الإبقاء على التثبيت */
+    suspend fun replace(oldStored: String, newText: String): Boolean {
+        val stored = prepare(newText) ?: return false
+        store.edit { p ->
+            val list = decode(p[key]).toMutableList()
+            val index = list.indexOfFirst { it.text == oldStored }
+            var pinned = index >= 0 && list[index].pinned
+            if (index >= 0) list.removeAt(index)
+            val dup = list.indexOfFirst { it.text == stored }
+            if (dup >= 0) {
+                pinned = pinned || list[dup].pinned
+                list.removeAt(dup)
+            }
+            list.add(if (index in 0..list.size) index else 0, ClipItem(stored, pinned))
+            val kept = limit(list)
+            list.filter { it !in kept }.forEach { deleteBacking(it.text) }
+            p[key] = encode(kept)
+        }
+        if (oldStored != stored) deleteBacking(oldStored)
+        return true
     }
 
     /** يحذف ما يكسر التخزين: أحرف surrogate منفردة، NUL، وBOM */

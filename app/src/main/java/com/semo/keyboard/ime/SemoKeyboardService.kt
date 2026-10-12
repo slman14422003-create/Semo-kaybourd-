@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -58,8 +59,14 @@ import com.semo.keyboard.ui.keyboard.KeyboardViewModelFactory
 import com.semo.keyboard.ui.MainActivity
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineExceptionHandler
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -68,6 +75,11 @@ import kotlinx.coroutines.withContext
 
 /** أقصى عدد أحرف بدفعة لصق واحدة (النص الطويل يُلصق على دفعات كي لا يتجاوز حدّ حجم رسالة Binder) */
 private const val COMMIT_CHUNK = 4_000
+private const val SLOW_BACKOFF_MS = 600L
+private const val EXPLICIT_READ_MS = 1200L
+private const val START_READ_MS = 100L
+private const val DELETE_FEEDBACK_GAP_MS = 35L
+private const val POLL_IDLE_MS = 1200L
 
 /**
  * خدمة لوحة المفاتيح. تستضيف واجهة Compose داخل نافذة الـ IME.
@@ -100,12 +112,65 @@ class SemoKeyboardService :
     private var clickPlayer: KeyClickPlayer? = null
 
     /** الصوت والاهتزاز على خيط خلفي كي لا يؤخّرا رسم الضغطة التالية على الخيط الرئيسي */
-    private val feedbackThread = HandlerThread("semo-feedback").also { it.start() }
+    private val feedbackThread = HandlerThread("semo-feedback", android.os.Process.THREAD_PRIORITY_DISPLAY).also { it.start() }
     private val feedbackHandler = Handler(feedbackThread.looper)
 
     /** الاهتزاز بخيط مستقل عن الصوت: توقّف أحدهما (AudioTrack) لا يؤخّر الآخر */
-    private val hapticThread = HandlerThread("semo-haptic").also { it.start() }
+    private val hapticThread = HandlerThread("semo-haptic", android.os.Process.THREAD_PRIORITY_DISPLAY).also { it.start() }
     private val hapticHandler = Handler(hapticThread.looper)
+
+    private val readThread = HandlerThread("semo-read", android.os.Process.THREAD_PRIORITY_DISPLAY).also { it.start() }
+    private val readHandler = Handler(readThread.looper)
+    private val readsInFlight = AtomicInteger(0)
+    @Volatile private var slowUntil = 0L
+    @Volatile private var lastTypeAt = 0L
+    @Volatile private var lastDeleteFeedbackAt = 0L
+    private val capsPending = AtomicBoolean(false)
+    private val pendingHaptic = AtomicReference<KeyFeedback?>(null)
+    private var clipJob: Job? = null
+    private var shotJob: Job? = null
+
+    private class ReadTask<T>(private val block: () -> T) : Runnable {
+        @Volatile var cancelled = false
+        var value: T? = null
+        val latch = CountDownLatch(1)
+        override fun run() {
+            try {
+                if (!cancelled) value = runCatching(block).getOrNull()
+            } finally {
+                latch.countDown()
+            }
+        }
+    }
+
+    private fun <T> readWithin(timeoutMs: Long, skipIfSlow: Boolean, block: () -> T): T? {
+        if (skipIfSlow && SystemClock.uptimeMillis() < slowUntil && readsInFlight.get() > 0) return null
+        val task = ReadTask(block)
+        readsInFlight.incrementAndGet()
+        val posted = readHandler.post {
+            try {
+                task.run()
+            } finally {
+                readsInFlight.decrementAndGet()
+            }
+        }
+        if (!posted) {
+            readsInFlight.decrementAndGet()
+            return null
+        }
+        val finished = try {
+            task.latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+        if (!finished) {
+            task.cancelled = true
+            slowUntil = SystemClock.uptimeMillis() + SLOW_BACKOFF_MS
+            return null
+        }
+        return task.value
+    }
 
     /**
      * قراءات حقل الإدخال (getCursorCapsMode...) استدعاءات بين عمليتين تتجمّد حتى يردّ التطبيق؛ كانت تُنفَّذ
@@ -128,43 +193,82 @@ class SemoKeyboardService :
     }
     private val hasVibrator: Boolean by lazy { vibrator?.hasVibrator() == true }
 
-    /**
-     * تأثيرات هابتك جاهزة: ضربة قصيرة حادّة (مثل Taptic Engine بآيفون) بدل اهتزاز عام طويل "طنّان".
-     * من أندرويد 10 نستعمل التأثيرات المعرّفة بالنظام (TICK/CLICK) لأن محرك الاهتزاز مضبوط لها بكل جهاز،
-     * وقبله نقرة قصيرة جدًا بشدة متدرجة.
-     */
-    private val hapticEffects: Map<KeyFeedback, VibrationEffect> by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val tick = VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
-            val click = VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
-            val heavy = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
-            mapOf(
-                KeyFeedback.STANDARD to tick,
-                KeyFeedback.MODIFIER to tick,
-                KeyFeedback.SELECTION to tick,
-                KeyFeedback.DELETE to click,
-                KeyFeedback.LONG_PRESS to heavy
+    private val hapticEffects: Map<KeyFeedback, VibrationEffect> by lazy { buildHapticEffects() }
+
+    private fun buildHapticEffects(): Map<KeyFeedback, VibrationEffect> {
+        val v = vibrator
+        val amp = v?.hasAmplitudeControl() == true
+        fun shot(ms: Long, strength: Int): VibrationEffect =
+            VibrationEffect.createOneShot(ms, if (amp) strength else VibrationEffect.DEFAULT_AMPLITUDE)
+        val legacy = mapOf(
+            KeyFeedback.STANDARD to shot(8, 70),
+            KeyFeedback.MODIFIER to shot(9, 90),
+            KeyFeedback.SELECTION to shot(6, 50),
+            KeyFeedback.DELETE to shot(10, 120),
+            KeyFeedback.LONG_PRESS to shot(16, 180)
+        )
+        if (v == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return legacy
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            composedHaptics(v)?.let { return it }
+            val support = v.areEffectsSupported(
+                VibrationEffect.EFFECT_TICK,
+                VibrationEffect.EFFECT_CLICK,
+                VibrationEffect.EFFECT_HEAVY_CLICK
             )
-        } else {
-            val amp = vibrator?.hasAmplitudeControl() == true
-            fun shot(ms: Long, strength: Int): VibrationEffect =
-                VibrationEffect.createOneShot(ms, if (amp) strength else VibrationEffect.DEFAULT_AMPLITUDE)
-            mapOf(
-                KeyFeedback.STANDARD to shot(8, 70),
-                KeyFeedback.MODIFIER to shot(9, 90),
-                KeyFeedback.SELECTION to shot(6, 50),
-                KeyFeedback.DELETE to shot(10, 120),
-                KeyFeedback.LONG_PRESS to shot(16, 180)
-            )
+            if (support.any { it == Vibrator.VIBRATION_EFFECT_SUPPORT_NO }) return legacy
         }
+        val tick = VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+        val click = VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+        val heavy = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
+        return mapOf(
+            KeyFeedback.STANDARD to tick,
+            KeyFeedback.MODIFIER to tick,
+            KeyFeedback.SELECTION to tick,
+            KeyFeedback.DELETE to click,
+            KeyFeedback.LONG_PRESS to heavy
+        )
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.R)
+    private fun composedHaptics(v: Vibrator): Map<KeyFeedback, VibrationEffect>? {
+        val tick = VibrationEffect.Composition.PRIMITIVE_TICK
+        val click = VibrationEffect.Composition.PRIMITIVE_CLICK
+        if (!v.areAllPrimitivesSupported(tick, click)) return null
+        val low = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            v.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_LOW_TICK)
+        ) VibrationEffect.Composition.PRIMITIVE_LOW_TICK else tick
+        fun one(id: Int, scale: Float): VibrationEffect =
+            VibrationEffect.startComposition().addPrimitive(id, scale).compose()
+        return mapOf(
+            KeyFeedback.STANDARD to one(tick, 0.8f),
+            KeyFeedback.MODIFIER to one(low, 0.9f),
+            KeyFeedback.SELECTION to one(tick, 0.45f),
+            KeyFeedback.DELETE to one(click, 0.55f),
+            KeyFeedback.LONG_PRESS to one(click, 1f)
+        )
+    }
+
+    private val hapticRunner = Runnable {
+        val kind = pendingHaptic.getAndSet(null) ?: return@Runnable
+        runCatching { vibrateTick(kind) }
+    }
+
+    private fun requestHaptic(kind: KeyFeedback) {
+        val previous = pendingHaptic.getAndUpdate { prev -> if (prev == KeyFeedback.LONG_PRESS) prev else kind }
+        if (previous == null) hapticHandler.post(hapticRunner)
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cursorMovedTask = Runnable {
-        if (::viewModel.isInitialized) {
+        if (::viewModel.isInitialized && capsPending.compareAndSet(false, true)) {
             val inputType = currentInputEditorInfo?.inputType ?: 0
-            ioHandler.post {
-                val capitalize = shouldCapitalize(inputType)
+            val ic = currentInputConnection
+            readHandler.post {
+                val capitalize = try {
+                    runCatching { shouldCapitalize(inputType, ic) }.getOrDefault(false)
+                } finally {
+                    capsPending.set(false)
+                }
                 mainHandler.post {
                     if (::viewModel.isInitialized) viewModel.onCursorMoved(capitalize)
                 }
@@ -181,7 +285,7 @@ class SemoKeyboardService :
     /** استطلاع دوري أثناء ظهور اللوحة: بعض الأنظمة (HyperOS/One UI) لا ترسل إشعار تغيّر الحافظة بشكل موثوق */
     private val pollTask = object : Runnable {
         override fun run() {
-            if (::viewModel.isInitialized) {
+            if (::viewModel.isInitialized && SystemClock.uptimeMillis() - lastTypeAt > POLL_IDLE_MS) {
                 captureClipboard()
                 captureScreenshot()
             }
@@ -222,7 +326,8 @@ class SemoKeyboardService :
     /** لقطات الشاشة التي لا تُنسخ للحافظة تلقائيًا: نلتقط أحدث لقطة (آخر 3 دقائق) لو مُنح إذن الصور */
     private fun captureScreenshot() {
         if (passwordField || !viewModel.uiState.value.clipboardEnabled || !hasMediaPermission()) return
-        serviceScope.launch {
+        if (shotJob?.isActive == true) return
+        shotJob = serviceScope.launch {
             val shot = withContext(Dispatchers.IO) { runCatching { latestScreenshot() }.getOrNull() } ?: return@launch
             if (shot.id == lastShotId) return@launch
             lastShotId = shot.id
@@ -253,6 +358,7 @@ class SemoKeyboardService :
 
         // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
+        hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
     }
 
     private class ClipSnap(val text: String?, val uri: android.net.Uri?, val imageMime: String?)
@@ -299,7 +405,8 @@ class SemoKeyboardService :
      */
     private fun captureClipboard(force: Boolean = false) {
         if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
-        serviceScope.launch {
+        if (!force && clipJob?.isActive == true) return
+        clipJob = serviceScope.launch {
             // محاولة فورية أولًا (أغلب الحالات تنجح من أول مرة)، ثم إعادة محاولة متباعدة
             // قليلًا فقط لو الحافظة لم تكن جاهزة بعد (رابط تطبيقات مثل X/Twitter أحيانًا يتأخر).
             var snap: ClipSnap? = null
@@ -424,7 +531,13 @@ class SemoKeyboardService :
         }
         KeyboardStatusHelper.markImeSeen(this)
         hasSelection = (info?.initialSelStart ?: 0) != (info?.initialSelEnd ?: 0)
-        viewModel.onStartInput(page, shouldCapitalize(inputType), enterKindFor(info), !noSuggestions, fieldKind)
+        val startIc = currentInputConnection
+        val startCaps = if (inputType == 0) false else readWithin(START_READ_MS, true) { shouldCapitalize(inputType, startIc) }
+        viewModel.onStartInput(page, startCaps == true, enterKindFor(info), !noSuggestions, fieldKind)
+        if (startCaps == null) {
+            mainHandler.removeCallbacks(cursorMovedTask)
+            mainHandler.postDelayed(cursorMovedTask, 150)
+        }
         captureClipboard()
     }
 
@@ -482,7 +595,10 @@ class SemoKeyboardService :
             clickPlayer = null
         }
         feedbackThread.quitSafely()
+        hapticHandler.removeCallbacksAndMessages(null)
         hapticThread.quitSafely()
+        readHandler.removeCallbacksAndMessages(null)
+        readThread.quitSafely()
         ioThread.quitSafely()
         KeyboardStatusHelper.setImeVisible(this, false)
         super.onDestroy()
@@ -490,8 +606,10 @@ class SemoKeyboardService :
         store.clear()
     }
 
-    private fun shouldCapitalize(inputType: Int): Boolean =
-        inputType != 0 && (currentInputConnection?.getCursorCapsMode(inputType) ?: 0) != 0
+    private fun shouldCapitalize(
+        inputType: Int,
+        ic: android.view.inputmethod.InputConnection? = currentInputConnection
+    ): Boolean = inputType != 0 && (ic?.getCursorCapsMode(inputType) ?: 0) != 0
 
     private fun enterKindFor(info: EditorInfo?): EnterKind {
         if (info == null) return EnterKind.RETURN
@@ -512,6 +630,7 @@ class SemoKeyboardService :
     private val bridge = object : InputBridge {
 
         override fun commitText(text: String) {
+            lastTypeAt = SystemClock.uptimeMillis()
             val ic = currentInputConnection ?: return
             if (text.length <= COMMIT_CHUNK) {
                 runCatching { ic.commitText(text, 1) }
@@ -629,7 +748,12 @@ class SemoKeyboardService :
         }
 
         override fun textBeforeCursor(length: Int): String =
-            runCatching { currentInputConnection?.getTextBeforeCursor(length, 0)?.toString() }.getOrNull().orEmpty()
+            textBeforeCursorWithin(length, EXPLICIT_READ_MS, false).orEmpty()
+
+        override fun textBeforeCursorWithin(length: Int, timeoutMs: Long, skipIfSlow: Boolean): String? {
+            val ic = currentInputConnection ?: return ""
+            return readWithin(timeoutMs, skipIfSlow) { ic.getTextBeforeCursor(length, 0)?.toString().orEmpty() }
+        }
 
         override fun commitImage(fileName: String, mime: String): Boolean {
             val uri = runCatching { imageStore.contentUri(fileName) }.getOrNull() ?: return false
@@ -662,8 +786,14 @@ class SemoKeyboardService :
         }
 
         override fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback, volume: Float) {
+            val now = SystemClock.uptimeMillis()
+            lastTypeAt = now
             if (!sound && !haptic) return
-            if (haptic) hapticHandler.post { runCatching { vibrateTick(kind) } }
+            if (kind == KeyFeedback.DELETE) {
+                if (now - lastDeleteFeedbackAt < DELETE_FEEDBACK_GAP_MS) return
+                lastDeleteFeedbackAt = now
+            }
+            if (haptic) requestHaptic(kind)
             if (sound) feedbackHandler.post { runCatching { clickPlayer?.play(kind, volume) } }
         }
     }

@@ -56,7 +56,7 @@ data class KeyDefinition(
 }
 
 enum class ShiftState { OFF, ON, LOCKED }
-enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, NUMPAD, EMOJI, CLIPBOARD, EDIT }
+enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, NUMPAD, EMOJI, CLIPBOARD, EDIT, CALC }
 /** نظام الكتابة: يحدّد الحروف الكبيرة (Shift) واتجاه النص */
 enum class Script { LATIN, ARABIC, CYRILLIC }
 
@@ -124,7 +124,7 @@ enum class KeySpacing(val horizontal: Float, val vertical: Float) {
 }
 
 /** عناصر شريط الأدوات: يختار المستخدم أيها يظهر وبأي ترتيب */
-enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CURSOR, ONEHAND, SETTINGS }
+enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS }
 
 /** ماذا يفتح مفتاح «123» بصفحة الحروف: لوحة أرقام 3×4 أو صفحة الرموز القديمة */
 enum class NumKeyTarget { NUMPAD, SYMBOLS }
@@ -165,6 +165,10 @@ enum class EnterKind { RETURN, SEARCH, SEND, GO, DONE, NEXT }
 /** عنصر من سجل الحافظة */
 @Immutable
 data class ClipItem(val text: String, val pinned: Boolean)
+
+/** تعديل عنصر حافظة جارٍ: [key] المفتاح المخزَّن الأصلي، [text] النص قيد التعديل (يُكتب بلوحة المفاتيح نفسها) */
+@Immutable
+data class ClipEdit(val key: String, val text: String)
 
 /**
  * عنصر الحافظة الصورة يُخزَّن كنص خاص: بادئة + اسم الملف + نوع الصورة. الملف نفسه بتخزين التطبيق
@@ -302,6 +306,7 @@ data class KeyboardUiState(
     val mathResult: MathResult? = null,
     val toolbarOpen: Boolean = false,
     val clipItems: List<ClipItem> = emptyList(),
+    val clipEdit: ClipEdit? = null,
     /** توقّع الكلمة التالية (من أنماط كتابتك + قائمة مدمجة) */
     val nextWord: Boolean = true,
     /** تدقيق إملائي: اقتراح التصحيح بالشريط لو الكلمة غير موجودة بالقاموس */
