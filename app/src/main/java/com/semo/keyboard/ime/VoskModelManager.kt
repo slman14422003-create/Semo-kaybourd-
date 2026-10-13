@@ -48,7 +48,7 @@ object VoskModelManager {
     private const val MODEL_DIR = "ar"
     private const val PART_FILE = "ar.zip.part"
     private const val READY_MARK = ".ready"
-    private const val IDLE_RELEASE_MS = 90_000L
+    private const val IDLE_RELEASE_MS = 20_000L
     private const val MIN_ZIP_BYTES = 300_000_000L
     private const val SPACE_FACTOR = 3L
 
@@ -58,6 +58,9 @@ object VoskModelManager {
     private val loadLock = Any()
     private var job: Job? = null
     private var model: Model? = null
+
+    @Volatile
+    private var busy = false
     private var logConfigured = false
 
     val state: StateFlow<VoskState> get() = flow
@@ -105,18 +108,28 @@ object VoskModelManager {
 
     fun loadModel(context: Context): Model? = synchronized(loadLock) {
         main.removeCallbacks(releaseTask)
+        busy = true
         model?.let { return it }
-        if (!isReady(context)) return null
+        if (!isReady(context)) {
+            busy = false
+            return null
+        }
         if (!logConfigured) {
             logConfigured = true
             runCatching { LibVosk.setLogLevel(LogLevel.WARNINGS) }
         }
         val loaded = runCatching { Model(modelDir(context).absolutePath) }.getOrNull()
         model = loaded
+        if (loaded == null) busy = false
         loaded
     }
 
+    fun trim() {
+        if (!busy) release()
+    }
+
     fun idle() {
+        busy = false
         main.removeCallbacks(releaseTask)
         main.postDelayed(releaseTask, IDLE_RELEASE_MS)
     }

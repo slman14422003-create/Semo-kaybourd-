@@ -4,52 +4,37 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- التدرّج الأساسي -->
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:startX="6" android:startY="0"
                 android:endX="104" android:endY="108"
                 android:type="linear">
-                <item android:offset="0" android:color="#FF6E8CFF" />
-                <item android:offset="0.45" android:color="#FF3F55F2" />
-                <item android:offset="1" android:color="#FF1C1FA8" />
+                <item android:offset="0" android:color="#FF7C5CFF" />
+                <item android:offset="0.5" android:color="#FF4A2FE0" />
+                <item android:offset="1" android:color="#FF1E1286" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- شعاع قطري ناعم -->
-    <path android:pathData="M-10,46 L50,-10 L118,18 L58,74 Z" android:fillAlpha="0.16">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="0" android:startY="0"
-                android:endX="108" android:endY="60"
-                android:type="linear">
-                <item android:offset="0" android:color="#FFFFFFFF" />
-                <item android:offset="1" android:color="#00FFFFFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <!-- توهّج ناعم أعلى الأيسر -->
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:centerX="28" android:centerY="20"
                 android:gradientRadius="62"
                 android:type="radial">
-                <item android:offset="0" android:color="#4DFFFFFF" />
+                <item android:offset="0" android:color="#47FFFFFF" />
                 <item android:offset="1" android:color="#00FFFFFF" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- توهّج لوني أسفل اليمين لعمق إضافي -->
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:centerX="86" android:centerY="92"
-                android:gradientRadius="48"
+                android:centerX="96" android:centerY="100"
+                android:gradientRadius="58"
                 android:type="radial">
-                <item android:offset="0" android:color="#3DAE7BFF" />
-                <item android:offset="1" android:color="#00AE7BFF" />
+                <item android:offset="0" android:color="#CCFF4FA0" />
+                <item android:offset="1" android:color="#00FF4FA0" />
             </gradient>
         </aapt:attr>
     </path>

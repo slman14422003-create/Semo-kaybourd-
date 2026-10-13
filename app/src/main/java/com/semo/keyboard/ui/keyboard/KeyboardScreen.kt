@@ -99,6 +99,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shape
@@ -1124,7 +1125,8 @@ private fun RowScope.KeyButton(
         else -> colors.key
     }
     // آيفون: الضغط لحظي واللون يتلاشى بسلاسة عند الرفع
-    val animBg by animateColorAsState(bg, scaledTween(LocalAnimScale.current, if (pressed) 0 else 140), label = "keyBg")
+    val animBg = animateColorAsState(bg, scaledTween(LocalAnimScale.current, if (pressed) 0 else 140), label = "keyBg")
+    val bgShape = if (def.plain) RoundedCornerShape(50) else metrics.keyShape
     val textColor = when {
         shiftOn -> colors.onShiftActive
         def.isAccent -> colors.textOnAccent
@@ -1265,7 +1267,9 @@ private fun RowScope.KeyButton(
                         )
                     }
                 }
-                .background(animBg, if (def.plain) RoundedCornerShape(50) else metrics.keyShape),
+                .drawBehind {
+                    drawOutline(bgShape.createOutline(size, layoutDirection, this), animBg.value)
+                },
             contentAlignment = Alignment.Center
         ) {
             if (!hideLabels) {

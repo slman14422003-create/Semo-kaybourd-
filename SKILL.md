@@ -92,3 +92,9 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Strip UI (KeyboardScreen): SuggestionCell with press highlight, tap and long press through detectTapGestures, font shrink for long phrases, accessibility long-click label; RemovedNotice (trash icon, message, Undo pill, countdown line) crossfades in place of the slots. Strings suggest_* and blocked_* in values and values-ar; keyboardString() picks the keyboard language.
 - Settings, Dictionary page: new section listing removed words with Restore and Restore all.
 - Not yet verified by a Gradle build.
+
+## Memory trim, calmer animations, new icon (v3.9.5, versionCode 36)
+- VoskModelManager: idle release 20s, busy flag, trim() called from SemoKeyboardService.onTrimMemory (UI_HIDDEN and above) together with CacheCleaner.clearMemory().
+- TranslatePanel: language chip pulse only runs while loading. KeyboardScreen: key background color is read in the draw phase (drawBehind plus drawOutline).
+- Icon: keycap with voice waveform and spacebar pill on a violet gradient; drawables ic_launcher_background, ic_launcher_foreground, ic_launcher_monochrome (outline keycap plus waveform) and ic_logo.
+- Not yet verified by a Gradle build.

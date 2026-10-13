@@ -12,8 +12,8 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 35
-        versionName = "3.9.4"
+        versionCode = 36
+        versionName = "3.9.5"
         ndk { debugSymbolLevel = "NONE" }
     }
     val semoKeystore = file("semo-release.p12")

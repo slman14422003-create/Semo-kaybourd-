@@ -48,7 +48,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,12 +104,14 @@ internal fun TranslateBar(
         animationSpec = scaledTween(scale, 280),
         label = "translateGlow"
     )
-    val pulse by rememberInfiniteTransition(label = "langPulse").animateFloat(
-        initialValue = 1f,
-        targetValue = if (ui.loading) 1.06f else 1f,
-        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
-        label = "langPulseValue"
-    )
+    val pulse: State<Float> = if (ui.loading) {
+        rememberInfiniteTransition(label = "langPulse").animateFloat(
+            initialValue = 1f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+            label = "langPulseValue"
+        )
+    } else remember { mutableStateOf(1f) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -129,8 +133,8 @@ internal fun TranslateBar(
                 modifier = Modifier
                     .padding(horizontal = 2.dp)
                     .graphicsLayer {
-                        scaleX = press * pulse
-                        scaleY = press * pulse
+                        scaleX = press * pulse.value
+                        scaleY = press * pulse.value
                     }
                     .height(pillHeight)
                     .clip(pillShape)

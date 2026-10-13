@@ -790,6 +790,8 @@ class SemoKeyboardService :
         super.onTrimMemory(level)
         if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
             com.semo.keyboard.ui.keyboard.EmojiBitmapCache.clear()
+            com.semo.keyboard.ime.VoskModelManager.trim()
+            com.semo.keyboard.data.CacheCleaner.clearMemory()
         }
     }
 
