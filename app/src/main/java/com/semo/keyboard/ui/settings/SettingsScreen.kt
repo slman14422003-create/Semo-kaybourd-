@@ -226,6 +226,7 @@ private fun toolbarItemInfo(item: ToolbarItem): Triple<String, Int, androidx.com
     ToolbarItem.ONEHAND -> Triple(L("وضع اليد الواحدة"), R.drawable.ic_tool_onehand, IconGray)
     ToolbarItem.SETTINGS -> Triple(L("الإعدادات"), R.drawable.ic_tool_settings, IconGray)
     ToolbarItem.TRANSLATE -> Triple("Translate", R.drawable.ic_tool_translate, IconBlue)
+    ToolbarItem.VOICE -> Triple("Voice", R.drawable.ic_ios_mic, IconOrange)
 }
 
 private fun holdLabel(d: HoldDelay) = when (d) {
@@ -649,7 +650,11 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             order.forEachIndexed { index, item ->
                 val on = item in enabled
                 val info = toolbarItemInfo(item).let {
-                    if (item == ToolbarItem.TRANSLATE) it.copy(first = com.semo.keyboard.ui.appString(R.string.translate_title)) else it
+                    when (item) {
+                        ToolbarItem.TRANSLATE -> it.copy(first = com.semo.keyboard.ui.appString(R.string.translate_title))
+                        ToolbarItem.VOICE -> it.copy(first = com.semo.keyboard.ui.appString(R.string.voice_title))
+                        else -> it
+                    }
                 }
                 if (index > 0) Divider()
                 ToolbarItemRow(

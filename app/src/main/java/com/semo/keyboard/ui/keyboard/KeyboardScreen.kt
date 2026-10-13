@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -207,7 +208,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val rows = remember(
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
         state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind,
-        state.hideButtonMode, state.numKeyTarget
+        state.hideButtonMode, state.numKeyTarget, state.navButtons
     ) { KeyboardLayoutProvider.rows(state) }
     // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل. فبدل ما نترك مساحة فارغة تحت الصف الأخير،
     // نجعل صف الكرة الأرضية والميكروفون بنفس ارتفاع شريط التنقل ونوسّط أيقوناته فيه (مثل آيفون
@@ -215,6 +216,10 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
     val density = LocalDensity.current
     val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).toDp() } else 0.dp
+    val tappableBottom = WindowInsets.tappableElement.getBottom(density)
+    val insetNavButtons = tappableBottom > 0
+    LaunchedEffect(insetNavButtons) { viewModel.setNavInset(insetNavButtons) }
+    val navButtons = state.navButtons
     // صف الأيقونات بنفس ارتفاع شريط التنقل بالضبط، وأيقونة الكرة تتوسّط ارتفاعه تمامًا، لأن النظام
     // يوسّط أزرار الشريط (زر إخفاء الكيبورد) بنفس المنتصف. ويمكن للمستخدم تعديل الفرق الصغير
     // بين الأجهزة من الإعدادات (globeOffsetDp).
@@ -224,11 +229,11 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val navCenter = utilHeight / 2
     // رفع الدائرتين عن أسفل الشاشة: نزيد ارتفاع الصف الأخير بمقدار الرفع ونرفع مركزيهما معه
     val raise = state.bottomRaiseDp.dp
-    val utilRowHeight = utilHeight + raise
+    val utilRowHeight = if (navButtons) 0.dp else utilHeight + raise
     val globeCenter = (navCenter + raise + state.globeOffsetDp.dp).coerceIn(14.dp, utilRowHeight - 14.dp)
     // صفحات الإيموجي/الحافظة/التحرير: شريطها السفلي كان يقع تحت زر إخفاء الكيبورد (يتداخل مع لمس النظام)،
     // فنحجز منطقة شريط التنقل أسفل الصفحة ونقصّر المحتوى بنفس المقدار
-    val bottomReserve = if (edgeToEdgeIme) utilHeight else 0.dp
+    val bottomReserve = if (edgeToEdgeIme && !navButtons) utilHeight else 0.dp
     // نسخّن فلترة الإيموجي بخيط خلفي كي لا تعلّق فتح لوحة الإيموجي أول مرة
     // نجهّز الإيموجي بالخلفية قبل أن يفتح المستخدم لوحتها: فلترة الرموز غير المدعومة ثم رسم أول الأقسام لصور جاهزة
     val warmDensity = LocalDensity.current.density
@@ -248,7 +253,9 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     LaunchedEffect(colors.panel, isDark) { currentOnChrome(colors.panel.toArgb(), isDark) }
 
     // لون اللوحة يمتد خلف الشريط؛ لو كان الشريط أطول من صف الأيقونات نكمّل الفرق بحشوة سفلية
-    val extraBottom = if (edgeToEdgeIme) (navInset - utilHeight).coerceAtLeast(0.dp) else 8.dp
+    val extraBottom = if (edgeToEdgeIme) {
+        if (navButtons) navInset else (navInset - utilHeight).coerceAtLeast(0.dp)
+    } else 8.dp
 
     val panelShape = RectangleShape
 
@@ -319,13 +326,14 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
             ) {
                 if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
                     Crossfade(
-                        targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else 0,
+                        targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else 0,
                         animationSpec = scaledTween(animScale, 170),
                         label = "strip"
                     ) { mode ->
                         when (mode) {
                             1 -> ClipEditBar(state, colors, metrics.stripHeight, viewModel)
                             2 -> TranslateBar(state, colors, metrics.stripHeight, viewModel)
+                            3 -> VoiceBar(state, colors, metrics.stripHeight, viewModel)
                             else -> TopStrip(state, colors, metrics, viewModel)
                         }
                     }
@@ -608,6 +616,7 @@ private fun TopStrip(
                         ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = index * 28) { viewModel.cycleOneHand() }
                         ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28) { viewModel.openSettings() }
                         ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28) { viewModel.openTranslate() }
+                        ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = index * 28) { viewModel.openVoice() }
                         }
                     }
                 }

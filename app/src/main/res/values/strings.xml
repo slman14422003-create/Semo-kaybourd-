@@ -34,4 +34,12 @@
     <string name="backup_export_fail">Export failed</string>
     <string name="backup_import_ok">Imported %1$d items</string>
     <string name="backup_import_fail">Invalid or unreadable backup file</string>
+    <string name="voice_title">Voice typing</string>
+    <string name="voice_starting">Starting…</string>
+    <string name="voice_listening">Listening…</string>
+    <string name="voice_paused">Tap the mic to continue</string>
+    <string name="voice_permission">Allow microphone access</string>
+    <string name="voice_unavailable">Speech recognition is unavailable</string>
+    <string name="voice_network">No connection, tap to retry</string>
+    <string name="voice_failed">Could not listen, tap to retry</string>
 </resources>

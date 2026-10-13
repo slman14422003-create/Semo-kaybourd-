@@ -38,6 +38,9 @@ import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ShiftState
 import com.semo.keyboard.domain.model.TextShortcut
 import com.semo.keyboard.domain.model.TranslateUi
+import com.semo.keyboard.domain.model.VoiceStatus
+import com.semo.keyboard.domain.model.VoiceUi
+import com.semo.keyboard.ime.VoiceLanguages
 import com.semo.keyboard.domain.logic.TranslateEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -148,7 +151,10 @@ class KeyboardViewModel(
         /** نص نُسخ للتو (شريحة اللصق السريع بشريط الاقتراحات) */
         val freshClip: String? = null,
         val clipEdit: ClipEdit? = null,
-        val translate: TranslateUi? = null
+        val translate: TranslateUi? = null,
+        val voice: VoiceUi? = null,
+        val navSetting: Boolean = false,
+        val navInset: Boolean = false
     )
 
     /** تصحيح تلقائي حصل للتو: الرجوع (Backspace) مباشرة بعده يعيد الكلمة الأصلية */
@@ -242,6 +248,8 @@ class KeyboardViewModel(
                 freshClip = t.freshClip,
                 clipEdit = t.clipEdit,
                 translate = t.translate,
+                voice = t.voice,
+                navButtons = t.navSetting || t.navInset,
                 translateTarget = s.translateTarget,
                 translateRecents = s.translateRecents
             )
@@ -273,6 +281,7 @@ class KeyboardViewModel(
                 toolbarOpen = false,
                 clipEdit = null,
                 translate = null,
+                voice = null,
                 suggestionsAllowed = suggestionsAllowed
             )
         }
@@ -330,6 +339,7 @@ class KeyboardViewModel(
             bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, feedbackKind(action), state.soundVolume)
         }
         if (transient.value.alternates.isNotEmpty()) dismissAlternates()
+        if (transient.value.voice != null) closeVoice()
 
         // أي مفتاح غير الحذف يلغي إمكانية التراجع عن التصحيح التلقائي
         val pendingUndo = undo
@@ -604,10 +614,69 @@ class KeyboardViewModel(
 
     // ---------- translation ----------
 
+    val voiceLevel = MutableStateFlow(0f)
+
+    fun setNavSetting(v: Boolean) {
+        if (transient.value.navSetting != v) transient.update { it.copy(navSetting = v) }
+    }
+
+    fun setNavInset(v: Boolean) {
+        if (transient.value.navInset != v) transient.update { it.copy(navInset = v) }
+    }
+
+    fun openVoice() {
+        transient.update {
+            it.copy(
+                voice = VoiceUi(VoiceStatus.STARTING),
+                translate = null,
+                clipEdit = null,
+                toolbarOpen = false,
+                page = KeyboardPage.LETTERS,
+                alternates = emptyList()
+            )
+        }
+        translateJob?.cancel()
+        bridge.voiceStart(VoiceLanguages.tagFor(uiState.value.language))
+    }
+
+    fun closeVoice() {
+        if (transient.value.voice == null) return
+        bridge.voiceCancel()
+        voiceLevel.value = 0f
+        transient.update { it.copy(voice = null) }
+    }
+
+    fun toggleVoice() {
+        val v = transient.value.voice ?: return
+        when (v.status) {
+            VoiceStatus.LISTENING, VoiceStatus.STARTING -> bridge.voiceFinish()
+            else -> {
+                transient.update { st -> st.voice?.let { st.copy(voice = it.copy(status = VoiceStatus.STARTING, text = "")) } ?: st }
+                bridge.voiceStart(VoiceLanguages.tagFor(uiState.value.language))
+            }
+        }
+    }
+
+    fun onVoiceStatus(status: VoiceStatus) {
+        if (status != VoiceStatus.LISTENING) voiceLevel.value = 0f
+        transient.update { st ->
+            st.voice?.let { st.copy(voice = it.copy(status = status, text = if (status == VoiceStatus.LISTENING) it.text else "")) } ?: st
+        }
+    }
+
+    fun onVoicePartial(text: String) {
+        transient.update { st -> st.voice?.let { if (it.text == text) st else st.copy(voice = it.copy(text = text)) } ?: st }
+    }
+
+    fun onVoiceLevel(level: Float) {
+        voiceLevel.value = level
+    }
+
     private var translateJob: Job? = null
     private var translateKey = ""
 
     fun openTranslate() {
+        closeVoice()
         transient.update { it.copy(translate = TranslateUi(), toolbarOpen = false, page = KeyboardPage.LETTERS, alternates = emptyList()) }
         translateKey = ""
         refreshTranslate(true)
@@ -693,6 +762,7 @@ class KeyboardViewModel(
     }
 
     fun openPage(page: KeyboardPage) {
+        if (page != KeyboardPage.LETTERS) closeVoice()
         transient.update { it.copy(page = page, alternates = emptyList()) }
     }
 

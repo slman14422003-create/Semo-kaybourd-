@@ -128,7 +128,7 @@ enum class KeySpacing(val horizontal: Float, val vertical: Float) {
 }
 
 /** عناصر شريط الأدوات: يختار المستخدم أيها يظهر وبأي ترتيب */
-enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS, TRANSLATE }
+enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS, TRANSLATE, VOICE }
 
 /** ماذا يفتح مفتاح «123» بصفحة الحروف: لوحة أرقام 3×4 أو صفحة الرموز القديمة */
 enum class NumKeyTarget { NUMPAD, SYMBOLS }
@@ -347,6 +347,8 @@ data class KeyboardUiState(
     val keyboardScale: Float = 1f,
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translate: TranslateUi? = null,
+    val voice: VoiceUi? = null,
+    val navButtons: Boolean = false,
     val translateTarget: String = "en",
     val translateRecents: List<String> = emptyList(),
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
@@ -361,4 +363,12 @@ data class TranslateUi(
     val detected: String = "",
     val loading: Boolean = false,
     val error: Boolean = false
+)
+
+
+enum class VoiceStatus { STARTING, LISTENING, PAUSED, NO_PERMISSION, UNAVAILABLE, NETWORK, FAILED }
+
+data class VoiceUi(
+    val status: VoiceStatus = VoiceStatus.STARTING,
+    val text: String = ""
 )

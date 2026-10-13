@@ -21,6 +21,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.view.inputmethod.InputMethodSubtype
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.inputmethod.EditorInfoCompat
 import androidx.core.view.inputmethod.InputConnectionCompat
@@ -473,6 +474,93 @@ class SemoKeyboardService :
         }.getOrNull()
     }
 
+    private var voiceInput: VoiceInput? = null
+    private var voiceComposing = false
+    private var voicePrefixValue: String? = null
+    private var pendingVoice = false
+
+    private val voiceCallback = object : VoiceInput.Callback {
+        override fun onStatus(status: com.semo.keyboard.domain.model.VoiceStatus) {
+            if (!::viewModel.isInitialized) return
+            viewModel.onVoiceStatus(status)
+            if (status != com.semo.keyboard.domain.model.VoiceStatus.LISTENING &&
+                status != com.semo.keyboard.domain.model.VoiceStatus.STARTING
+            ) commitVoiceLeftover()
+        }
+
+        override fun onPartial(text: String) {
+            voiceCompose(text)
+            if (::viewModel.isInitialized) viewModel.onVoicePartial(text)
+        }
+
+        override fun onFinal(text: String) {
+            voiceCommit(text)
+            if (::viewModel.isInitialized) viewModel.onVoicePartial("")
+        }
+
+        override fun onLevel(level: Float) {
+            if (::viewModel.isInitialized) viewModel.onVoiceLevel(level)
+        }
+    }
+
+    private fun voicePrefixFor(ic: android.view.inputmethod.InputConnection): String {
+        val before = runCatching { ic.getTextBeforeCursor(1, 0)?.toString() }.getOrNull().orEmpty()
+        val last = before.lastOrNull() ?: return ""
+        return if (last.isWhitespace() || last in "([{\"'") "" else " "
+    }
+
+    private fun voiceCompose(text: String) {
+        val ic = currentInputConnection ?: return
+        val prefix = voicePrefixValue ?: voicePrefixFor(ic).also { voicePrefixValue = it }
+        voiceComposing = true
+        lastTypeAt = SystemClock.uptimeMillis()
+        runCatching { ic.setComposingText(prefix + text, 1) }
+    }
+
+    private fun voiceCommit(text: String) {
+        val ic = currentInputConnection ?: return
+        val prefix = voicePrefixValue ?: voicePrefixFor(ic)
+        voicePrefixValue = null
+        voiceComposing = false
+        lastTypeAt = SystemClock.uptimeMillis()
+        runCatching { ic.commitText(prefix + text, 1) }
+    }
+
+    private fun commitVoiceLeftover() {
+        if (voiceComposing) {
+            runCatching { currentInputConnection?.finishComposingText() }
+        }
+        voiceComposing = false
+        voicePrefixValue = null
+    }
+
+    private fun startVoice(languageTag: String) {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            if (::viewModel.isInitialized) viewModel.onVoiceStatus(com.semo.keyboard.domain.model.VoiceStatus.NO_PERMISSION)
+            VoiceBus.onPermission = { granted ->
+                if (granted) {
+                    pendingVoice = true
+                    mainHandler.post { if (isInputViewShown) startPendingVoice() }
+                }
+            }
+            runCatching {
+                startActivity(Intent(this, VoicePermissionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
+            }
+            return
+        }
+        val engine = voiceInput ?: VoiceInput(applicationContext, voiceCallback).also { voiceInput = it }
+        engine.start(languageTag)
+    }
+
+    private fun startPendingVoice() {
+        pendingVoice = false
+        if (::viewModel.isInitialized) viewModel.openVoice()
+    }
+
+    private fun detectNavButtons(): Boolean = runCatching {
+        android.provider.Settings.Secure.getInt(contentResolver, "navigation_mode", 2) < 2
+    }.getOrDefault(false)
+
     private fun startCacheCycle() {
         serviceScope.launch {
             while (isActive) {
@@ -574,6 +662,10 @@ class SemoKeyboardService :
         hasSelection = (info?.initialSelStart ?: 0) != (info?.initialSelEnd ?: 0)
         val startIc = currentInputConnection
         val startCaps = if (inputType == 0) false else readWithin(START_READ_MS, true) { shouldCapitalize(inputType, startIc) }
+        voiceInput?.cancel()
+        voiceComposing = false
+        voicePrefixValue = null
+        viewModel.setNavSetting(detectNavButtons())
         viewModel.onStartInput(page, startCaps == true, enterKindFor(info), !noSuggestions, fieldKind)
         if (startCaps == null) {
             mainHandler.removeCallbacks(cursorMovedTask)
@@ -597,14 +689,19 @@ class SemoKeyboardService :
         super.onWindowShown()
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         KeyboardStatusHelper.setImeVisible(this, true)
+        if (::viewModel.isInitialized) viewModel.setNavSetting(detectNavButtons())
         captureClipboard()
         mainHandler.removeCallbacks(pollTask)
         mainHandler.postDelayed(pollTask, 600)
+        if (pendingVoice) mainHandler.postDelayed({ if (pendingVoice && isInputViewShown) startPendingVoice() }, 250)
     }
 
     override fun onWindowHidden() {
         super.onWindowHidden()
-        if (::viewModel.isInitialized) viewModel.flushLearning()
+        if (::viewModel.isInitialized) {
+            viewModel.closeVoice()
+            viewModel.flushLearning()
+        }
         mainHandler.removeCallbacks(pollTask)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         KeyboardStatusHelper.setImeVisible(this, false)
@@ -615,6 +712,7 @@ class SemoKeyboardService :
         // لو ما صفّرنا هاد العلم بعد الخروج من حقل كلمة مرور، بيضل عالق true ويمنع التقاط
         // النسخ من أي تطبيق ثاني لاحقًا (حتى لو مو حقل كلمة مرور إطلاقًا) إلى حين فتح حقل جديد.
         passwordField = false
+        voiceInput?.cancel()
     }
 
     /** صور الإيموجي الجاهزة تأخذ عشرات الميغابايت: نحرّرها لما يطلب النظام ذاكرة (اللوحة مخفية) */
@@ -629,6 +727,8 @@ class SemoKeyboardService :
         runCatching {
             (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipListener)
         }
+        voiceInput?.cancel()
+        voiceInput = null
         serviceScope.cancel()
         mainHandler.removeCallbacks(cursorMovedTask)
         feedbackHandler.post {
@@ -736,6 +836,17 @@ class SemoKeyboardService :
 
         override fun startVoiceInput() {
             this@SemoKeyboardService.switchToVoiceInput()
+        }
+
+        override fun voiceStart(languageTag: String) = this@SemoKeyboardService.startVoice(languageTag)
+
+        override fun voiceFinish() {
+            voiceInput?.finish()
+        }
+
+        override fun voiceCancel() {
+            voiceInput?.cancel()
+            commitVoiceLeftover()
         }
 
         override fun performEdit(action: EditAction) {

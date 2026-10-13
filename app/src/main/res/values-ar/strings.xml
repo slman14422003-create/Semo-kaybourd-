@@ -34,4 +34,12 @@
     <string name="backup_export_fail">فشل التصدير</string>
     <string name="backup_import_ok">تم استيراد %1$d عنصر</string>
     <string name="backup_import_fail">ملف النسخة غير صالح أو غير مقروء</string>
+    <string name="voice_title">الكتابة الصوتية</string>
+    <string name="voice_starting">جارٍ التشغيل…</string>
+    <string name="voice_listening">أستمع إليك…</string>
+    <string name="voice_paused">المس الميكروفون للمتابعة</string>
+    <string name="voice_permission">اسمح بالوصول إلى الميكروفون</string>
+    <string name="voice_unavailable">التعرّف على الصوت غير متاح</string>
+    <string name="voice_network">لا يوجد اتصال، المس للمحاولة</string>
+    <string name="voice_failed">تعذّر الاستماع، المس للمحاولة</string>
 </resources>

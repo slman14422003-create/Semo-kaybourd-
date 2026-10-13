@@ -33,5 +33,8 @@ interface InputBridge {
     fun performEdit(action: EditAction)
     /** الانتقال للإدخال الصوتي بالنظام (لوحة صوتية مفعّلة بالجهاز) */
     fun startVoiceInput()
+    fun voiceStart(languageTag: String)
+    fun voiceFinish()
+    fun voiceCancel()
     fun openSettings()
 }

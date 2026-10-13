@@ -238,6 +238,9 @@ object KeyboardLayoutProvider {
      * بلغة الكتابة الحالية، ويمينًا دائرة إخفاء اللوحة: تُرسم خلف سهم الإخفاء الخاص بالنظام (One UI)
      * فيبدو داخل دائرة تنسجم مع دائرة الكرة، أو بسهم خاص بالتطبيق حسب الإعدادات.
      */
+    private fun utilityTail(state: KeyboardUiState): List<List<KeyDefinition>> =
+        if (state.navButtons) emptyList() else listOf(utilityRow(state))
+
     fun utilityRow(state: KeyboardUiState): List<KeyDefinition> {
         val globe = KeyDefinition(
             "🌐", KeyAction.SwitchLanguage, weight = 2.8f,
@@ -313,7 +316,7 @@ object KeyboardLayoutProvider {
             centered(mapRow(r2), width - r2.size),
             row3,
             bottomRow(state, letters = true)
-        ) + listOf(utilityRow(state))
+        ) + utilityTail(state)
     }
 
     /** لغات بلا حروف كبيرة (عربي وفارسي): صف ثالث بحذف يمينًا بلا Shift */
@@ -346,7 +349,7 @@ object KeyboardLayoutProvider {
             if (row2.size < letters[0].size) centered(row2, letters[0].size - row2.size) else row2,
             row3,
             bottomRow(state, letters = true)
-        ) + listOf(utilityRow(state))
+        ) + utilityTail(state)
     }
 
     /**
@@ -393,7 +396,7 @@ object KeyboardLayoutProvider {
             plain(".", alts = listOf("…", "٫", "·")),
             KeyDefinition(if (arabic) "رموز" else "#+=", KeyAction.SwitchToSymbols, textOnly = true)
         )
-        return listOf(r1, r2, r3, r4, utilityRow(state))
+        return listOf(r1, r2, r3, r4) + utilityTail(state)
     }
 
     private fun symbolRows(state: KeyboardUiState, firstPage: Boolean): List<List<KeyDefinition>> {
@@ -410,7 +413,7 @@ object KeyboardLayoutProvider {
             KeyDefinition("123", KeyAction.SwitchToSymbols, weight = edge)
         val third = listOf(switchKey, KeyDefinition.spacer(EDGE_GAP)) + mapRow(r3, 1.4f) +
             listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("⌫", KeyAction.Backspace, weight = edge))
-        return listOf(mapRow(r1), mapRow(r2), third, bottomRow(state, letters = false), utilityRow(state))
+        return listOf(mapRow(r1), mapRow(r2), third, bottomRow(state, letters = false)) + utilityTail(state)
     }
 
     /** صف آيفون: [123] [إيموجي] [مسافة] [return] بالنسب المقيسة 1.25 / 1.25 / 5 / 2.5 */
@@ -428,10 +431,20 @@ object KeyboardLayoutProvider {
         // iOS 18: على شريط المسافة كلمة space / مسافة
         val spaceLabel = state.language.spaceLabel
         val emoji = KeyDefinition("😊", KeyAction.Emoji, weight = 1.25f)
+        val nav = state.navButtons
+        val globe = KeyDefinition("🌐", KeyAction.SwitchLanguage, weight = 1f, longPressAction = KeyAction.Globe)
 
         // مثل آيفون: حقول البريد والروابط تعرض مفاتيح @ . / .com بجانب المسافة
         return when (if (letters) state.fieldKind else FieldKind.TEXT) {
-            FieldKind.EMAIL -> listOf(
+            FieldKind.EMAIL -> if (nav) listOf(
+                left.copy(weight = 1.25f),
+                globe.copy(weight = 1.0f),
+                emoji.copy(weight = 1.0f),
+                KeyDefinition("@", KeyAction.Character("@"), weight = 1.0f),
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 2.6f),
+                KeyDefinition(".", KeyAction.Character("."), weight = 1.0f),
+                enterKey(state.enterKind, state.language).copy(weight = 2.15f)
+            ) else listOf(
                 left.copy(weight = 1.25f),
                 emoji.copy(weight = 1.1f),
                 KeyDefinition("@", KeyAction.Character("@"), weight = 1.1f),
@@ -439,7 +452,16 @@ object KeyboardLayoutProvider {
                 KeyDefinition(".", KeyAction.Character("."), weight = 1.1f),
                 enterKey(state.enterKind, state.language).copy(weight = 2.15f)
             )
-            FieldKind.URL -> listOf(
+            FieldKind.URL -> if (nav) listOf(
+                left.copy(weight = 1.2f),
+                globe.copy(weight = 0.9f),
+                emoji.copy(weight = 0.9f),
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 1.8f),
+                KeyDefinition(".", KeyAction.Character("."), weight = 0.8f),
+                KeyDefinition("/", KeyAction.Character("/"), weight = 0.8f),
+                KeyDefinition(".com", KeyAction.Character(".com"), weight = 1.3f),
+                enterKey(state.enterKind, state.language).copy(weight = 2.3f)
+            ) else listOf(
                 left.copy(weight = 1.2f),
                 emoji.copy(weight = 1.0f),
                 KeyDefinition(spaceLabel, KeyAction.Space, weight = 2.2f),
@@ -448,7 +470,13 @@ object KeyboardLayoutProvider {
                 KeyDefinition(".com", KeyAction.Character(".com"), weight = 1.5f),
                 enterKey(state.enterKind, state.language).copy(weight = 2.3f)
             )
-            FieldKind.TEXT -> listOf(
+            FieldKind.TEXT -> if (nav) listOf(
+                left,
+                globe,
+                emoji.copy(weight = 1.0f),
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 4.25f),
+                enterKey(state.enterKind, state.language)
+            ) else listOf(
                 left,
                 emoji,
                 KeyDefinition(spaceLabel, KeyAction.Space, weight = 5f),
