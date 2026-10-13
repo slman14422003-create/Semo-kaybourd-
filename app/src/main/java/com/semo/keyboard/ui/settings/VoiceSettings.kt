@@ -191,13 +191,13 @@ internal fun VoicePage(repo: SettingsRepository, settings: SemoSettings, onBack:
                 )
             }
             Divider()
-            SwitchRow(
-                appString(R.string.voice_builtin_pref_title),
-                R.drawable.ic_ios_mic,
-                IconOrange,
-                settings.voiceBuiltinFirst,
-                subtitle = appString(R.string.voice_builtin_pref_hint)
-            ) { scope.launch { repo.setVoiceBuiltinFirst(it) } }
+            Text(
+                appString(R.string.voice_builtin_always_on),
+                color = SemoPalette.TextHint,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(14.dp)
+            )
         }
 
         Section(appString(R.string.voice_offline_title)) {

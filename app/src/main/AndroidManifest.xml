@@ -45,9 +45,25 @@
             android:theme="@style/Theme.Semo">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- alias منفصل حامل أيقونة الإطلاق: تعطيله (AppIconVisibility) يخفي أيقونة
+             التطبيق من الشاشة الرئيسية وشاشة التطبيقات دون التأثير على MainActivity نفسه
+             أو على خدمة لوحة المفاتيح. -->
+        <activity-alias
+            android:name=".ui.MainActivityLauncher"
+            android:targetActivity=".ui.MainActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <activity
             android:name=".ime.VoicePermissionActivity"
@@ -61,7 +77,8 @@
             android:permission="android.permission.BIND_INPUT_METHOD"
             android:exported="true"
             android:directBootAware="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:settingsActivity=".ui.MainActivity">
             <intent-filter>
                 <action android:name="android.view.InputMethod" />
             </intent-filter>

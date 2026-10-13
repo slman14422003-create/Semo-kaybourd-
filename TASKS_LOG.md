@@ -105,3 +105,10 @@
 - الشريطان: BarWidgets.kt فيه rememberBarEnter وbarEntrance (دخول بنابض: انزلاق وتلاشٍ وتكبير)، BarCapsule (كبسولة موحّدة بتدرّج وحدّ متلوّن وتوهّج حسب الحالة)، BarCloseButton (انكماش ودوران عند الضغط). شريط الترجمة: توهّج أثناء الترجمة ونبض لشريحة اللغة. شريط الصوت: توهّج يتبع مستوى الصوت، وميكروفون بتدرّج.
 - أزرار شريط الأدوات: لكل أداة لون خاص (تدرّج خفيف وحدّ رفيع وأيقونة بلون الأداة)، ضغط بنابض مرتد مع رفع الأيقونة، وحالة «نشط» متحرّكة للصفحة المفتوحة (إيموجي، حافظة، أرقام، حاسبة، تحرير).
 - لم يُبنَ بـ Gradle بعد؛ راجع مخرجات البناء أولًا لو ظهر خطأ.
+
+## إزالة صوت النظام نهائيًا، أيقونة جديدة، إخفاء الأيقونة (v3.9.3, versionCode 34)
+- VoiceInput.start: builtinReady() صار كافيًا وحده لتشغيل المحرك المدمج (Vosk) فورًا، بدون أي شرط على voiceBuiltinFirst؛ العربية بعد تنزيل النموذج ما بتوصل أبدًا لمحرك النظام/جوجل (كانت تُستخدم أولاً بالوضع الافتراضي وتتحول للمدمج فقط عند فشلها). voice_builtin_pref switch بصفحة الصوت صار نص حالة ثابت (voice_builtin_always_on) بدل التبديل، لأنه صار سلوكًا إجباريًا.
+- أيقونة التطبيق: إعادة رسم ic_launcher_background/foreground/monochrome (تدرّج أغنى، ظل طبقي، شارة بريق صغيرة)، نفس نظام adaptive icon الحالي.
+- إخفاء الأيقونة: AndroidManifest فيه الآن activity-alias منفصل (.ui.MainActivityLauncher) حامل intent-filter الـ LAUNCHER بدل MainActivity نفسها؛ util/AppIconVisibility.kt يبدّل حالته (ENABLED/DISABLED) عبر PackageManager. SemoKeyboardService فيه الآن android:settingsActivity=".ui.MainActivity" (زر الإعدادات بقائمة لوحات المفاتيح بالنظام) كطريق رجوع مضمون حتى لو الأيقونة مخفية؛ وزر الإعدادات داخل شريط أدوات اللوحة (MainActivity::class.java صريح) يشتغل بنفس الطريقة بغض النظر عن حالة الـ alias.
+- SemoSettings.hideAppIcon + Keys.HIDE_APP_ICON + setHideAppIcon؛ تبديل بصفحة "الحافظة والخصوصية" (SwitchRow) مع LaunchedEffect(settings.hideAppIcon) يطبّق الحالة الفعلية على الـ alias عند كل تحميل للصفحة (حماية من أي تعارض).
+- لم يُبنَ بـ Gradle بعد؛ راجع مخرجات البناء أولًا لو ظهر خطأ.

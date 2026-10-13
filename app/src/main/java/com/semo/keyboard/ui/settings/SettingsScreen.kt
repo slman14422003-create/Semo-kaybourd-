@@ -979,6 +979,10 @@ private fun PrivacyPage(
     val mediaLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { mediaGranted = it }
+    // يحافظ على تطابق حالة أيقونة الإطلاق الفعلية مع الإعداد المحفوظ (احتياطًا لأي تعارض)
+    LaunchedEffect(settings.hideAppIcon) {
+        com.semo.keyboard.util.AppIconVisibility.setIconVisible(ctx, !settings.hideAppIcon)
+    }
     SubPage(L("الحافظة والخصوصية"), onBack) {
         Section(L("الحافظة")) {
             SwitchRow(L("حفظ سجل الحافظة"), R.drawable.ic_tool_clipboard, IconBlue, settings.clipboardEnabled) {
@@ -997,6 +1001,24 @@ private fun PrivacyPage(
                 color = SemoPalette.TextSecondary,
                 fontSize = 13.sp,
                 lineHeight = 21.sp,
+                modifier = Modifier.padding(14.dp)
+            )
+        }
+        Section(L("أيقونة التطبيق")) {
+            SwitchRow(
+                L("إخفاء أيقونة التطبيق"),
+                R.drawable.ic_set_lock,
+                IconGray,
+                settings.hideAppIcon,
+                subtitle = L("تختفي الأيقونة من الشاشة الرئيسية وشاشة التطبيقات، ولوحة المفاتيح بتضل تشتغل عادي")
+            ) { hide ->
+                scope.launch { repo.setHideAppIcon(hide) }
+            }
+            Text(
+                L("لو خبّيتها وبدك ترجع تفتح التطبيق: افتح إعدادات ← اللغة والإدخال ← لوحات المفاتيح ← زر الإعدادات (⚙) جنب Semo، أو زر الإعدادات داخل شريط أدوات اللوحة نفسها."),
+                color = SemoPalette.TextHint,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
                 modifier = Modifier.padding(14.dp)
             )
         }

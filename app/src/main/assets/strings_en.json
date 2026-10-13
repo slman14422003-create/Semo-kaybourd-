@@ -235,5 +235,9 @@
 "لا يوجد ملف APK مرفق بآخر إصدار": "No APK file is attached to the latest release",
 "لا يوجد إصدار منشور بالمستودع بعد (HTTP 404)": "No published release in the repository yet (HTTP 404)",
 "لا يوجد اتصال بالإنترنت": "No internet connection",
-"انتهت مهلة الاتصال، حاول مجددًا": "Connection timed out, try again"
+"انتهت مهلة الاتصال، حاول مجددًا": "Connection timed out, try again",
+"أيقونة التطبيق": "App icon",
+"إخفاء أيقونة التطبيق": "Hide app icon",
+"تختفي الأيقونة من الشاشة الرئيسية وشاشة التطبيقات، ولوحة المفاتيح بتضل تشتغل عادي": "The icon disappears from the home screen and app drawer; the keyboard keeps working normally",
+"لو خبّيتها وبدك ترجع تفتح التطبيق: افتح إعدادات ← اللغة والإدخال ← لوحات المفاتيح ← زر الإعدادات (⚙) جنب Semo، أو زر الإعدادات داخل شريط أدوات اللوحة نفسها.": "If you hide it and want to open the app again: go to Settings → Language & input → On-screen keyboards → the settings gear next to Semo, or the settings button inside the keyboard's own toolbar."
 }

@@ -167,7 +167,9 @@ class VoiceInput(
             callback.onStatus(VoiceStatus.NO_PERMISSION)
             return
         }
-        if (builtinReady() && options.builtinFirst) {
+        // الصوت المدمج (محرك محلي بالكامل) له الأولوية المطلقة متى كان جاهزًا،
+        // بحيث ما بيوصل الطلب أبدًا لمحرك النظام/جوجل - ولو كان خيار "تفضيل الصوت المدمج" متوقف.
+        if (builtinReady()) {
             callback.onStatus(VoiceStatus.STARTING)
             beginWithCue { startBuiltin() }
             return

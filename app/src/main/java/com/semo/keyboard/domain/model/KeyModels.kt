@@ -284,7 +284,9 @@ data class SemoSettings(
     val voiceBuiltinFirst: Boolean = false,
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
-    val autoCacheClear: Boolean = true
+    val autoCacheClear: Boolean = true,
+    /** إخفاء أيقونة التطبيق من الشاشة الرئيسية وشاشة التطبيقات (تبقى لوحة المفاتيح تعمل عاديًا) */
+    val hideAppIcon: Boolean = false
 )
 
 @Immutable

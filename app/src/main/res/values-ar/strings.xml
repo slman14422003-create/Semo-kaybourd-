@@ -79,7 +79,7 @@
     <string name="voice_dialect_dz">الجزائر</string>
     <string name="voice_dialect_ma">المغرب</string>
     <string name="voice_builtin_title">محرك التعرّف العربي المدمج</string>
-    <string name="voice_builtin_hint">يعمل بدون خدمات الكلام من Google وبدون إنترنت وعلى أي جهاز. ينزّل مرة واحدة نموذجًا مفتوح المصدر (Vosk، رخصة Apache 2.0، حوالي 320 ميغابايت) من alphacephei.com. يتعرّف على الفصحى بأفضل دقة وعلى اللهجات بدقة أقل. يُفضَّل التنزيل عبر Wi-Fi.</string>
+    <string name="voice_builtin_hint">يعمل بدون خدمات الكلام من Google وبدون إنترنت وعلى أي جهاز. ينزّل مرة واحدة نموذجًا مفتوح المصدر (Vosk، رخصة Apache 2.0، حوالي 320 ميغابايت) من alphacephei.com. يتعرّف على الفصحى بأفضل دقة وعلى اللهجات بدقة أقل. يُفضَّل التنزيل عبر Wi-Fi.\n\nبعد التنزيل: الميكروفون بالعربية بيستخدم هاد المحرك المدمج دائمًا ولا يلمس تعرّف النظام أو Google إطلاقًا. محرك النظام بيُستخدم فقط لو لسا ما نزّلت المحرك المدمج، أو للغات الثانية غير العربية.</string>
     <string name="voice_builtin_status_missing">غير منزَّل</string>
     <string name="voice_builtin_status_ready">جاهز ويعمل بدون إنترنت</string>
     <string name="voice_builtin_status_downloading">جارٍ التنزيل</string>
@@ -92,4 +92,5 @@
     <string name="voice_builtin_delete">حذف</string>
     <string name="voice_builtin_pref_title">استخدام المحرك العربي المدمج أولًا</string>
     <string name="voice_builtin_pref_hint">يتجاوز تعرّف النظام للعربية. وعند الإيقاف يتولى المحرك المدمج تلقائيًا كلما كان تعرّف النظام غير متاح.</string>
+    <string name="voice_builtin_always_on">مفعّل تلقائيًا دائمًا: بمجرد تنزيل المحرك المدمج، ما في أي اتصال بمحرك النظام أو Google للعربية.</string>
 </resources>

@@ -79,7 +79,7 @@
     <string name="voice_dialect_dz">Algeria</string>
     <string name="voice_dialect_ma">Morocco</string>
     <string name="voice_builtin_title">Built-in Arabic engine</string>
-    <string name="voice_builtin_hint">Works without Google speech services and without internet, on any device. Downloads an open-source model (Vosk, Apache 2.0, about 320 MB) from alphacephei.com once. Standard Arabic is recognized best, dialects less accurately. Wi-Fi recommended.</string>
+    <string name="voice_builtin_hint">Works without Google speech services and without internet, on any device. Downloads an open-source model (Vosk, Apache 2.0, about 320 MB) from alphacephei.com once. Standard Arabic is recognized best, dialects less accurately. Wi-Fi recommended.\n\nOnce downloaded, Arabic voice input always uses this built-in engine and never touches the system or Google recognizer. The system recognizer is only used before the built-in model is downloaded, or for other languages.</string>
     <string name="voice_builtin_status_missing">Not downloaded</string>
     <string name="voice_builtin_status_ready">Ready, works offline</string>
     <string name="voice_builtin_status_downloading">Downloading</string>
@@ -92,4 +92,5 @@
     <string name="voice_builtin_delete">Delete</string>
     <string name="voice_builtin_pref_title">Use built-in Arabic first</string>
     <string name="voice_builtin_pref_hint">Skips the system recognizer for Arabic. When off, the built-in engine still takes over whenever the system one is unavailable.</string>
+    <string name="voice_builtin_always_on">Always on automatically: once the built-in engine is downloaded, Arabic never reaches the system or Google recognizer.</string>
 </resources>

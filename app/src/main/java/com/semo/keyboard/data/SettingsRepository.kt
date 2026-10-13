@@ -199,6 +199,7 @@ class SettingsRepository(context: Context) {
         val TRANSLATE_RECENTS = stringPreferencesKey("translate_recents")
         val TOOLBAR_TRANSLATE_SEEN = booleanPreferencesKey("toolbar_translate_seen")
         val TOOLBAR_VOICE_SEEN = booleanPreferencesKey("toolbar_voice_seen")
+        val HIDE_APP_ICON = booleanPreferencesKey("hide_app_icon")
     }
 
     val settings: Flow<SemoSettings> = store.data
@@ -251,7 +252,8 @@ class SettingsRepository(context: Context) {
                 voiceDialect = p[Keys.VOICE_DIALECT].toEnumOr(VoiceDialect.AUTO),
                 voiceOfflineFirst = p[Keys.VOICE_OFFLINE_FIRST] ?: false,
                 voiceBuiltinFirst = p[Keys.VOICE_BUILTIN_FIRST] ?: false,
-                translateRecents = p[Keys.TRANSLATE_RECENTS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
+                translateRecents = p[Keys.TRANSLATE_RECENTS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList(),
+                hideAppIcon = p[Keys.HIDE_APP_ICON] ?: false
             )
         }
         .distinctUntilChanged()
@@ -260,6 +262,7 @@ class SettingsRepository(context: Context) {
     suspend fun setVoiceDialect(v: VoiceDialect) { store.edit { it[Keys.VOICE_DIALECT] = v.name } }
     suspend fun setVoiceOfflineFirst(v: Boolean) { store.edit { it[Keys.VOICE_OFFLINE_FIRST] = v } }
     suspend fun setVoiceBuiltinFirst(v: Boolean) { store.edit { it[Keys.VOICE_BUILTIN_FIRST] = v } }
+    suspend fun setHideAppIcon(v: Boolean) { store.edit { it[Keys.HIDE_APP_ICON] = v } }
     suspend fun setAppLanguage(language: AppLanguage) { store.edit { it[Keys.APP_LANGUAGE] = language.name } }
     suspend fun setAutoCacheClear(v: Boolean) { store.edit { it[Keys.AUTO_CACHE_CLEAR] = v } }
     suspend fun setKeyboardTheme(theme: KeyboardTheme) { store.edit { it[Keys.KEYBOARD_THEME] = theme.name } }
