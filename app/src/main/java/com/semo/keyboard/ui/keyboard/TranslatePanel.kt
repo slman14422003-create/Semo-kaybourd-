@@ -1,5 +1,27 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import com.semo.keyboard.domain.model.KeyboardPage
+import com.semo.keyboard.ui.anim.IosPush
+import com.semo.keyboard.ui.anim.LocalAnimScale
+import com.semo.keyboard.ui.anim.scaledSpring
+import com.semo.keyboard.ui.anim.scaledTween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +41,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -46,80 +67,186 @@ internal fun TranslateBar(
     viewModel: KeyboardViewModel
 ) {
     val ui = state.translate ?: return
+    val scale = LocalAnimScale.current
+    val hasResult = ui.result.isNotEmpty() && !ui.error
+    val pickerOpen = state.page == KeyboardPage.TRANSLATE
+    val chevron by animateFloatAsState(
+        targetValue = if (pickerOpen) 180f else 0f,
+        animationSpec = scaledSpring(scale, 0.8f, 380f),
+        label = "chevron"
+    )
+    val border by animateColorAsState(
+        targetValue = when {
+            ui.error -> BarDanger.copy(alpha = 0.75f)
+            ui.loading -> colors.keyAccent.copy(alpha = 0.9f)
+            hasResult -> colors.keyAccent.copy(alpha = 0.45f)
+            else -> Color.Transparent
+        },
+        animationSpec = scaledTween(scale, 260),
+        label = "border"
+    )
+    val pillHeight = (stripHeight - 8.dp).coerceAtLeast(34.dp)
+    val pillShape = RoundedCornerShape(pillHeight / 2)
+    val accentBrush = Brush.linearGradient(
+        listOf(colors.keyAccent, colors.keyAccent.copy(alpha = 0.72f))
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(stripHeight)
-            .padding(horizontal = 2.dp),
+            .padding(horizontal = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        PressBox(modifier = Modifier.size(width = 52.dp, height = 40.dp), onClick = {
+        PressBox(modifier = Modifier.height(stripHeight), onClick = {
             viewModel.onSelectionTick()
             viewModel.toggleTranslatePicker()
         }) { pressed ->
-            Box(
+            val press by animateFloatAsState(
+                targetValue = if (pressed) 0.92f else 1f,
+                animationSpec = scaledSpring(scale, 0.8f, 700f),
+                label = "langPress"
+            )
+            Row(
                 modifier = Modifier
-                    .size(width = 42.dp, height = 30.dp)
-                    .background(if (pressed) colors.keyPressed else colors.keySpecial, RoundedCornerShape(50)),
-                contentAlignment = Alignment.Center
+                    .padding(horizontal = 2.dp)
+                    .graphicsLayer {
+                        scaleX = press
+                        scaleY = press
+                    }
+                    .height(pillHeight)
+                    .clip(pillShape)
+                    .background(accentBrush)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = TranslateLanguages.shortCode(state.translateTarget),
-                    color = colors.keyAccent,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                AnimatedContent(
+                    targetState = TranslateLanguages.shortCode(state.translateTarget),
+                    transitionSpec = {
+                        (fadeIn(scaledTween(scale, 200)) + slideInVertically(scaledTween(scale, 240, easing = IosPush)) { it / 2 }) togetherWith
+                            (fadeOut(scaledTween(scale, 120)) + slideOutVertically(scaledTween(scale, 200, easing = IosPush)) { -it / 2 })
+                    },
+                    label = "langCode"
+                ) { code ->
+                    Text(
+                        text = code,
+                        color = colors.textOnAccent,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.4.sp
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                Box(Modifier.graphicsLayer { rotationZ = chevron }) {
+                    ChevronGlyph(colors.textOnAccent, 9.dp)
+                }
             }
         }
+        Spacer(Modifier.width(4.dp))
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(34.dp)
-                .background(colors.chip, RoundedCornerShape(17.dp))
+                .height(pillHeight)
+                .clip(pillShape)
+                .background(colors.chip.copy(alpha = 0.92f))
+                .border(1.5.dp, border, pillShape)
                 .clickable {
                     if (ui.error) viewModel.retryTranslate() else viewModel.applyTranslation()
-                }
-                .padding(horizontal = 14.dp),
+                },
             contentAlignment = Alignment.CenterStart
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val hint = when {
-                    ui.error -> stringResource(R.string.translate_error)
-                    ui.result.isNotEmpty() -> ui.result
-                    ui.loading -> ""
-                    else -> stringResource(R.string.translate_hint)
+            if (ui.loading) Shimmer(colors.keyAccent, Modifier.fillMaxSize())
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val shown = when {
+                    ui.error -> 1
+                    hasResult -> 2
+                    ui.loading -> 3
+                    else -> 0
                 }
-                Text(
-                    text = hint,
-                    color = if (ui.result.isNotEmpty() && !ui.error) colors.text else colors.textMuted,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(textDirection = TextDirection.Content),
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (ui.loading) {
+                AnimatedContent(
+                    targetState = shown to (if (shown == 2) ui.result else ""),
+                    transitionSpec = {
+                        (fadeIn(scaledTween(scale, 220)) + slideInVertically(scaledTween(scale, 260, easing = IosPush)) { it / 3 }) togetherWith
+                            (fadeOut(scaledTween(scale, 120)) + slideOutVertically(scaledTween(scale, 200, easing = IosPush)) { -it / 3 })
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = "result"
+                ) { value ->
+                    when (value.first) {
+                        2 -> Text(
+                            text = value.second,
+                            color = colors.text,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(textDirection = TextDirection.Content)
+                        )
+                        1 -> Text(
+                            text = stringResource(R.string.translate_error),
+                            color = BarDanger,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        3 -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                            TypingDots(colors.keyAccent)
+                        }
+                        else -> Text(
+                            text = stringResource(R.string.translate_hint),
+                            color = colors.textMuted,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                if (ui.detected.isNotEmpty() && hasResult) {
                     Spacer(Modifier.width(8.dp))
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp),
-                        strokeWidth = 1.6.dp,
-                        color = colors.keyAccent
+                    Text(
+                        text = TranslateLanguages.shortCode(ui.detected),
+                        color = colors.textMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
         }
-        PressBox(modifier = Modifier.size(width = 48.dp, height = 40.dp), onClick = {
+        AnimatedVisibility(
+            visible = hasResult,
+            enter = fadeIn(scaledTween(scale, 180)) + scaleIn(scaledSpring(scale, 0.7f, 500f), initialScale = 0.4f),
+            exit = fadeOut(scaledTween(scale, 100)) + scaleOut(scaledTween(scale, 120), targetScale = 0.4f)
+        ) {
+            Row {
+                Spacer(Modifier.width(6.dp))
+                PressBox(modifier = Modifier.size(pillHeight), onClick = {
+                    viewModel.onSelectionTick()
+                    viewModel.applyTranslation()
+                }) { pressed ->
+                    Box(
+                        modifier = Modifier
+                            .size(pillHeight - 2.dp)
+                            .clip(CircleShape)
+                            .background(if (pressed) colors.keyAccent.copy(alpha = 0.7f) else colors.keyAccent),
+                        contentAlignment = Alignment.Center
+                    ) { CheckGlyph(colors.textOnAccent, 15.dp) }
+                }
+            }
+        }
+        Spacer(Modifier.width(4.dp))
+        PressBox(modifier = Modifier.size(width = 44.dp, height = stripHeight), onClick = {
             viewModel.onSelectionTick()
             viewModel.closeTranslate()
         }) { pressed ->
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .background(if (pressed) colors.keyPressed else colors.keySpecial, RoundedCornerShape(50)),
+                    .size(pillHeight - 8.dp)
+                    .clip(CircleShape)
+                    .background(if (pressed) colors.keyPressed else colors.keySpecial),
                 contentAlignment = Alignment.Center
-            ) {
-                Text(text = "✕", color = colors.text, fontSize = 13.sp)
-            }
+            ) { CloseGlyph(colors.text, 11.dp) }
         }
     }
 }
