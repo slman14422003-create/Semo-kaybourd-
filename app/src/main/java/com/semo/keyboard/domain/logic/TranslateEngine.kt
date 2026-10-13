@@ -20,6 +20,10 @@ object TranslateEngine {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TranslateResult>?): Boolean = size > 64
     }
 
+    fun clearCache() {
+        synchronized(cache) { cache.clear() }
+    }
+
     fun cached(text: String, target: String): TranslateResult? = synchronized(cache) { cache["$target|$text"] }
 
     fun translate(text: String, target: String): TranslateResult? {

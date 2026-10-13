@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui.onboarding
 
+import com.semo.keyboard.ui.L
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -100,47 +101,47 @@ fun OnboardingScreen(
 
             when (step) {
                 OnboardingStep.WELCOME -> StepText(
-                    "أهلًا فيك بسيمو كيبورد",
-                    "لوحة مفاتيح عربي وإنكليزي بتصميم أنيق وسريعة. خلّينا نجهّزها بخطوتين بسيطتين."
+                    L("أهلًا فيك بسيمو كيبورد"),
+                    L("لوحة مفاتيح عربي وإنكليزي بتصميم أنيق وسريعة. خلّينا نجهّزها بخطوتين بسيطتين.")
                 )
                 OnboardingStep.ENABLE -> {
-                    StepText("١. فعّل اللوحة", "افتح إعدادات لوحات المفاتيح وفعّل «سيمو كيبورد» من القائمة، وبعدين ارجع هون.")
+                    StepText(L("١. فعّل اللوحة"), L("افتح إعدادات لوحات المفاتيح وفعّل «سيمو كيبورد» من القائمة، وبعدين ارجع هون."))
                     Spacer(Modifier.height(18.dp))
-                    StatusPill(status.isEnabled, "مفعّلة ✓", "لسا ما انفعلت")
+                    StatusPill(status.isEnabled, L("مفعّلة ✓"), L("لسا ما انفعلت"))
                     Spacer(Modifier.height(18.dp))
                     if (status.isEnabled) {
                         // لو كانت مفعّلة أصلًا عند دخول الخطوة ما في انتقال تلقائي (ممكن المستخدم رجع للخلف عمدًا)
-                        Hint(if (enabledAtEntry) "اللوحة مفعّلة مسبقًا. اضغط «التالي» للمتابعة." else "تمام! جاري الانتقال للخطوة التالية...")
+                        Hint(if (enabledAtEntry) L("اللوحة مفعّلة مسبقًا. اضغط «التالي» للمتابعة.") else L("تمام! جاري الانتقال للخطوة التالية..."))
                     } else {
-                        PrimaryButton("فتح الإعدادات", onOpenEnableSettings)
+                        PrimaryButton(L("فتح الإعدادات"), onOpenEnableSettings)
                         Spacer(Modifier.height(14.dp))
-                        Hint("بعد التفعيل ارجع لهون وبتنتقل الخطوة تلقائيًا. لو انسألت عن «مخاطر لوحات المفاتيح» اضغط موافق، هيدا تنبيه عام من النظام.")
+                        Hint(L("بعد التفعيل ارجع لهون وبتنتقل الخطوة تلقائيًا. لو انسألت عن «مخاطر لوحات المفاتيح» اضغط موافق، هيدا تنبيه عام من النظام."))
                     }
                 }
                 OnboardingStep.SELECT -> {
-                    StepText("٢. اخترها كلوحة نشطة", "اختار «سيمو كيبورد» من القائمة اللي رح تظهر لتبدأ تكتب فيها.")
+                    StepText(L("٢. اخترها كلوحة نشطة"), L("اختار «سيمو كيبورد» من القائمة اللي رح تظهر لتبدأ تكتب فيها."))
                     Spacer(Modifier.height(18.dp))
-                    StatusPill(status.isSelected, "هي اللوحة النشطة ✓", "لسا مش مختارة")
+                    StatusPill(status.isSelected, L("هي اللوحة النشطة ✓"), L("لسا مش مختارة"))
                     Spacer(Modifier.height(18.dp))
                     if (status.isSelected) {
-                        Hint(if (selectedAtEntry) "هي اللوحة النشطة مسبقًا. اضغط «التالي» للمتابعة." else "تمام! جاري الانتقال...")
+                        Hint(if (selectedAtEntry) L("هي اللوحة النشطة مسبقًا. اضغط «التالي» للمتابعة.") else L("تمام! جاري الانتقال..."))
                     } else {
-                        PrimaryButton("اختيار اللوحة", onOpenKeyboardPicker)
+                        PrimaryButton(L("اختيار اللوحة"), onOpenKeyboardPicker)
                         Spacer(Modifier.height(14.dp))
-                        Hint("لو اخترتها وبعدك شايف «لسا»، اضغط الحقل تحت واكتب فيه — بتنعرف تلقائيًا أول ما تظهر اللوحة.")
+                        Hint(L("لو اخترتها وبعدك شايف «لسا»، اضغط الحقل تحت واكتب فيه — بتنعرف تلقائيًا أول ما تظهر اللوحة."))
                         Spacer(Modifier.height(14.dp))
                         TestField()
                     }
                 }
                 OnboardingStep.DONE -> {
                     StepText(
-                        "جاهز! 🎉",
-                        "افتح أي تطبيق فيه حقل كتابة وبتلاقي سيمو كيبورد جاهزة. وتقدر تغيّر الشكل والترتيب والصوت من إعدادات التطبيق."
+                        L("جاهز! 🎉"),
+                        L("افتح أي تطبيق فيه حقل كتابة وبتلاقي سيمو كيبورد جاهزة. وتقدر تغيّر الشكل والترتيب والصوت من إعدادات التطبيق.")
                     )
                     Spacer(Modifier.height(18.dp))
-                    StatusPill(status.isEnabled, "مفعّلة ✓", "اللوحة غير مفعّلة بعد")
+                    StatusPill(status.isEnabled, L("مفعّلة ✓"), L("اللوحة غير مفعّلة بعد"))
                     Spacer(Modifier.height(8.dp))
-                    StatusPill(status.isSelected, "هي اللوحة النشطة ✓", "مش مختارة كلوحة نشطة بعد")
+                    StatusPill(status.isSelected, L("هي اللوحة النشطة ✓"), L("مش مختارة كلوحة نشطة بعد"))
                     Spacer(Modifier.height(18.dp))
                     TestField()
                 }
@@ -153,18 +154,18 @@ fun OnboardingScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (step == OnboardingStep.WELCOME) {
-                TextButton(onClick = onSkip) { Text("تخطّي", color = SemoPalette.TextHint) }
+                TextButton(onClick = onSkip) { Text(L("تخطّي"), color = SemoPalette.TextHint) }
             } else if (step != OnboardingStep.DONE) {
                 OutlinedButton(
                     onClick = onBack,
                     border = BorderStroke(1.dp, SemoPalette.Stroke)
-                ) { Text("رجوع", color = SemoPalette.TextSecondary) }
+                ) { Text(L("رجوع"), color = SemoPalette.TextSecondary) }
             } else {
                 Spacer(Modifier.size(1.dp))
             }
 
             if (step == OnboardingStep.DONE) {
-                PrimaryButton("ابدأ", onFinish)
+                PrimaryButton(L("ابدأ"), onFinish)
             } else {
                 val stepDone = when (step) {
                     OnboardingStep.ENABLE -> status.isEnabled
@@ -172,7 +173,7 @@ fun OnboardingScreen(
                     else -> true
                 }
                 // لو الخطوة ما اكتملت نوضّح أن الضغط هون يتجاوزها (ممكن الفحص ما اشتغل على بعض الأجهزة)
-                PrimaryButton(if (stepDone) "التالي" else "تخطّي الخطوة", onNext)
+                PrimaryButton(if (stepDone) L("التالي") else L("تخطّي الخطوة"), onNext)
             }
         }
     }
@@ -195,7 +196,7 @@ private fun TestField() {
             .padding(horizontal = 14.dp, vertical = 14.dp),
         decorationBox = { inner ->
             Box {
-                if (text.isEmpty()) Text("جرّب الكتابة هون…", color = SemoPalette.TextHint, fontSize = 15.sp)
+                if (text.isEmpty()) Text(L("جرّب الكتابة هون…"), color = SemoPalette.TextHint, fontSize = 15.sp)
                 inner()
             }
         }

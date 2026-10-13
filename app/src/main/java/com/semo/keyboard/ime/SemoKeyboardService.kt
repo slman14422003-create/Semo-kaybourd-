@@ -70,6 +70,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
@@ -354,6 +355,8 @@ class SemoKeyboardService :
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
         clickPlayer = KeyClickPlayer(applicationContext)
+        startCacheCycle()
+        prewarmAssets()
         val settingsRepository = SettingsRepository(applicationContext)
         clipboardRepository = ClipboardRepository(applicationContext)
         val learnedRepository = LearnedWordsRepository(applicationContext)
@@ -468,6 +471,27 @@ class SemoKeyboardService :
             contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
             bounds.outMimeType?.takeIf { it.startsWith("image/") && bounds.outWidth > 0 }
         }.getOrNull()
+    }
+
+    private fun startCacheCycle() {
+        serviceScope.launch {
+            while (isActive) {
+                val wait = com.semo.keyboard.data.CacheCleaner.millisUntilNext(applicationContext)
+                if (wait > 0L) delay(wait)
+                if (com.semo.keyboard.data.CacheCleaner.isAutoEnabled(applicationContext)) {
+                    com.semo.keyboard.data.CacheCleaner.clearNow(applicationContext)
+                } else {
+                    delay(com.semo.keyboard.data.CacheCleaner.INTERVAL_MS)
+                }
+                delay(60_000L)
+            }
+        }
+    }
+
+    private fun prewarmAssets() {
+        ioHandler.post {
+            runCatching { com.semo.keyboard.ui.keyboard.supportedEmojiCache.size }
+        }
     }
 
     override fun onCreateInputView(): View {

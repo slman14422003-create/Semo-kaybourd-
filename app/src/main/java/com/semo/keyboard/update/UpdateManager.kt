@@ -1,5 +1,6 @@
 package com.semo.keyboard.update
 
+import com.semo.keyboard.ui.L
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -54,7 +55,7 @@ object UpdateManager {
             val body = httpGetString(API_URL)
             val obj = JSONObject(body)
             val tag = obj.optString("tag_name")
-            if (tag.isBlank()) return@withContext UpdateCheckResult.Error("تعذّرت قراءة بيانات الإصدار")
+            if (tag.isBlank()) return@withContext UpdateCheckResult.Error(L("تعذّرت قراءة بيانات الإصدار"))
             val normalized = tag.removePrefix("v").removePrefix("V").trim()
 
             val assets: JSONArray = obj.optJSONArray("assets") ?: JSONArray()
@@ -71,7 +72,7 @@ object UpdateManager {
                     break
                 }
             }
-            if (apkUrl == null) return@withContext UpdateCheckResult.Error("لا يوجد ملف APK مرفق بآخر إصدار")
+            if (apkUrl == null) return@withContext UpdateCheckResult.Error(L("لا يوجد ملف APK مرفق بآخر إصدار"))
 
             val current = runCatching {
                 context.packageManager.getPackageInfo(context.packageName, 0).versionName
@@ -104,7 +105,7 @@ object UpdateManager {
         try {
             connection = followRedirects(connection)
             if (connection.responseCode !in 200..299) {
-                if (connection.responseCode == 404) throw IOException("لا يوجد إصدار منشور بالمستودع بعد (HTTP 404)")
+                if (connection.responseCode == 404) throw IOException(L("لا يوجد إصدار منشور بالمستودع بعد (HTTP 404)"))
                 throw IOException("HTTP ${connection.responseCode}")
             }
             return connection.inputStream.bufferedReader().use { it.readText() }
@@ -199,9 +200,9 @@ object UpdateManager {
     }
 
     private fun describeError(e: Exception): String = when (e) {
-        is java.net.UnknownHostException -> "لا يوجد اتصال بالإنترنت"
-        is java.net.SocketTimeoutException -> "انتهت مهلة الاتصال، حاول مجددًا"
-        else -> e.message ?: "تعذّر التحقق من التحديثات"
+        is java.net.UnknownHostException -> L("لا يوجد اتصال بالإنترنت")
+        is java.net.SocketTimeoutException -> L("انتهت مهلة الاتصال، حاول مجددًا")
+        else -> e.message ?: L("تعذّر التحقق من التحديثات")
     }
 
     private val REDIRECT_CODES = intArrayOf(301, 302, 303, 307, 308)

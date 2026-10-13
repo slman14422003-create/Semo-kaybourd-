@@ -52,11 +52,13 @@ object BigDictionary {
 
     fun clear(language: KeyboardLanguage) {
         indices.remove(language)
+        ModelVersion.bump()
     }
 
     /** يبني الفهرس من قائمة مرتبة حسب الشيوع (ثقيل نسبيًا: يُستدعى بخيط خلفي) */
     fun setWords(language: KeyboardLanguage, words: List<String>) {
         indices[language] = build(words)
+        ModelVersion.bump()
     }
 
     /**

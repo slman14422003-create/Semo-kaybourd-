@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui.settings
 
+import com.semo.keyboard.ui.L
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.snap
 import androidx.compose.ui.unit.IntOffset
@@ -172,6 +173,7 @@ internal fun SettingsScreen(
     ) { shown ->
         when (shown) {
             SettingsPage.HOME -> HomePage(
+                repo = repo,
                 settings = settings,
                 shortcutCount = shortcuts.size,
                 learnedCount = learned.size,
@@ -196,46 +198,46 @@ internal fun SettingsScreen(
 // ---------------- أسماء للعرض ----------------
 
 private fun arabicLayoutLabel(l: ArabicLayout) = when (l) {
-    ArabicLayout.STANDARD -> "قياسي"
-    ArabicLayout.ALPHABETIC -> "أبجدي"
+    ArabicLayout.STANDARD -> L("قياسي")
+    ArabicLayout.ALPHABETIC -> L("أبجدي")
     ArabicLayout.QWERTY -> "QWERTY"
     ArabicLayout.GBOARD -> "Gboard"
 }
 
 private fun themeLabel(t: ThemeMode) = when (t) {
-    ThemeMode.SYSTEM -> "حسب النظام"
-    ThemeMode.LIGHT -> "فاتح"
-    ThemeMode.DARK -> "داكن"
+    ThemeMode.SYSTEM -> L("حسب النظام")
+    ThemeMode.LIGHT -> L("فاتح")
+    ThemeMode.DARK -> L("داكن")
 }
 
 private fun sizeLabel(s: KeyboardSize) = when (s) {
-    KeyboardSize.SMALL -> "صغير"
-    KeyboardSize.MEDIUM -> "متوسط"
-    KeyboardSize.LARGE -> "كبير"
+    KeyboardSize.SMALL -> L("صغير")
+    KeyboardSize.MEDIUM -> L("متوسط")
+    KeyboardSize.LARGE -> L("كبير")
 }
 
 /** اسم عنصر شريط الأدوات وأيقونته ولونه بصفحة الإعدادات */
 private fun toolbarItemInfo(item: ToolbarItem): Triple<String, Int, androidx.compose.ui.graphics.Color> = when (item) {
-    ToolbarItem.EMOJI -> Triple("الإيموجي", R.drawable.ic_ios_emoji, IconOrange)
-    ToolbarItem.CLIPBOARD -> Triple("الحافظة", R.drawable.ic_tool_clipboard, IconBlue)
-    ToolbarItem.NUMPAD -> Triple("لوحة الأرقام", R.drawable.ic_tool_numpad, IconPurple)
-    ToolbarItem.CALC -> Triple("الحاسبة العلمية", R.drawable.ic_tool_calc, IconGreen)
-    ToolbarItem.CURSOR -> Triple("التحرير وتحريك المؤشر", R.drawable.ic_tool_cursor, IconTeal)
-    ToolbarItem.ONEHAND -> Triple("وضع اليد الواحدة", R.drawable.ic_tool_onehand, IconGray)
-    ToolbarItem.SETTINGS -> Triple("الإعدادات", R.drawable.ic_tool_settings, IconGray)
+    ToolbarItem.EMOJI -> Triple(L("الإيموجي"), R.drawable.ic_ios_emoji, IconOrange)
+    ToolbarItem.CLIPBOARD -> Triple(L("الحافظة"), R.drawable.ic_tool_clipboard, IconBlue)
+    ToolbarItem.NUMPAD -> Triple(L("لوحة الأرقام"), R.drawable.ic_tool_numpad, IconPurple)
+    ToolbarItem.CALC -> Triple(L("الحاسبة العلمية"), R.drawable.ic_tool_calc, IconGreen)
+    ToolbarItem.CURSOR -> Triple(L("التحرير وتحريك المؤشر"), R.drawable.ic_tool_cursor, IconTeal)
+    ToolbarItem.ONEHAND -> Triple(L("وضع اليد الواحدة"), R.drawable.ic_tool_onehand, IconGray)
+    ToolbarItem.SETTINGS -> Triple(L("الإعدادات"), R.drawable.ic_tool_settings, IconGray)
     ToolbarItem.TRANSLATE -> Triple("Translate", R.drawable.ic_tool_translate, IconBlue)
 }
 
 private fun holdLabel(d: HoldDelay) = when (d) {
-    HoldDelay.SHORT -> "قصيرة"
-    HoldDelay.MEDIUM -> "متوسطة"
-    HoldDelay.LONG -> "طويلة"
+    HoldDelay.SHORT -> L("قصيرة")
+    HoldDelay.MEDIUM -> L("متوسطة")
+    HoldDelay.LONG -> L("طويلة")
 }
 
 private fun backspaceLabel(b: BackspaceSpeed) = when (b) {
-    BackspaceSpeed.SLOW -> "بطيء"
-    BackspaceSpeed.NORMAL -> "عادي"
-    BackspaceSpeed.FAST -> "سريع"
+    BackspaceSpeed.SLOW -> L("بطيء")
+    BackspaceSpeed.NORMAL -> L("عادي")
+    BackspaceSpeed.FAST -> L("سريع")
 }
 
 @Composable
@@ -251,6 +253,7 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
 
 @Composable
 private fun HomePage(
+    repo: SettingsRepository,
     settings: SemoSettings,
     shortcutCount: Int,
     learnedCount: Int,
@@ -262,14 +265,14 @@ private fun HomePage(
 ) {
     var testText by remember { mutableStateOf("") }
     val typingSummary = if (!settings.suggestionsEnabled) {
-        "النص التنبؤي متوقف"
+        L("النص التنبؤي متوقف")
     } else {
         buildList {
-            add("تنبؤ")
-            if (settings.nextWord) add("الكلمة التالية")
-            if (settings.autoCorrect) add("استبدال تلقائي")
-            if (settings.spellCheck) add("تدقيق")
-            if (settings.textShortcuts && shortcutCount > 0) add("$shortcutCount اختصار")
+            add(L("تنبؤ"))
+            if (settings.nextWord) add(L("الكلمة التالية"))
+            if (settings.autoCorrect) add(L("استبدال تلقائي"))
+            if (settings.spellCheck) add(L("تدقيق"))
+            if (settings.textShortcuts && shortcutCount > 0) add("$shortcutCount${L(" اختصار")}")
         }.joinToString(" · ")
     }
 
@@ -287,63 +290,67 @@ private fun HomePage(
             Image(painter = painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(46.dp))
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("سيمو كيبورد", color = SemoPalette.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text("الإعدادات", color = SemoPalette.TextHint, fontSize = 13.sp)
+                Text(L("سيمو كيبورد"), color = SemoPalette.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(L("الإعدادات"), color = SemoPalette.TextHint, fontSize = 13.sp)
             }
         }
 
         StatusCard(isEnabled, isSelected, onEnable, onPick)
 
-        Section("جرّب اللوحة") {
+        Section(L("جرّب اللوحة")) {
             Box(Modifier.padding(12.dp)) {
                 OutlinedTextField(
                     value = testText,
                     onValueChange = { testText = it },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    placeholder = { Text("اكتب هون...", color = SemoPalette.TextHint) },
+                    placeholder = { Text(L("اكتب هون..."), color = SemoPalette.TextHint) },
                     colors = fieldColors()
                 )
             }
         }
 
-        Section("الإعدادات") {
+        Section(com.semo.keyboard.ui.appString(R.string.lang_title)) {
+            AppLanguageBlock(repo, settings)
+        }
+
+        Section(L("الإعدادات")) {
             NavRow(
-                "اللغات والتخطيط",
+                L("اللغات والتخطيط"),
                 "${settings.englishLayout.name} · ${arabicLayoutLabel(settings.arabicLayout)}" +
-                    if (settings.numberRow) " · صف أرقام" else "",
+                    if (settings.numberRow) L(" · صف أرقام") else "",
                 R.drawable.ic_ios_globe, IconBlue
             ) { onOpen(SettingsPage.LANGUAGES) }
             Divider()
-            NavRow("الكتابة الذكية", typingSummary, R.drawable.ic_ios_emoji, IconGreen) { onOpen(SettingsPage.TYPING) }
+            NavRow(L("الكتابة الذكية"), typingSummary, R.drawable.ic_ios_emoji, IconGreen) { onOpen(SettingsPage.TYPING) }
             Divider()
             NavRow(
-                "المظهر والحجم",
-                "${themeLabel(settings.themeMode)} · حجم ${(settings.keyboardScale * 100).roundToInt()}% · ارتفاع ${sizeLabel(settings.size)}",
+                L("المظهر والحجم"),
+                "${com.semo.keyboard.ui.appString(themeNameRes(settings.keyboardTheme))} · ${themeLabel(settings.themeMode)}${L(" · حجم ")}${(settings.keyboardScale * 100).roundToInt()}${L("% · ارتفاع ")}${sizeLabel(settings.size)}",
                 R.drawable.ic_set_theme, IconGray
             ) { onOpen(SettingsPage.APPEARANCE) }
             Divider()
             NavRow(
-                "اللمس والصوت والاهتزاز",
-                "ضغط مطوّل ${holdLabel(settings.holdDelay)} · حذف ${backspaceLabel(settings.backspaceSpeed)}",
+                L("اللمس والصوت والاهتزاز"),
+                "${L("ضغط مطوّل ")}${holdLabel(settings.holdDelay)}${L(" · حذف ")}${backspaceLabel(settings.backspaceSpeed)}",
                 R.drawable.ic_set_hold, IconOrange
             ) { onOpen(SettingsPage.TOUCH) }
             Divider()
             NavRow(
-                "القاموس والكلمات",
-                "$learnedCount كلمة متعلَّمة · قاموس مدمج + تنزيل اختياري",
+                L("القاموس والكلمات"),
+                "$learnedCount${L(" كلمة متعلَّمة · قاموس مدمج + تنزيل اختياري")}",
                 R.drawable.ic_set_dictionary, IconPurple
             ) { onOpen(SettingsPage.DICTIONARY) }
             Divider()
             NavRow(
-                "الحافظة والخصوصية",
-                if (settings.clipboardEnabled) "سجل الحافظة مفعّل" else "سجل الحافظة متوقف",
+                L("الحافظة والخصوصية"),
+                if (settings.clipboardEnabled) L("سجل الحافظة مفعّل") else L("سجل الحافظة متوقف"),
                 R.drawable.ic_tool_clipboard, IconTeal
             ) { onOpen(SettingsPage.PRIVACY) }
         }
 
         Section {
-            NavRow("حول وإعادة الضبط", "الإصدار والدليل وإعادة الإعدادات للافتراضي", R.drawable.ic_set_info, IconPink) {
+            NavRow(L("حول وإعادة الضبط"), L("الإصدار والدليل وإعادة الإعدادات للافتراضي"), R.drawable.ic_set_info, IconPink) {
                 onOpen(SettingsPage.ABOUT)
             }
         }
@@ -356,10 +363,10 @@ private fun HomePage(
 @Composable
 private fun LanguagesPage(repo: SettingsRepository, settings: SemoSettings, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    SubPage("اللغات والتخطيط", onBack) {
+    SubPage(L("اللغات والتخطيط"), onBack) {
         LanguageLibraryBlock(repo, settings)
-        Section("ترتيب المفاتيح") {
-            Block("الإنكليزي", R.drawable.ic_ios_globe, IconBlue) {
+        Section(L("ترتيب المفاتيح")) {
+            Block(L("الإنكليزي"), R.drawable.ic_ios_globe, IconBlue) {
                 Segmented(
                     options = listOf(
                         EnglishLayout.QWERTY to "QWERTY",
@@ -372,11 +379,11 @@ private fun LanguagesPage(repo: SettingsRepository, settings: SemoSettings, onBa
                 LayoutPreview(KeyboardLayoutProvider.previewRows(KeyboardLanguage.ENGLISH, settings.englishLayout, settings.arabicLayout))
             }
             Divider()
-            Block("العربي", R.drawable.ic_ios_globe, IconGreen) {
+            Block(L("العربي"), R.drawable.ic_ios_globe, IconGreen) {
                 Segmented(
                     options = listOf(
-                        ArabicLayout.STANDARD to "قياسي",
-                        ArabicLayout.ALPHABETIC to "أبجدي",
+                        ArabicLayout.STANDARD to L("قياسي"),
+                        ArabicLayout.ALPHABETIC to L("أبجدي"),
                         ArabicLayout.QWERTY to "QWERTY",
                         ArabicLayout.GBOARD to "Gboard"
                     ),
@@ -386,14 +393,14 @@ private fun LanguagesPage(repo: SettingsRepository, settings: SemoSettings, onBa
                 LayoutPreview(KeyboardLayoutProvider.previewRows(KeyboardLanguage.ARABIC, settings.englishLayout, settings.arabicLayout))
             }
         }
-        Section("الأرقام") {
-            SwitchRow("أرقام عربية هندية (١٢٣)", R.drawable.ic_set_number, IconOrange, settings.arabicDigits) {
+        Section(L("الأرقام")) {
+            SwitchRow(L("أرقام عربية هندية (١٢٣)"), R.drawable.ic_set_number, IconOrange, settings.arabicDigits) {
                 scope.launch { repo.setArabicDigits(it) }
             }
             Divider()
             SwitchRow(
-                "صف الأرقام فوق الحروف", R.drawable.ic_set_number, IconPurple, settings.numberRow,
-                subtitle = "يضيف صفًا للأرقام دائمًا فوق الحروف"
+                L("صف الأرقام فوق الحروف"), R.drawable.ic_set_number, IconPurple, settings.numberRow,
+                subtitle = L("يضيف صفًا للأرقام دائمًا فوق الحروف")
             ) { scope.launch { repo.setNumberRow(it) } }
         }
     }
@@ -410,56 +417,56 @@ private fun TypingPage(
     onOpenShortcuts: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    SubPage("الكتابة الذكية", onBack) {
-        Section("التنبؤ والتصحيح") {
+    SubPage(L("الكتابة الذكية"), onBack) {
+        Section(L("التنبؤ والتصحيح")) {
             SwitchRow(
-                "النص التنبؤي", R.drawable.ic_ios_emoji, IconBlue, settings.suggestionsEnabled,
-                subtitle = "يقترح إكمال الكلمة أثناء الكتابة بشريط الاقتراحات"
+                L("النص التنبؤي"), R.drawable.ic_ios_emoji, IconBlue, settings.suggestionsEnabled,
+                subtitle = L("يقترح إكمال الكلمة أثناء الكتابة بشريط الاقتراحات")
             ) { scope.launch { repo.setSuggestionsEnabled(it) } }
             Divider()
             SwitchRow(
-                "توقّع الكلمة التالية", R.drawable.ic_set_text, IconGreen, settings.nextWord,
-                subtitle = "يقترح الكلمة المتوقعة بعد ما تكتب، ويتعلّم من أسلوبك بالكتابة"
+                L("توقّع الكلمة التالية"), R.drawable.ic_set_text, IconGreen, settings.nextWord,
+                subtitle = L("يقترح الكلمة المتوقعة بعد ما تكتب، ويتعلّم من أسلوبك بالكتابة")
             ) { scope.launch { repo.setNextWord(it) } }
             Divider()
             SwitchRow(
-                "استبدال تلقائي", R.drawable.ic_set_spell, IconTeal, settings.autoCorrect,
-                subtitle = "يصحّح الأخطاء الشائعة (dont ← don't، الى ← إلى) والأخطاء الإملائية الواضحة بالإنكليزي"
+                L("استبدال تلقائي"), R.drawable.ic_set_spell, IconTeal, settings.autoCorrect,
+                subtitle = L("يصحّح الأخطاء الشائعة (dont ← don't، الى ← إلى) والأخطاء الإملائية الواضحة بالإنكليزي")
             ) { scope.launch { repo.setAutoCorrect(it) } }
             Divider()
             SwitchRow(
-                "تدقيق إملائي", R.drawable.ic_set_spell, IconOrange, settings.spellCheck,
-                subtitle = "يقترح الكلمة الصحيحة بالشريط لو الكلمة غير موجودة بالقاموس (مثل recieve)"
+                L("تدقيق إملائي"), R.drawable.ic_set_spell, IconOrange, settings.spellCheck,
+                subtitle = L("يقترح الكلمة الصحيحة بالشريط لو الكلمة غير موجودة بالقاموس (مثل recieve)")
             ) { scope.launch { repo.setSpellCheck(it) } }
             Divider()
             SwitchRow(
-                "اقتراح إيموجي", R.drawable.ic_ios_emoji, IconPink, settings.suggestEmojis,
-                subtitle = "يقترح إيموجي مناسب للكلمة مثل love ← ❤️"
+                L("اقتراح إيموجي"), R.drawable.ic_ios_emoji, IconPink, settings.suggestEmojis,
+                subtitle = L("يقترح إيموجي مناسب للكلمة مثل love ← ❤️")
             ) { scope.launch { repo.setSuggestEmojis(it) } }
         }
-        Section("اختصارات النص") {
+        Section(L("اختصارات النص")) {
             NavRow(
-                "اختصارات النص",
-                if (shortcutCount == 0) "أضف اختصارًا يتحوّل لعبارة كاملة (omw ← On my way!)" else "$shortcutCount اختصار",
+                L("اختصارات النص"),
+                if (shortcutCount == 0) L("أضف اختصارًا يتحوّل لعبارة كاملة (omw ← On my way!)") else "$shortcutCount${L(" اختصار")}",
                 R.drawable.ic_set_shortcut, IconPurple,
                 onOpenShortcuts
             )
         }
-        Section("خيارات الكتابة") {
-            SwitchRow("حرف كبير تلقائي بأول الجملة", R.drawable.ic_ios_shift, IconGreen, settings.autoCapitalize) {
+        Section(L("خيارات الكتابة")) {
+            SwitchRow(L("حرف كبير تلقائي بأول الجملة"), R.drawable.ic_ios_shift, IconGreen, settings.autoCapitalize) {
                 scope.launch { repo.setAutoCapitalize(it) }
             }
             Divider()
-            SwitchRow("مسافتان = نقطة ومسافة", R.drawable.ic_set_spacing, IconOrange, settings.doubleSpacePeriod) {
+            SwitchRow(L("مسافتان = نقطة ومسافة"), R.drawable.ic_set_spacing, IconOrange, settings.doubleSpacePeriod) {
                 scope.launch { repo.setDoubleSpacePeriod(it) }
             }
             Divider()
             SwitchRow(
-                "ناتج العمليات الحسابية", R.drawable.ic_set_number, IconPink, settings.mathResults,
-                subtitle = "اكتب 60*30+20 فيظهر الناتج بالشريط"
+                L("ناتج العمليات الحسابية"), R.drawable.ic_set_number, IconPink, settings.mathResults,
+                subtitle = L("اكتب 60*30+20 فيظهر الناتج بالشريط")
             ) { scope.launch { repo.setMathResults(it) } }
         }
-        Hint("الاقتراحات والتصحيح والتعلّم ما بتشتغل بحقول كلمات المرور. الكلمات المتعلَّمة بتنخزن على جهازك فقط، وبتقدر تمسحها من «القاموس والكلمات».")
+        Hint(L("الاقتراحات والتصحيح والتعلّم ما بتشتغل بحقول كلمات المرور. الكلمات المتعلَّمة بتنخزن على جهازك فقط، وبتقدر تمسحها من «القاموس والكلمات»."))
     }
 }
 
@@ -476,14 +483,14 @@ private fun ShortcutsPage(
     var expansion by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
-    SubPage("اختصارات النص", onBack) {
+    SubPage(L("اختصارات النص"), onBack) {
         Section {
             SwitchRow(
-                "تفعيل اختصارات النص", R.drawable.ic_set_shortcut, IconPurple, settings.textShortcuts,
-                subtitle = "اكتب الاختصار ثم مسافة فيتحوّل للنص الكامل. تقدر تتراجع بزر الحذف مباشرة"
+                L("تفعيل اختصارات النص"), R.drawable.ic_set_shortcut, IconPurple, settings.textShortcuts,
+                subtitle = L("اكتب الاختصار ثم مسافة فيتحوّل للنص الكامل. تقدر تتراجع بزر الحذف مباشرة")
             ) { scope.launch { repo.setTextShortcuts(it) } }
         }
-        Section("إضافة اختصار") {
+        Section(L("إضافة اختصار")) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = abbr,
@@ -491,7 +498,7 @@ private fun ShortcutsPage(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     singleLine = true,
-                    placeholder = { Text("الاختصار (حروف فقط، مثل omw)", color = SemoPalette.TextHint) },
+                    placeholder = { Text(L("الاختصار (حروف فقط، مثل omw)"), color = SemoPalette.TextHint) },
                     colors = fieldColors()
                 )
                 OutlinedTextField(
@@ -499,14 +506,14 @@ private fun ShortcutsPage(
                     onValueChange = { expansion = it.take(200); error = null },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    placeholder = { Text("النص الكامل (مثل On my way!)", color = SemoPalette.TextHint) },
+                    placeholder = { Text(L("النص الكامل (مثل On my way!)"), color = SemoPalette.TextHint) },
                     colors = fieldColors()
                 )
                 val message = error
                 if (message != null) {
                     Text(message, color = DangerRed, fontSize = 12.sp)
                 }
-                SolidButton("إضافة", abbr.isNotBlank() && expansion.isNotBlank(), Modifier.fillMaxWidth()) {
+                SolidButton(L("إضافة"), abbr.isNotBlank() && expansion.isNotBlank(), Modifier.fillMaxWidth()) {
                     scope.launch {
                         val ok = shortcutsRepo.add(abbr, expansion)
                         if (ok) {
@@ -514,16 +521,16 @@ private fun ShortcutsPage(
                             expansion = ""
                             error = null
                         } else {
-                            error = "الاختصار لازم يكون حروف فقط (حتى 15 حرف) والنص غير فارغ. وما بيشتغل قبل فك قفل الجهاز."
+                            error = L("الاختصار لازم يكون حروف فقط (حتى 15 حرف) والنص غير فارغ. وما بيشتغل قبل فك قفل الجهاز.")
                         }
                     }
                 }
             }
         }
-        Section("اختصاراتك (${list.size})") {
+        Section("${L("اختصاراتك (")}${list.size})") {
             if (list.isEmpty()) {
                 Text(
-                    "ما في اختصارات بعد. جرّب: omw ← On my way!  أو  عع ← عن إذنك",
+                    L("ما في اختصارات بعد. جرّب: omw ← On my way!  أو  عع ← عن إذنك"),
                     color = SemoPalette.TextHint,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -541,7 +548,7 @@ private fun ShortcutsPage(
                             Text(item.expansion, color = SemoPalette.TextHint, fontSize = 13.sp, maxLines = 2)
                         }
                         Text(
-                            "حذف",
+                            L("حذف"),
                             color = DangerRed,
                             fontSize = 14.sp,
                             modifier = Modifier
@@ -552,7 +559,7 @@ private fun ShortcutsPage(
                 }
             }
         }
-        Hint("الاختصار لازم يكون حروفًا فقط، والتطابق ما بيفرّق بين الأحرف الكبيرة والصغيرة.")
+        Hint(L("الاختصار لازم يكون حروفًا فقط، والتطابق ما بيفرّق بين الأحرف الكبيرة والصغيرة."))
     }
 }
 
@@ -561,11 +568,14 @@ private fun ShortcutsPage(
 @Composable
 private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    SubPage("المظهر والحجم", onBack) {
-        Section("الشكل") {
-            Block("الثيم", R.drawable.ic_set_theme, IconGray) {
+    SubPage(L("المظهر والحجم"), onBack) {
+        Section(com.semo.keyboard.ui.appString(R.string.themes_title)) {
+            ThemePickerBlock(repo, settings)
+        }
+        Section(L("الشكل")) {
+            Block(L("الوضع (فاتح / داكن)"), R.drawable.ic_set_theme, IconGray) {
                 Segmented(
-                    options = listOf(ThemeMode.SYSTEM to "حسب النظام", ThemeMode.LIGHT to "فاتح", ThemeMode.DARK to "داكن"),
+                    options = listOf(ThemeMode.SYSTEM to L("حسب النظام"), ThemeMode.LIGHT to L("فاتح"), ThemeMode.DARK to L("داكن")),
                     selected = settings.themeMode,
                     onSelect = { scope.launch { repo.setThemeMode(it) } }
                 )
@@ -573,7 +583,7 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             Divider()
             var scaleDraft by remember(settings.keyboardScale) { mutableStateOf(settings.keyboardScale) }
             SliderRow(
-                title = "حجم الكيبورد",
+                title = L("حجم الكيبورد"),
                 valueLabel = "${(scaleDraft * 100).roundToInt()}%",
                 value = scaleDraft,
                 range = 0.8f..1.3f,
@@ -582,64 +592,64 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 onFinish = { scope.launch { repo.setKeyboardScale(scaleDraft) } }
             )
             if (settings.keyboardScale != 1f) {
-                ActionRow("إعادة الحجم إلى 100%") { scope.launch { repo.setKeyboardScale(1f) } }
+                ActionRow(L("إعادة الحجم إلى 100%")) { scope.launch { repo.setKeyboardScale(1f) } }
             }
             Divider()
-            Block("ارتفاع المفاتيح", R.drawable.ic_set_height, IconTeal) {
+            Block(L("ارتفاع المفاتيح"), R.drawable.ic_set_height, IconTeal) {
                 Segmented(
-                    options = listOf(KeyboardSize.SMALL to "صغير", KeyboardSize.MEDIUM to "متوسط", KeyboardSize.LARGE to "كبير"),
+                    options = listOf(KeyboardSize.SMALL to L("صغير"), KeyboardSize.MEDIUM to L("متوسط"), KeyboardSize.LARGE to L("كبير")),
                     selected = settings.size,
                     onSelect = { scope.launch { repo.setSize(it) } }
                 )
             }
             Divider()
-            Block("المسافة بين المفاتيح", R.drawable.ic_set_spacing, IconBlue) {
+            Block(L("المسافة بين المفاتيح"), R.drawable.ic_set_spacing, IconBlue) {
                 Segmented(
-                    options = listOf(KeySpacing.TIGHT to "ضيّقة", KeySpacing.NORMAL to "عادية", KeySpacing.WIDE to "واسعة"),
+                    options = listOf(KeySpacing.TIGHT to L("ضيّقة"), KeySpacing.NORMAL to L("عادية"), KeySpacing.WIDE to L("واسعة")),
                     selected = settings.keySpacing,
                     onSelect = { scope.launch { repo.setKeySpacing(it) } }
                 )
             }
             Divider()
-            Block("سرعة الحركة", R.drawable.ic_set_hold, IconTeal) {
+            Block(L("سرعة الحركة"), R.drawable.ic_set_hold, IconTeal) {
                 Segmented(
                     options = listOf(
-                        AnimationSpeed.OFF to "إيقاف",
-                        AnimationSpeed.FAST to "سريعة",
-                        AnimationSpeed.NORMAL to "عادية",
-                        AnimationSpeed.SLOW to "بطيئة"
+                        AnimationSpeed.OFF to L("إيقاف"),
+                        AnimationSpeed.FAST to L("سريعة"),
+                        AnimationSpeed.NORMAL to L("عادية"),
+                        AnimationSpeed.SLOW to L("بطيئة")
                     ),
                     selected = settings.animationSpeed,
                     onSelect = { scope.launch { repo.setAnimationSpeed(it) } }
                 )
-                Hint("يتحكم بسرعة كل حركات اللوحة (تبديل الصفحات واللغة وضغط المفاتيح). إيقاف يلغي الحركة تمامًا لأفضل أداء على الأجهزة الضعيفة.")
+                Hint(L("يتحكم بسرعة كل حركات اللوحة (تبديل الصفحات واللغة وضغط المفاتيح). إيقاف يلغي الحركة تمامًا لأفضل أداء على الأجهزة الضعيفة."))
             }
             Divider()
-            Block("زر 123", R.drawable.ic_tool_numpad, IconPurple) {
+            Block(L("زر 123"), R.drawable.ic_tool_numpad, IconPurple) {
                 Segmented(
-                    options = listOf(NumKeyTarget.NUMPAD to "لوحة أرقام 3×4", NumKeyTarget.SYMBOLS to "صفحة الرموز"),
+                    options = listOf(NumKeyTarget.NUMPAD to L("لوحة أرقام 3×4"), NumKeyTarget.SYMBOLS to L("صفحة الرموز")),
                     selected = settings.numKeyTarget,
                     onSelect = { scope.launch { repo.setNumKeyTarget(it) } }
                 )
-                Hint("لوحة الأرقام تظهر تلقائيًا بحقول الأرقام والهاتف، وبباقي الحقول يفتح 123 الوجهة المختارة. الضغطة المطوّلة على 123 تفتح الوجهة الأخرى، ولوحة الأرقام متاحة من شريط الأدوات أيضًا. رموز مثل = % * # [ ] تلاقيها بالضغط المطوّل على مفاتيح اللوحة.")
+                Hint(L("لوحة الأرقام تظهر تلقائيًا بحقول الأرقام والهاتف، وبباقي الحقول يفتح 123 الوجهة المختارة. الضغطة المطوّلة على 123 تفتح الوجهة الأخرى، ولوحة الأرقام متاحة من شريط الأدوات أيضًا. رموز مثل = % * # [ ] تلاقيها بالضغط المطوّل على مفاتيح اللوحة."))
             }
             Divider()
-            Block("وضع اليد الواحدة", R.drawable.ic_tool_onehand, IconOrange) {
+            Block(L("وضع اليد الواحدة"), R.drawable.ic_tool_onehand, IconOrange) {
                 Segmented(
-                    options = listOf(OneHandMode.OFF to "معطّل", OneHandMode.LEFT to "يسار", OneHandMode.RIGHT to "يمين"),
+                    options = listOf(OneHandMode.OFF to L("معطّل"), OneHandMode.LEFT to L("يسار"), OneHandMode.RIGHT to L("يمين")),
                     selected = settings.oneHand,
                     onSelect = { scope.launch { repo.setOneHand(it) } }
                 )
             }
         }
-        Section("شريط الأدوات") {
+        Section(L("شريط الأدوات")) {
             // المفعّلة أولًا بترتيبها المحفوظ، ثم المعطّلة
             val enabled = settings.toolbarItems
             val order = enabled + ToolbarItem.values().filter { it !in enabled }
             order.forEachIndexed { index, item ->
                 val on = item in enabled
                 val info = toolbarItemInfo(item).let {
-                    if (item == ToolbarItem.TRANSLATE) it.copy(first = androidx.compose.ui.res.stringResource(R.string.translate_title)) else it
+                    if (item == ToolbarItem.TRANSLATE) it.copy(first = com.semo.keyboard.ui.appString(R.string.translate_title)) else it
                 }
                 if (index > 0) Divider()
                 ToolbarItemRow(
@@ -664,22 +674,22 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     }
                 )
             }
-            Hint("اختر العناصر اللي بدك تظهر لما تفتح شريط الأدوات (السهم الصغير بطرف اللوحة)، ورتّبها بالأسهم.")
+            Hint(L("اختر العناصر اللي بدك تظهر لما تفتح شريط الأدوات (السهم الصغير بطرف اللوحة)، ورتّبها بالأسهم."))
         }
-        Section("الصف السفلي") {
+        Section(L("الصف السفلي")) {
             // دائرة إخفاء اللوحة بالصف السفلي (يمين) بمقابل دائرة الكرة الأرضية (يسار)
-            Block("دائرة إخفاء الكيبورد", R.drawable.ic_ios_hide_keyboard, IconTeal) {
+            Block(L("دائرة إخفاء الكيبورد"), R.drawable.ic_ios_hide_keyboard, IconTeal) {
                 Segmented(
                     options = listOf(
-                        HideButtonMode.RING to "دائرة",
-                        HideButtonMode.ARROW to "دائرة + سهم",
-                        HideButtonMode.OFF to "بدون"
+                        HideButtonMode.RING to L("دائرة"),
+                        HideButtonMode.ARROW to L("دائرة + سهم"),
+                        HideButtonMode.OFF to L("بدون")
                     ),
                     selected = settings.hideButtonMode,
                     onSelect = { scope.launch { repo.setHideButtonMode(it) } }
                 )
                 Text(
-                    "«دائرة + سهم» هو الوضع المناسب مع رفع الدائرتين. على سامسونج أطفئ من إعدادات لوحة المفاتيح خيار «Show button to hide keyboard» كي لا يظهر سهم النظام مرتين. وضع «دائرة» يرسم الدائرة خلف سهم النظام وهو مناسب فقط لو الرفع = 0.",
+                    L("«دائرة + سهم» هو الوضع المناسب مع رفع الدائرتين. على سامسونج أطفئ من إعدادات لوحة المفاتيح خيار «Show button to hide keyboard» كي لا يظهر سهم النظام مرتين. وضع «دائرة» يرسم الدائرة خلف سهم النظام وهو مناسب فقط لو الرفع = 0."),
                     color = SemoPalette.TextHint,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
@@ -688,8 +698,8 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             Divider()
             var raise by remember(settings.bottomRaiseDp) { mutableFloatStateOf(settings.bottomRaiseDp) }
             SliderRow(
-                title = "رفع الدائرتين عن أسفل الشاشة",
-                valueLabel = if (raise.roundToInt() == 0) "ملاصقتان" else "${raise.roundToInt()}",
+                title = L("رفع الدائرتين عن أسفل الشاشة"),
+                valueLabel = if (raise.roundToInt() == 0) L("ملاصقتان") else "${raise.roundToInt()}",
                 value = raise,
                 range = 0f..40f,
                 steps = 19,
@@ -700,16 +710,19 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 Divider()
                 var globeOffset by remember(settings.globeOffsetDp) { mutableFloatStateOf(settings.globeOffsetDp) }
                 SliderRow(
-                    title = "ارتفاع زر الكرة الأرضية",
-                    valueLabel = if (globeOffset.roundToInt() == 0) "تلقائي" else "${globeOffset.roundToInt()}",
+                    title = L("ارتفاع زر الكرة الأرضية"),
+                    valueLabel = if (globeOffset.roundToInt() == 0) L("تلقائي") else "${globeOffset.roundToInt()}",
                     value = globeOffset,
                     range = -8f..8f,
                     steps = 15,
                     onChange = { globeOffset = it },
                     onFinish = { scope.launch { repo.setGlobeOffset(globeOffset.roundToInt().toFloat()) } }
                 )
-                Hint("حرّكه لفوق أو لتحت حتى تصير الأيقونة بمحاذاة زر إخفاء الكيبورد تمامًا. الوضع التلقائي مضبوط على منتصف شريط التنقل.")
+                Hint(L("حرّكه لفوق أو لتحت حتى تصير الأيقونة بمحاذاة زر إخفاء الكيبورد تمامًا. الوضع التلقائي مضبوط على منتصف شريط التنقل."))
             }
+        }
+        Section(com.semo.keyboard.ui.appString(R.string.perf_title)) {
+            CacheBlock(repo, settings)
         }
     }
 }
@@ -723,74 +736,74 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
     val player = remember { KeyClickPlayer(localContext) }
     DisposableEffect(Unit) { onDispose { player.release() } }
 
-    SubPage("اللمس والصوت والاهتزاز", onBack) {
-        Section("الكتابة والإيماءات") {
+    SubPage(L("اللمس والصوت والاهتزاز"), onBack) {
+        Section(L("الكتابة والإيماءات")) {
             SwitchRow(
-                "الكتابة بالسحب على الحروف", R.drawable.ic_set_swipe, IconPurple, settings.swipeTyping,
-                subtitle = "مرّر إصبعك على الحروف لكتابة الكلمة بحركة وحدة"
+                L("الكتابة بالسحب على الحروف"), R.drawable.ic_set_swipe, IconPurple, settings.swipeTyping,
+                subtitle = L("مرّر إصبعك على الحروف لكتابة الكلمة بحركة وحدة")
             ) { scope.launch { repo.setSwipeTyping(it) } }
             Divider()
-            SwitchRow("معاينة الحرف فوق المفتاح", R.drawable.ic_ios_emoji, IconBlue, settings.keyPreview) {
+            SwitchRow(L("معاينة الحرف فوق المفتاح"), R.drawable.ic_ios_emoji, IconBlue, settings.keyPreview) {
                 scope.launch { repo.setKeyPreview(it) }
             }
             Divider()
             SwitchRow(
-                "إبقاء لوحة الرموز مفتوحة", R.drawable.ic_ios_shift, IconGreen, settings.keepSymbolPanel,
-                subtitle = "بعد كتابة رمز تبقى لوحة الرموز ظاهرة. لو متوقف ترجع اللوحة للحروف"
+                L("إبقاء لوحة الرموز مفتوحة"), R.drawable.ic_ios_shift, IconGreen, settings.keepSymbolPanel,
+                subtitle = L("بعد كتابة رمز تبقى لوحة الرموز ظاهرة. لو متوقف ترجع اللوحة للحروف")
             ) { scope.launch { repo.setKeepSymbolPanel(it) } }
         }
-        Section("الضغط المطوّل") {
-            Block("مهلة الضغط المطوّل", R.drawable.ic_set_hold, IconTeal) {
+        Section(L("الضغط المطوّل")) {
+            Block(L("مهلة الضغط المطوّل"), R.drawable.ic_set_hold, IconTeal) {
                 Segmented(
                     options = listOf(
-                        HoldDelay.SHORT to "قصيرة 0.2ث",
-                        HoldDelay.MEDIUM to "متوسطة 0.3ث",
-                        HoldDelay.LONG to "طويلة 0.5ث"
+                        HoldDelay.SHORT to L("قصيرة 0.2ث"),
+                        HoldDelay.MEDIUM to L("متوسطة 0.3ث"),
+                        HoldDelay.LONG to L("طويلة 0.5ث")
                     ),
                     selected = settings.holdDelay,
                     onSelect = { scope.launch { repo.setHoldDelay(it) } }
                 )
                 Text(
-                    "المدة اللازمة لفتح بدائل الحروف (مثل الهمزات والتشكيل) وتفعيل الضغطة المطوّلة على المسافة.",
+                    L("المدة اللازمة لفتح بدائل الحروف (مثل الهمزات والتشكيل) وتفعيل الضغطة المطوّلة على المسافة."),
                     color = SemoPalette.TextHint,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
                 )
             }
             Divider()
-            Block("سرعة الحذف", R.drawable.ic_ios_backspace, IconPink) {
+            Block(L("سرعة الحذف"), R.drawable.ic_ios_backspace, IconPink) {
                 Segmented(
                     options = listOf(
-                        BackspaceSpeed.SLOW to "بطيء",
-                        BackspaceSpeed.NORMAL to "عادي",
-                        BackspaceSpeed.FAST to "سريع"
+                        BackspaceSpeed.SLOW to L("بطيء"),
+                        BackspaceSpeed.NORMAL to L("عادي"),
+                        BackspaceSpeed.FAST to L("سريع")
                     ),
                     selected = settings.backspaceSpeed,
                     onSelect = { scope.launch { repo.setBackspaceSpeed(it) } }
                 )
             }
             Divider()
-            Block("ضغطة مطوّلة على المسافة", R.drawable.ic_set_hold, IconPurple) {
+            Block(L("ضغطة مطوّلة على المسافة"), R.drawable.ic_set_hold, IconPurple) {
                 Segmented(
                     options = listOf(
-                        SpaceBarAction.CURSOR to "تحريك المؤشر",
-                        SpaceBarAction.SWITCH_LANGUAGE to "تبديل اللغة",
-                        SpaceBarAction.NONE to "بدون"
+                        SpaceBarAction.CURSOR to L("تحريك المؤشر"),
+                        SpaceBarAction.SWITCH_LANGUAGE to L("تبديل اللغة"),
+                        SpaceBarAction.NONE to L("بدون")
                     ),
                     selected = settings.spaceBarAction,
                     onSelect = { scope.launch { repo.setSpaceBarAction(it) } }
                 )
             }
         }
-        Section("الصوت والاهتزاز") {
-            SwitchRow("صوت الضغط على المفاتيح", R.drawable.ic_set_sound, IconPink, settings.soundEnabled) {
+        Section(L("الصوت والاهتزاز")) {
+            SwitchRow(L("صوت الضغط على المفاتيح"), R.drawable.ic_set_sound, IconPink, settings.soundEnabled) {
                 scope.launch { repo.setSoundEnabled(it) }
             }
             Divider()
             // مستوى الصوت: نحرّكه محليًا ونحفظ عند رفع الإصبع، ونشغّل نقرة تجريبية بالمستوى الجديد
             var volume by remember(settings.soundVolume) { mutableFloatStateOf(settings.soundVolume) }
             SliderRow(
-                title = "مستوى الصوت",
+                title = L("مستوى الصوت"),
                 valueLabel = "${(volume * 100).roundToInt()}%",
                 value = volume,
                 range = 0f..1f,
@@ -807,12 +820,12 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PillButton("حرف", Modifier.weight(1f)) { player.play(KeyFeedback.STANDARD, volume) }
-                PillButton("حذف", Modifier.weight(1f)) { player.play(KeyFeedback.DELETE, volume) }
-                PillButton("مسافة", Modifier.weight(1f)) { player.play(KeyFeedback.MODIFIER, volume) }
+                PillButton(L("حرف"), Modifier.weight(1f)) { player.play(KeyFeedback.STANDARD, volume) }
+                PillButton(L("حذف"), Modifier.weight(1f)) { player.play(KeyFeedback.DELETE, volume) }
+                PillButton(L("مسافة"), Modifier.weight(1f)) { player.play(KeyFeedback.MODIFIER, volume) }
             }
             Divider()
-            SwitchRow("الاهتزاز عند الضغط", R.drawable.ic_set_vibrate, IconOrange, settings.hapticEnabled) {
+            SwitchRow(L("الاهتزاز عند الضغط"), R.drawable.ic_set_vibrate, IconOrange, settings.hapticEnabled) {
                 scope.launch { repo.setHapticEnabled(it) }
             }
         }
@@ -830,21 +843,21 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
         if (query.isBlank()) learned else learned.filter { it.contains(query.trim()) }
     }
 
-    SubPage("القاموس والكلمات", onBack) {
-        Section("القاموس") {
+    SubPage(L("القاموس والكلمات"), onBack) {
+        Section(L("القاموس")) {
             Text(
-                "القاموس ونموذج الجمل لكل لغة (إنكليزي، عربي، وغيرهم) بيتنزّلوا من مكتبة اللغات.",
+                L("القاموس ونموذج الجمل لكل لغة (إنكليزي، عربي، وغيرهم) بيتنزّلوا من مكتبة اللغات."),
                 color = SemoPalette.TextSecondary,
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(14.dp)
             )
             Divider()
-            ActionRow("فتح مكتبة اللغات والتنزيل", onClick = onOpenLanguages)
+            ActionRow(L("فتح مكتبة اللغات والتنزيل"), onClick = onOpenLanguages)
         }
-        Section("الكلمات المتعلَّمة") {
+        Section(L("الكلمات المتعلَّمة")) {
             Text(
-                "${learned.size} كلمة تعلّمتها اللوحة من كتابتك. الأكثر استعمالًا بتظهر أول بالاقتراحات، وكمان بتتعلّم أي كلمة بتجي بعد أي كلمة لتوقّع الكلمة التالية. لو فيه كلمة غلط، احذفها من القائمة تحت.",
+                "${learned.size}${L(" كلمة تعلّمتها اللوحة من كتابتك. الأكثر استعمالًا بتظهر أول بالاقتراحات، وكمان بتتعلّم أي كلمة بتجي بعد أي كلمة لتوقّع الكلمة التالية. لو فيه كلمة غلط، احذفها من القائمة تحت.")}",
                 color = SemoPalette.TextSecondary,
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
@@ -855,7 +868,7 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("ابحث عن كلمة…", color = SemoPalette.TextHint) },
+                    placeholder = { Text(L("ابحث عن كلمة…"), color = SemoPalette.TextHint) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = SemoPalette.TextPrimary,
@@ -869,7 +882,7 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
                 Divider()
                 if (filtered.isEmpty()) {
                     Text(
-                        "ما في كلمة مطابقة",
+                        L("ما في كلمة مطابقة"),
                         color = SemoPalette.TextHint,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(14.dp)
@@ -895,7 +908,7 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.ic_clip_trash),
-                                        contentDescription = "حذف",
+                                        contentDescription = L("حذف"),
                                         tint = DangerRed,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -908,7 +921,7 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
             }
             Divider()
             ActionRow(
-                if (confirmClearAll) "اضغط مرة ثانية للتأكيد" else "مسح كل الكلمات المتعلَّمة وتوقّعات الكلمة التالية",
+                if (confirmClearAll) L("اضغط مرة ثانية للتأكيد") else L("مسح كل الكلمات المتعلَّمة وتوقّعات الكلمة التالية"),
                 DangerRed
             ) {
                 if (!confirmClearAll) {
@@ -919,7 +932,7 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
                 }
             }
         }
-        Hint("ما بيتعلّم شي بحقول كلمات المرور. كل شي بيتخزن على جهازك فقط.")
+        Hint(L("ما بيتعلّم شي بحقول كلمات المرور. كل شي بيتخزن على جهازك فقط."))
     }
 }
 
@@ -944,21 +957,21 @@ private fun PrivacyPage(
     val mediaLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { mediaGranted = it }
-    SubPage("الحافظة والخصوصية", onBack) {
-        Section("الحافظة") {
-            SwitchRow("حفظ سجل الحافظة", R.drawable.ic_tool_clipboard, IconBlue, settings.clipboardEnabled) {
+    SubPage(L("الحافظة والخصوصية"), onBack) {
+        Section(L("الحافظة")) {
+            SwitchRow(L("حفظ سجل الحافظة"), R.drawable.ic_tool_clipboard, IconBlue, settings.clipboardEnabled) {
                 scope.launch { repo.setClipboardEnabled(it) }
             }
             Divider()
-            ActionRow(if (mediaGranted) "التقاط لقطات الشاشة تلقائيًا: مفعّل" else "السماح بالتقاط لقطات الشاشة تلقائيًا") {
+            ActionRow(if (mediaGranted) L("التقاط لقطات الشاشة تلقائيًا: مفعّل") else L("السماح بالتقاط لقطات الشاشة تلقائيًا")) {
                 if (!mediaGranted) mediaLauncher.launch(mediaPerm)
             }
             Divider()
-            ActionRow("مسح سجل الحافظة (مع المثبّت)", DangerRed) { scope.launch { clipboardRepo.clearAll() } }
+            ActionRow(L("مسح سجل الحافظة (مع المثبّت)"), DangerRed) { scope.launch { clipboardRepo.clearAll() } }
         }
-        Section("الخصوصية والأذونات") {
+        Section(L("الخصوصية والأذونات")) {
             Text(
-                "خدمة لوحة المفاتيح نفسها ما بتتصل بالإنترنت أبدًا. الاتصال الوحيد هو لما تضغط بنفسك «تنزيل القاموس» بصفحة «القاموس والكلمات» (ملف كلمات من GitHub). سجل الحافظة (نصوص وصور) والكلمات المتعلَّمة والاختصارات بيتخزنوا على جهازك فقط، وما بيتسجلوا بحقول كلمات المرور. الأذونات: الاهتزاز عند الضغط، والإنترنت لزر التنزيل فقط، وكلاهما عادي ما بيحتاج موافقتك.",
+                L("خدمة لوحة المفاتيح نفسها ما بتتصل بالإنترنت أبدًا. الاتصال الوحيد هو لما تضغط بنفسك «تنزيل القاموس» بصفحة «القاموس والكلمات» (ملف كلمات من GitHub). سجل الحافظة (نصوص وصور) والكلمات المتعلَّمة والاختصارات بيتخزنوا على جهازك فقط، وما بيتسجلوا بحقول كلمات المرور. الأذونات: الاهتزاز عند الضغط، والإنترنت لزر التنزيل فقط، وكلاهما عادي ما بيحتاج موافقتك."),
                 color = SemoPalette.TextSecondary,
                 fontSize = 13.sp,
                 lineHeight = 21.sp,
@@ -1011,7 +1024,7 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
             }.onSuccess { file ->
                 updateState = UpdateUiState.ReadyToInstall(file)
             }.onFailure { e ->
-                updateState = UpdateUiState.Error(e.message ?: "فشل تنزيل التحديث")
+                updateState = UpdateUiState.Error(e.message ?: L("فشل تنزيل التحديث"))
             }
         }
     }
@@ -1032,7 +1045,7 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
         )
     }
 
-    SubPage("حول وإعادة الضبط", onBack) {
+    SubPage(L("حول وإعادة الضبط"), onBack) {
         Section {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -1041,18 +1054,22 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
                 Image(painter = painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(44.dp))
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("سيمو كيبورد", color = SemoPalette.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("الإصدار $version", color = SemoPalette.TextHint, fontSize = 13.sp)
+                    Text(L("سيمو كيبورد"), color = SemoPalette.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("${L("الإصدار ")}$version", color = SemoPalette.TextHint, fontSize = 13.sp)
                 }
             }
             Divider()
-            ActionRow("التحقق من التحديثات", onClick = ::startCheck)
+            ActionRow(L("التحقق من التحديثات"), onClick = ::startCheck)
             Divider()
-            ActionRow("إعادة عرض دليل الإعداد", onClick = onReplay)
+            ActionRow(L("إعادة عرض دليل الإعداد"), onClick = onReplay)
         }
-        Section("إعادة الضبط") {
+        Section(com.semo.keyboard.ui.appString(R.string.backup_title)) {
+            BackupBlock()
+        }
+
+        Section(L("إعادة الضبط")) {
             ActionRow(
-                if (confirmReset) "اضغط مرة ثانية للتأكيد" else "إعادة الإعدادات للافتراضي",
+                if (confirmReset) L("اضغط مرة ثانية للتأكيد") else L("إعادة الإعدادات للافتراضي"),
                 DangerRed
             ) {
                 if (!confirmReset) {
@@ -1063,7 +1080,7 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
                 }
             }
         }
-        Hint("بيرجّع كل الإعدادات (التخطيط، المظهر، اللمس، الصوت…) للقيم الافتراضية. الكلمات المتعلَّمة والاختصارات وسجل الحافظة ما بتنمسح.")
+        Hint(L("بيرجّع كل الإعدادات (التخطيط، المظهر، اللمس، الصوت…) للقيم الافتراضية. الكلمات المتعلَّمة والاختصارات وسجل الحافظة ما بتنمسح."))
     }
 }
 
@@ -1087,19 +1104,19 @@ private fun UpdateDialog(
         ) {
             when (state) {
                 is UpdateUiState.Checking -> {
-                    Text("جارٍ التحقق من آخر إصدار…", color = SemoPalette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(L("جارٍ التحقق من آخر إصدار…"), color = SemoPalette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(10.dp))
                     UpdateProgressBar(indeterminate = true)
                 }
                 is UpdateUiState.UpToDate -> {
-                    Text("التطبيق محدَّث", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(L("التطبيق محدَّث"), color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
-                    Text("عندك آخر إصدار من سيمو كيبورد.", color = SemoPalette.TextHint, fontSize = 13.sp)
+                    Text(L("عندك آخر إصدار من سيمو كيبورد."), color = SemoPalette.TextHint, fontSize = 13.sp)
                     Spacer(Modifier.height(16.dp))
-                    UpdateDialogButton("تم", modifier = Modifier.fillMaxWidth(), filled = true, onClick = onDismiss)
+                    UpdateDialogButton(L("تم"), modifier = Modifier.fillMaxWidth(), filled = true, onClick = onDismiss)
                 }
                 is UpdateUiState.Available -> {
-                    Text("فيه تحديث جديد: ${state.info.versionName}", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("${L("فيه تحديث جديد: ")}${state.info.versionName}", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     if (state.info.notes.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -1113,12 +1130,12 @@ private fun UpdateDialog(
                     }
                     Spacer(Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        UpdateDialogButton("لاحقًا", modifier = Modifier.weight(1f), onClick = onDismiss)
-                        UpdateDialogButton("تنزيل وتثبيت", modifier = Modifier.weight(1f), filled = true) { onDownload(state.info) }
+                        UpdateDialogButton(L("لاحقًا"), modifier = Modifier.weight(1f), onClick = onDismiss)
+                        UpdateDialogButton(L("تنزيل وتثبيت"), modifier = Modifier.weight(1f), filled = true) { onDownload(state.info) }
                     }
                 }
                 is UpdateUiState.Downloading -> {
-                    Text("جارٍ تنزيل التحديث…", color = SemoPalette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(L("جارٍ تنزيل التحديث…"), color = SemoPalette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(10.dp))
                     val fraction = if (state.totalBytes > 0) (state.downloadedBytes.toFloat() / state.totalBytes).coerceIn(0f, 1f) else 0f
                     UpdateProgressBar(indeterminate = state.totalBytes <= 0, progress = fraction)
@@ -1132,23 +1149,23 @@ private fun UpdateDialog(
                     )
                 }
                 is UpdateUiState.ReadyToInstall -> {
-                    Text("التحديث جاهز للتثبيت", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(L("التحديث جاهز للتثبيت"), color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
-                    Text("رح يفتح نظام أندرويد شاشة التثبيت.", color = SemoPalette.TextHint, fontSize = 13.sp)
+                    Text(L("رح يفتح نظام أندرويد شاشة التثبيت."), color = SemoPalette.TextHint, fontSize = 13.sp)
                     Spacer(Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        UpdateDialogButton("لاحقًا", modifier = Modifier.weight(1f), onClick = onDismiss)
-                        UpdateDialogButton("تثبيت الآن", modifier = Modifier.weight(1f), filled = true) { onInstall(state.file) }
+                        UpdateDialogButton(L("لاحقًا"), modifier = Modifier.weight(1f), onClick = onDismiss)
+                        UpdateDialogButton(L("تثبيت الآن"), modifier = Modifier.weight(1f), filled = true) { onInstall(state.file) }
                     }
                 }
                 is UpdateUiState.Error -> {
-                    Text("تعذّر التحقق من التحديثات", color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(L("تعذّر التحقق من التحديثات"), color = SemoPalette.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
                     Text(state.message, color = SemoPalette.TextHint, fontSize = 13.sp)
                     Spacer(Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        UpdateDialogButton("إغلاق", modifier = Modifier.weight(1f), onClick = onDismiss)
-                        UpdateDialogButton("إعادة المحاولة", modifier = Modifier.weight(1f), filled = true, onClick = onRetry)
+                        UpdateDialogButton(L("إغلاق"), modifier = Modifier.weight(1f), onClick = onDismiss)
+                        UpdateDialogButton(L("إعادة المحاولة"), modifier = Modifier.weight(1f), filled = true, onClick = onRetry)
                     }
                 }
             }

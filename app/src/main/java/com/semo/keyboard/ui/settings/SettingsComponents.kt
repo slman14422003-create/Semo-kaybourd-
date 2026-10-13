@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui.settings
 
+import com.semo.keyboard.ui.L
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
@@ -134,18 +135,18 @@ internal fun StatusCard(isEnabled: Boolean, isSelected: Boolean, onEnable: () ->
             Spacer(Modifier.width(10.dp))
             Column {
                 Text(
-                    if (ready) "اللوحة جاهزة وشغّالة" else "لسا ما خلصنا الإعداد",
+                    if (ready) L("اللوحة جاهزة وشغّالة") else L("لسا ما خلصنا الإعداد"),
                     color = SemoPalette.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold
                 )
                 Text(
-                    if (ready) "افتح أي حقل كتابة وبتلاقي سيمو كيبورد" else "خطوتين وبتصير جاهزة",
+                    if (ready) L("افتح أي حقل كتابة وبتلاقي سيمو كيبورد") else L("خطوتين وبتصير جاهزة"),
                     color = SemoPalette.TextSecondary, fontSize = 12.sp
                 )
             }
         }
         if (!ready) {
-            StepRow("١. تفعيل اللوحة من إعدادات النظام", isEnabled, "تفعيل", onEnable)
-            StepRow("٢. اختيارها كلوحة نشطة", isSelected, "اختيار", onPick)
+            StepRow(L("١. تفعيل اللوحة من إعدادات النظام"), isEnabled, L("تفعيل"), onEnable)
+            StepRow(L("٢. اختيارها كلوحة نشطة"), isSelected, L("اختيار"), onPick)
         }
     }
 }
@@ -274,10 +275,10 @@ internal fun LanguageLibraryBlock(repo: SettingsRepository, settings: SemoSettin
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf<KeyboardLanguage?>(null) }
     var refresh by remember { mutableStateOf(0) }
-    Section("مكتبة اللغات") {
+    Section(L("مكتبة اللغات")) {
         Text(
-            "فعّل اللغات اللي بدك إياها بدورة زر الكرة الأرضية، ونزّل لكل لغة قاموسها ونموذج جملها (بيشتغلوا بعدها بدون إنترنت). " +
-                "القواميس من FrequencyWords (CC-BY-SA 4.0) والجمل من Tatoeba (CC-BY 2.0 FR).",
+            L("فعّل اللغات اللي بدك إياها بدورة زر الكرة الأرضية، ونزّل لكل لغة قاموسها ونموذج جملها (بيشتغلوا بعدها بدون إنترنت). ") +
+                L("القواميس من FrequencyWords (CC-BY-SA 4.0) والجمل من Tatoeba (CC-BY 2.0 FR)."),
             color = SemoPalette.TextHint,
             fontSize = 12.sp,
             lineHeight = 18.sp,
@@ -289,10 +290,10 @@ internal fun LanguageLibraryBlock(repo: SettingsRepository, settings: SemoSettin
             val hasWords = remember(refresh, busy) { DictionaryManager.hasWords(context, lang) }
             val hasModel = remember(refresh, busy) { DictionaryManager.hasModel(context, lang) }
             val state = when {
-                hasWords && hasModel -> "منزَّلة: قاموس + نموذج جمل"
-                hasWords -> "منزَّلة: قاموس فقط"
-                lang.builtIn -> "مدمجة (تنزيل القاموس الكامل اختياري)"
-                else -> "غير منزَّلة"
+                hasWords && hasModel -> L("منزَّلة: قاموس + نموذج جمل")
+                hasWords -> L("منزَّلة: قاموس فقط")
+                lang.builtIn -> L("مدمجة (تنزيل القاموس الكامل اختياري)")
+                else -> L("غير منزَّلة")
             }
             SwitchRow(lang.nativeName, R.drawable.ic_ios_globe, if (lang.rtl) IconGreen else IconBlue, on, subtitle = state) { v ->
                 val list = if (v) settings.enabledLanguages + lang else settings.enabledLanguages - lang
@@ -308,32 +309,32 @@ internal fun LanguageLibraryBlock(repo: SettingsRepository, settings: SemoSettin
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 SolidButton(
-                    text = if (busy == lang) "جاري التنزيل..." else if (hasWords) "تحديث" else "تنزيل",
+                    text = if (busy == lang) L("جاري التنزيل...") else if (hasWords) L("تحديث") else L("تنزيل"),
                     enabled = busy == null,
                     modifier = Modifier.weight(1f)
                 ) {
                     scope.launch {
                         busy = lang
-                        status = "جاري الاتصال..."
+                        status = L("جاري الاتصال...")
                         val result = withContext(Dispatchers.IO) {
                             DictionaryManager.download(context, lang) { message -> status = message }
                         }
                         result.onSuccess { info ->
-                            status = "تم تنزيل ${lang.nativeName}: ${info.words} كلمة" +
-                                if (info.sentences > 0) " + نموذج من ${info.sentences} جملة" else " (تعذّر نموذج الجمل، القاموس يعمل)"
+                            status = "${L("تم تنزيل ")}${lang.nativeName}: ${info.words}${L(" كلمة")}" +
+                                if (info.sentences > 0) "${L(" + نموذج من ")}${info.sentences}${L(" جملة")}" else L(" (تعذّر نموذج الجمل، القاموس يعمل)")
                             if (lang !in settings.enabledLanguages) repo.setEnabledLanguages(settings.enabledLanguages + lang)
                         }.onFailure {
-                            status = "فشل التنزيل، تأكد من الاتصال بالإنترنت ثم أعد المحاولة"
+                            status = L("فشل التنزيل، تأكد من الاتصال بالإنترنت ثم أعد المحاولة")
                         }
                         busy = null
                         refresh++
                     }
                 }
                 if (hasWords) {
-                    SolidButton(text = "حذف", enabled = busy == null, modifier = Modifier.weight(1f)) {
+                    SolidButton(text = L("حذف"), enabled = busy == null, modifier = Modifier.weight(1f)) {
                         scope.launch {
                             withContext(Dispatchers.IO) { DictionaryManager.delete(context, lang) }
-                            status = "حُذف ما نُزِّل للغة ${lang.nativeName}"
+                            status = "${L("حُذف ما نُزِّل للغة ")}${lang.nativeName}"
                             refresh++
                         }
                     }
@@ -516,7 +517,7 @@ internal fun SubPage(title: String, onBack: () -> Unit, content: @Composable () 
                 // بالـ RTL سهم الرجوع يشير لليمين = اتجاه الأيقونة الأصلي
                 Icon(
                     painter = painterResource(R.drawable.ic_tool_chevron),
-                    contentDescription = "رجوع",
+                    contentDescription = L("رجوع"),
                     tint = SemoPalette.TextPrimary,
                     modifier = Modifier.size(22.dp)
                 )

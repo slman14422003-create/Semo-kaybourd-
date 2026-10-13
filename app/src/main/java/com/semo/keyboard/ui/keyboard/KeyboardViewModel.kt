@@ -194,6 +194,7 @@ class KeyboardViewModel(
                 shiftState = if (s.language.cased) t.shift else ShiftState.OFF,
                 language = s.language,
                 themeMode = s.themeMode,
+                keyboardTheme = s.keyboardTheme,
                 soundEnabled = s.soundEnabled,
                 soundVolume = s.soundVolume,
                 hapticEnabled = s.hapticEnabled,

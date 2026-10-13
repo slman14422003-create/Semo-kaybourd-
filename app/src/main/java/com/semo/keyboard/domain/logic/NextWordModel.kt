@@ -121,12 +121,32 @@ object NextWordModel {
      * أفضل الكلمات التالية بعد [prev] (و[prev2] قبلها). الترتيب: ما تعلّمته اللوحة من كتابتك (ثلاثي ثم ثنائي)،
      * ثم نموذج الجمل (مدمج أو منزَّل من مكتبة اللغات)، ثم القائمة الصغيرة المدمجة.
      */
+    private val predictCache = LruCache<List<String>>(192)
+
+    fun clearCaches() {
+        predictCache.clear()
+    }
+
     fun predict(
         prev: String,
         language: KeyboardLanguage,
         learned: Map<String, List<String>>,
         limit: Int = 3,
         prev2: String = ""
+    ): List<String> {
+        val key = "${language.name}|$prev|$prev2|$limit|${ModelVersion.current()}|${System.identityHashCode(learned)}|${learned.size}"
+        predictCache.get(key)?.let { return it }
+        val result = predictUncached(prev, language, learned, limit, prev2)
+        predictCache.put(key, result)
+        return result
+    }
+
+    private fun predictUncached(
+        prev: String,
+        language: KeyboardLanguage,
+        learned: Map<String, List<String>>,
+        limit: Int,
+        prev2: String
     ): List<String> {
         val k = BigDictionary.key(prev)
         if (k.isEmpty()) return emptyList()

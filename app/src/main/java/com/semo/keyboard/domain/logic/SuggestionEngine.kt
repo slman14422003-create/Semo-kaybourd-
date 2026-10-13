@@ -44,6 +44,16 @@ object SuggestionEngine {
      * (ثلاثي ثم ثنائي) الأعلى، ثم نموذج الجمل بحسب احتمال الكلمة بهالسياق، ثم الكلمات المتعلَّمة، ثم القاموس
      * (الأشيع أولًا). بهذا "ar" بعد "how" تعطي "are" قبل "area"، و"ha" بعد "I" تعطي "have" قبل "hair".
      */
+    fun clearCaches() {
+        suggestCache.clear()
+        correctionCache.clear()
+        fixCache.clear()
+    }
+
+    private val suggestCache = LruCache<List<String>>(256)
+    private val correctionCache = LruCache<List<String>>(128)
+    private val fixCache = LruCache<String>(256)
+
     fun suggest(
         prefix: String,
         language: KeyboardLanguage,
@@ -52,6 +62,24 @@ object SuggestionEngine {
         context: String = "",
         bigrams: Map<String, List<String>> = emptyMap(),
         context2: String = ""
+    ): List<String> {
+        if (prefix.isEmpty()) return emptyList()
+        val key = "${language.name}|$prefix|$context|$context2|$limit|${ModelVersion.current()}|" +
+            "${System.identityHashCode(learned)}|${learned.size}|${System.identityHashCode(bigrams)}|${bigrams.size}"
+        suggestCache.get(key)?.let { return it }
+        val result = suggestUncached(prefix, language, learned, limit, context, bigrams, context2)
+        suggestCache.put(key, result)
+        return result
+    }
+
+    private fun suggestUncached(
+        prefix: String,
+        language: KeyboardLanguage,
+        learned: List<String>,
+        limit: Int,
+        context: String,
+        bigrams: Map<String, List<String>>,
+        context2: String
     ): List<String> {
         if (prefix.isEmpty()) return emptyList()
         val pk = BigDictionary.key(prefix)
@@ -112,7 +140,29 @@ object SuggestionEngine {
             ValidWords.english?.withPrefix(p, limit)?.forEach { w -> add(w, 1.0) }
         }
 
-        val result = cands.values.sortedByDescending { it.score }.take(limit).map { matchCase(prefix, it.word) }
+        val result = ArrayList(cands.values.sortedByDescending { it.score }.take(limit).map { matchCase(prefix, it.word) })
+
+        if (language.script == Script.ARABIC) {
+            if (result.size < limit) {
+                val clitic = ArabicText.clitic(prefix)
+                if (clitic.isNotEmpty()) {
+                    val stem = prefix.substring(clitic.length)
+                    for (w in BigDictionary.complete(stem, language, limit)) {
+                        if (result.size >= limit) break
+                        val joined = clitic + w
+                        if (result.none { BigDictionary.key(it) == BigDictionary.key(joined) }) result.add(joined)
+                    }
+                }
+            }
+            if (prefix.length >= 3 && prefix.endsWith('ه')) {
+                val variant = prefix.dropLast(1) + "ة"
+                val r = BigDictionary.rankOf(variant, language)
+                if (r in 0 until COMMON_RANK && result.none { it == variant }) {
+                    result.add(minOf(1, result.size), variant)
+                    if (result.size > limit) result.removeAt(result.size - 1)
+                }
+            }
+        }
         return if (result.isEmpty()) listOf(prefix) else result
     }
 
@@ -142,6 +192,11 @@ object SuggestionEngine {
         if (k.isEmpty() || k in learnedKeys) return true
         if (BigDictionary.rankOf(k, language) >= 0) return true
         if (language == KeyboardLanguage.ENGLISH && ValidWords.english?.contains(k) == true) return true
+        if (language.script == Script.ARABIC && k.length >= 4) {
+            for (stem in ArabicText.stems(k)) {
+                if (stem.length >= 3 && (stem in learnedKeys || BigDictionary.rankOf(stem, language) in 0 until 60_000)) return true
+            }
+        }
         return false
     }
 
@@ -167,6 +222,19 @@ object SuggestionEngine {
         limit: Int = 2
     ): List<String> {
         if (word.length < 3 || word.length > 20) return emptyList()
+        val key = "${language.name}|$word|$limit|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
+        correctionCache.get(key)?.let { return it }
+        val result = correctionsUncached(word, language, learnedKeys, limit)
+        correctionCache.put(key, result)
+        return result
+    }
+
+    private fun correctionsUncached(
+        word: String,
+        language: KeyboardLanguage,
+        learnedKeys: Set<String>,
+        limit: Int
+    ): List<String> {
         if (isKnown(word, language, learnedKeys)) return emptyList()
         val lower = word.lowercase()
         val alphabet = alphabetOf(language)
@@ -196,6 +264,28 @@ object SuggestionEngine {
      * كان مقتصرًا على الإنكليزية فقط؛ صار يعمل بأي لغة حُمِّل قاموسها (عربي، فرنسي، إسباني...).
      */
     fun smartFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
+        if (word.length < 3 || word.length > 14) return null
+        val key = "${language.name}|$word|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
+        fixCache.get(key)?.let { return it.ifEmpty { null } }
+        val result = smartFixUncached(word, language, learnedKeys)
+        fixCache.put(key, result ?: "")
+        return result
+    }
+
+    private fun smartFixUncached(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
+        if (language.script == Script.ARABIC) {
+            ArabicText.canonicalHamza(word, language)?.let { return it }
+            val clitic = ArabicText.clitic(word)
+            if (clitic.isNotEmpty() && !isKnown(word, language, learnedKeys)) {
+                val stem = word.substring(clitic.length)
+                val fixedStem = coreFix(stem, language, learnedKeys)
+                if (fixedStem != null) return clitic + fixedStem
+            }
+        }
+        return coreFix(word, language, learnedKeys)
+    }
+
+    private fun coreFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
         if (word.length < 3 || word.length > 14) return null
         val alphabet = alphabetOf(language)
         if (!word.all { it in alphabet }) return null

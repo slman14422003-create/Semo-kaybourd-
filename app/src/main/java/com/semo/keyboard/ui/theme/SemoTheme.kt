@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.semo.keyboard.domain.model.KeyboardSize
 import com.semo.keyboard.domain.model.KeyboardStyle
+import com.semo.keyboard.domain.model.KeyboardTheme
 import com.semo.keyboard.domain.model.KeySpacing
 
 /** هوية سيمو البصرية: رمادي فحمي متدرّج + أزرق واضح (مأخوذة من تصميم GITHUB-MANGER) */
@@ -109,8 +110,89 @@ private val Ios18Light = SemoKeyboardColors(
     suggestion = Color(0xFF1C1C1E)
 )
 
-fun semoColors(style: KeyboardStyle, dark: Boolean): SemoKeyboardColors = when (style) {
-    KeyboardStyle.IOS18 -> if (dark) Ios18Dark else Ios18Light
+private fun mix(a: Color, b: Color, t: Float): Color = Color(
+    red = a.red + (b.red - a.red) * t,
+    green = a.green + (b.green - a.green) * t,
+    blue = a.blue + (b.blue - a.blue) * t,
+    alpha = 1f
+)
+
+private fun darkTheme(panel: Long, key: Long, special: Long, accent: Long, onAccent: Color = Color.White): SemoKeyboardColors {
+    val p = Color(panel)
+    val k = Color(key)
+    val a = Color(accent)
+    return SemoKeyboardColors(
+        panel = p,
+        key = k,
+        keyPressed = mix(k, Color.White, 0.1f),
+        keySpecial = Color(special),
+        keyAccent = a,
+        text = Color.White,
+        textMuted = mix(Color(0xFF9B9C9F), a, 0.12f),
+        textOnAccent = onAccent,
+        keyShadow = mix(p, Color.Black, 0.6f),
+        chip = k,
+        shiftActive = Color(0xFFD2D3D5),
+        onShiftActive = Color.Black,
+        bubble = mix(k, Color.White, 0.05f),
+        divider = mix(p, Color.White, 0.13f),
+        suggestion = Color(0xFFE9EAEC)
+    )
+}
+
+private fun lightTheme(panel: Long, special: Long, accent: Long, shadow: Long, onAccent: Color = Color.White): SemoKeyboardColors {
+    val p = Color(panel)
+    val s = Color(special)
+    val a = Color(accent)
+    return SemoKeyboardColors(
+        panel = p,
+        key = Color.White,
+        keyPressed = s,
+        keySpecial = s,
+        keyAccent = a,
+        text = Color.Black,
+        textMuted = mix(Color(0xFF6B6F7A), a, 0.12f),
+        textOnAccent = onAccent,
+        keyShadow = Color(shadow),
+        chip = Color.White,
+        shiftActive = Color.White,
+        onShiftActive = Color.Black,
+        bubble = Color.White,
+        divider = mix(p, Color.Black, 0.1f),
+        suggestion = Color(0xFF1C1C1E)
+    )
+}
+
+private val ThemeMidnightDark = darkTheme(0xFF000000, 0xFF2C2C2E, 0xFF1A1A1C, 0xFF0A84FF)
+private val ThemeOceanDark = darkTheme(0xFF0F1B26, 0xFF2B4256, 0xFF1C2E3E, 0xFF32ADE6)
+private val ThemeForestDark = darkTheme(0xFF121C16, 0xFF34503E, 0xFF1F3126, 0xFF30D158, Color.Black)
+private val ThemeRoseDark = darkTheme(0xFF221619, 0xFF5A3B43, 0xFF3B262C, 0xFFFF375F)
+private val ThemeSunsetDark = darkTheme(0xFF211812, 0xFF5A4332, 0xFF3A2A1D, 0xFFFF9F0A, Color.Black)
+private val ThemeLavenderDark = darkTheme(0xFF1A1724, 0xFF463F63, 0xFF2D2842, 0xFFBF5AF2)
+private val ThemeGraphiteDark = darkTheme(0xFF17181A, 0xFF3A3C40, 0xFF26282B, 0xFF8E8E93)
+private val ThemeMintDark = darkTheme(0xFF0F1F1E, 0xFF2E5552, 0xFF1B3533, 0xFF63E6D4, Color.Black)
+
+private val ThemeMidnightLight = lightTheme(0xFFE4E5E9, 0xFFB7BAC2, 0xFF007AFF, 0xFF8D909A)
+private val ThemeOceanLight = lightTheme(0xFFCFE0EC, 0xFFA9C4D6, 0xFF0A84C8, 0xFF7E9BAE)
+private val ThemeForestLight = lightTheme(0xFFCFE0D3, 0xFFA7C4AE, 0xFF248A3D, 0xFF7C9A84)
+private val ThemeRoseLight = lightTheme(0xFFEBD3D8, 0xFFD3A9B2, 0xFFE0245E, 0xFFA8828A)
+private val ThemeSunsetLight = lightTheme(0xFFEDDCC8, 0xFFD6B48F, 0xFFE07B00, 0xFFA88B6A)
+private val ThemeLavenderLight = lightTheme(0xFFDDD6EC, 0xFFB9AED6, 0xFF8E44C9, 0xFF8F86A8)
+private val ThemeGraphiteLight = lightTheme(0xFFD8D9DC, 0xFFB3B5BA, 0xFF636366, 0xFF8A8C91)
+private val ThemeMintLight = lightTheme(0xFFD0E6E3, 0xFFA8CBC6, 0xFF00A896, 0xFF7FA09B)
+
+fun semoColors(style: KeyboardStyle, dark: Boolean, theme: KeyboardTheme = KeyboardTheme.IOS): SemoKeyboardColors = when (style) {
+    KeyboardStyle.IOS18 -> when (theme) {
+        KeyboardTheme.IOS -> if (dark) Ios18Dark else Ios18Light
+        KeyboardTheme.MIDNIGHT -> if (dark) ThemeMidnightDark else ThemeMidnightLight
+        KeyboardTheme.OCEAN -> if (dark) ThemeOceanDark else ThemeOceanLight
+        KeyboardTheme.FOREST -> if (dark) ThemeForestDark else ThemeForestLight
+        KeyboardTheme.ROSE -> if (dark) ThemeRoseDark else ThemeRoseLight
+        KeyboardTheme.SUNSET -> if (dark) ThemeSunsetDark else ThemeSunsetLight
+        KeyboardTheme.LAVENDER -> if (dark) ThemeLavenderDark else ThemeLavenderLight
+        KeyboardTheme.GRAPHITE -> if (dark) ThemeGraphiteDark else ThemeGraphiteLight
+        KeyboardTheme.MINT -> if (dark) ThemeMintDark else ThemeMintLight
+    }
 }
 
 /** قياسات اللوحة حسب النمط وارتفاع المفاتيح */

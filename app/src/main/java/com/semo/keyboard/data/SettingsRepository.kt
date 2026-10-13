@@ -26,6 +26,8 @@ import com.semo.keyboard.domain.model.KeyboardStyle
 import com.semo.keyboard.domain.model.KeySpacing
 import com.semo.keyboard.domain.model.NumKeyTarget
 import com.semo.keyboard.domain.model.ToolbarItem
+import com.semo.keyboard.domain.model.KeyboardTheme
+import com.semo.keyboard.domain.model.AppLanguage
 import com.semo.keyboard.domain.logic.TranslateLanguages
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
@@ -147,6 +149,9 @@ class SettingsRepository(context: Context) {
 
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val KEYBOARD_THEME = stringPreferencesKey("keyboard_theme")
+        val APP_LANGUAGE = stringPreferencesKey("app_language")
+        val AUTO_CACHE_CLEAR = booleanPreferencesKey("auto_cache_clear")
         val SOUND = booleanPreferencesKey("sound_enabled")
         val SOUND_VOLUME = floatPreferencesKey("sound_volume")
         val HAPTIC = booleanPreferencesKey("haptic_enabled")
@@ -195,6 +200,9 @@ class SettingsRepository(context: Context) {
         .map { p ->
             SemoSettings(
                 themeMode = p[Keys.THEME_MODE].toEnumOr(ThemeMode.SYSTEM),
+                keyboardTheme = p[Keys.KEYBOARD_THEME].toEnumOr(KeyboardTheme.IOS),
+                appLanguage = p[Keys.APP_LANGUAGE].toEnumOr(AppLanguage.SYSTEM),
+                autoCacheClear = p[Keys.AUTO_CACHE_CLEAR] ?: true,
                 soundEnabled = p[Keys.SOUND] ?: true,
                 soundVolume = (p[Keys.SOUND_VOLUME] ?: 0.5f).coerceIn(0f, 1f),
                 hapticEnabled = p[Keys.HAPTIC] ?: true,
@@ -240,6 +248,9 @@ class SettingsRepository(context: Context) {
         .distinctUntilChanged()
 
     suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[Keys.THEME_MODE] = mode.name } }
+    suspend fun setAppLanguage(language: AppLanguage) { store.edit { it[Keys.APP_LANGUAGE] = language.name } }
+    suspend fun setAutoCacheClear(v: Boolean) { store.edit { it[Keys.AUTO_CACHE_CLEAR] = v } }
+    suspend fun setKeyboardTheme(theme: KeyboardTheme) { store.edit { it[Keys.KEYBOARD_THEME] = theme.name } }
     suspend fun setSoundEnabled(v: Boolean) { store.edit { it[Keys.SOUND] = v } }
     suspend fun setSoundVolume(v: Float) { store.edit { it[Keys.SOUND_VOLUME] = v.coerceIn(0f, 1f) } }
     suspend fun setHapticEnabled(v: Boolean) { store.edit { it[Keys.HAPTIC] = v } }
@@ -306,10 +317,23 @@ class SettingsRepository(context: Context) {
             val onboarding = p[Keys.ONBOARDING]
             val language = p[Keys.LANGUAGE]
             val recent = p[Keys.RECENT_EMOJIS]
+            val appLanguage = p[Keys.APP_LANGUAGE]
+            val keep = KEEP_ON_RESET.mapNotNull { name -> p.asMap().entries.firstOrNull { it.key.name == name }?.let { it.key to it.value } }
             p.clear()
+            for ((k, v) in keep) {
+                @Suppress("UNCHECKED_CAST")
+                p[k as Preferences.Key<Any>] = v
+            }
+            if (appLanguage != null) p[Keys.APP_LANGUAGE] = appLanguage
             if (onboarding != null) p[Keys.ONBOARDING] = onboarding
             if (language != null) p[Keys.LANGUAGE] = language
             if (recent != null) p[Keys.RECENT_EMOJIS] = recent
         }
+    }
+
+    private companion object {
+        val KEEP_ON_RESET = setOf(
+            "learned_words", "learned_bigrams", "ignored_corrections", "text_shortcuts", "clipboard_items", "last_cache_clear"
+        )
     }
 }

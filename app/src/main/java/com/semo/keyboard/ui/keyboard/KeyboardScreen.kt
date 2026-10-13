@@ -187,7 +187,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val colors = remember(state.style, isDark) { semoColors(state.style, isDark) }
+    val colors = remember(state.style, isDark, state.keyboardTheme) { semoColors(state.style, isDark, state.keyboardTheme) }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
@@ -352,12 +352,12 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     transitionSpec = {
                         if (targetState != KeyboardPage.LETTERS) {
                             // التأخير الصغير يخفي لحظة تركيب اللوحة الجديدة (الأثقل) خلف اللوحة القديمة فلا يظهر تقطيع
-                            (fadeIn(scaledTween(animScale, 260, delayMillis = 40, easing = IosEaseOut)) +
-                                slideInVertically(scaledTween(animScale, 380, delayMillis = 40, easing = IosPush)) { it / 24 }) togetherWith
-                                fadeOut(scaledTween(animScale, 90)) using SizeTransform(clip = false) { _, _ -> snap() }
+                            (fadeIn(scaledTween(animScale, 240, delayMillis = 30, easing = IosEaseOut)) +
+                                slideInVertically(scaledTween(animScale, 360, delayMillis = 30, easing = IosPush)) { it / 28 }) togetherWith
+                                fadeOut(scaledTween(animScale, 100, easing = IosEaseOut)) using SizeTransform(clip = false) { _, _ -> snap() }
                         } else {
-                            fadeIn(scaledTween(animScale, 220, delayMillis = 30, easing = IosEaseOut)) togetherWith
-                                fadeOut(scaledTween(animScale, 90)) using
+                            fadeIn(scaledTween(animScale, 240, delayMillis = 30, easing = IosEaseOut)) togetherWith
+                                fadeOut(scaledTween(animScale, 100, easing = IosEaseOut)) using
                                 SizeTransform(clip = false) { _, _ -> snap() }
                         }
                     },

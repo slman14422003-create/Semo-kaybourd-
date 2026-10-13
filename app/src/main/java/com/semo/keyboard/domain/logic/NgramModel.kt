@@ -33,10 +33,12 @@ object NgramModel {
 
     fun set(language: KeyboardLanguage, model: Model) {
         if (model.isEmpty) models.remove(language) else models[language] = model
+        ModelVersion.bump()
     }
 
     fun clear(language: KeyboardLanguage) {
         models.remove(language)
+        ModelVersion.bump()
     }
 
     // ------------------------------------------------------------------

@@ -32,5 +32,22 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - ui/anim/IosControls.kt: IosIndication (gray press highlight that fades out, replaces Material ripple app-wide via SemoAppTheme) and IosSwitch (51x31 track, spring thumb with press stretch) used by SwitchRow and toolbar rows.
 - Not yet verified by a Gradle build.
 
+## Prediction, Arabic autocorrect and themes (v3.5.0, versionCode 27)
+- domain/logic/ArabicText.kt: ModelVersion (bumped when dictionaries or n-gram models load), LruCache, Arabic clitic and suffix stripping (stems), canonicalHamza (restores hamza forms of common dictionary words, length 4+).
+- SuggestionEngine: suggest/corrections/smartFix are wrapped by LRU caches keyed by language, text, context, ModelVersion and identity of learned collections. Arabic: completion with attached prefixes (و ف ب ل ك ال وال بال ...), isKnown understands prefixes and pronoun suffixes (fewer false corrections), smartFix fixes the stem under a prefix and restores hamza, ending ه offers the ة variant as a suggestion only.
+- NextWordModel.predict is cached the same way.
+- AutoCorrect table: about 40 more Arabic entries (hamza forms, common typos, set phrases).
+- Themes: KeyboardTheme enum (IOS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT), each with light and dark palette in ui/theme/SemoTheme.kt via semoColors(style, dark, theme). Stored as keyboard_theme. Picker with live preview and cards in ui/settings/ThemePicker.kt, shown first in the Appearance page; the old light/dark selector is labelled as mode.
+- Not yet verified by a Gradle build.
+
+## App language, cache cycle, backup, smoother pages (v3.6.0, versionCode 28)
+- App language (Arabic, English, System): AppLanguage enum, stored as app_language. ui/AppStrings.kt: AppLang (state, loads assets/strings_en.json), L(arabicText) returns the English text when the app language is English, appString(resId) reads a string resource in the chosen app language. All Arabic literals in settings, onboarding, MainActivity and UpdateManager are wrapped with L(); template strings wrap each Arabic chunk. To add a new UI string: use string resources (values and values-ar) with appString, or wrap an Arabic literal with L() and add the English line to assets/strings_en.json. Layout direction follows the language (Ltr for English).
+- Language picker: AppLanguageBlock in ui/settings/AppSettingsExtras.kt (three tiles), first section on the home page.
+- Cache: data/CacheCleaner.kt clears in-memory caches (suggestions, corrections, next word, translation) and files in cacheDir/externalCacheDir older than 30 minutes every 6 hours, driven by SemoKeyboardService.startCacheCycle using last_cache_clear. Toggle auto_cache_clear and a clear-now button are in Appearance, section Performance. User data is never touched.
+- Backup: data/BackupManager.kt exports and imports the whole DataStore as JSON (settings, learned words and pairs, ignored corrections, shortcuts); excludes clipboard history, onboarding flag and cache timestamp. UI in the About page (BackupBlock) using the system file picker.
+- Fixed: resetToDefaults used to wipe learned words, shortcuts and clipboard because they live in the same DataStore; it now keeps them (KEEP_ON_RESET) plus app language.
+- Keyboard page transitions use one timing family (fade 240ms, slide 360ms IosPush, exit fade 100ms); emoji font-support list is prewarmed on a background thread at service start to avoid a hitch on first open.
+- Not yet verified by a Gradle build.
+
 ## Ideas for next steps
 - Optional per-app or per-field source language override; swap button; translate selected text only.

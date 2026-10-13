@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui
 
+import com.semo.keyboard.ui.L
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import android.content.Context
@@ -166,7 +167,12 @@ private fun Root(
     }
 
     val current = settings ?: return // بانتظار قراءة التفضيلات
+    remember { com.semo.keyboard.ui.AppLang.load(context) }
+    val english = remember(current.appLanguage) {
+        com.semo.keyboard.ui.AppLang.resolve(current.appLanguage).also { com.semo.keyboard.ui.AppLang.english = it }
+    }
     val showOnboarding = !current.onboardingCompleted || forceOnboarding
+    CompositionLocalProvider(LocalLayoutDirection provides if (english) LayoutDirection.Ltr else LayoutDirection.Rtl) {
     Crossfade(targetState = showOnboarding, animationSpec = tween(380, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "root") { onboarding ->
     if (onboarding) {
         OnboardingScreen(
@@ -197,6 +203,7 @@ private fun Root(
         )
     }
     }
+    }
 }
 
 /** يفتح إعدادات لوحات المفاتيح، وعند فشلها (بعض الأجهزة) يجرّب شاشات بديلة قبل الاستسلام */
@@ -211,7 +218,7 @@ private fun openInputMethodSettings(context: Context) {
         }.isSuccess
         if (ok) return
     }
-    Toast.makeText(context, "ما قدرت أفتح الإعدادات. افتحها يدويًا: اللغة والإدخال ← لوحة المفاتيح", Toast.LENGTH_LONG).show()
+    Toast.makeText(context, L("ما قدرت أفتح الإعدادات. افتحها يدويًا: اللغة والإدخال ← لوحة المفاتيح"), Toast.LENGTH_LONG).show()
 }
 
 /**
@@ -220,7 +227,7 @@ private fun openInputMethodSettings(context: Context) {
  */
 private fun openKeyboardPicker(context: Context) {
     if (!KeyboardStatusHelper.isKeyboardEnabled(context)) {
-        Toast.makeText(context, "فعّل «سيمو كيبورد» أولًا ثم اخترها", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, L("فعّل «سيمو كيبورد» أولًا ثم اخترها"), Toast.LENGTH_SHORT).show()
         openInputMethodSettings(context)
         return
     }
@@ -228,6 +235,6 @@ private fun openKeyboardPicker(context: Context) {
         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.showInputMethodPicker()
     }.isSuccess
     if (!shown) {
-        Toast.makeText(context, "ما انفتحت نافذة الاختيار. اختر اللوحة من زر تبديل الكيبورد بشريط التنقل", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, L("ما انفتحت نافذة الاختيار. اختر اللوحة من زر تبديل الكيبورد بشريط التنقل"), Toast.LENGTH_LONG).show()
     }
 }

@@ -113,6 +113,10 @@ enum class FieldKind { TEXT, EMAIL, URL }
 /** شكل اللوحة: iOS 18 فقط (تمت إزالة نمط iOS 26) */
 enum class KeyboardStyle { IOS18 }
 
+enum class AppLanguage { SYSTEM, ARABIC, ENGLISH }
+
+enum class KeyboardTheme { IOS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT }
+
 /** ارتفاع المفاتيح */
 enum class KeyboardSize { SMALL, MEDIUM, LARGE }
 
@@ -274,7 +278,10 @@ data class SemoSettings(
     /** سرعة كل حركات اللوحة (تبديل الصفحات، اللغة، ضغط المفاتيح)؛ OFF يلغيها تمامًا */
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translateTarget: String = "en",
-    val translateRecents: List<String> = emptyList()
+    val translateRecents: List<String> = emptyList(),
+    val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM,
+    val autoCacheClear: Boolean = true
 )
 
 @Immutable
@@ -341,7 +348,10 @@ data class KeyboardUiState(
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translate: TranslateUi? = null,
     val translateTarget: String = "en",
-    val translateRecents: List<String> = emptyList()
+    val translateRecents: List<String> = emptyList(),
+    val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM,
+    val autoCacheClear: Boolean = true
 )
 
 
