@@ -2,6 +2,11 @@
 -keep class com.semo.keyboard.ui.MainActivity { *; }
 -keep class androidx.core.content.FileProvider { *; }
 -keepclassmembers enum com.semo.keyboard.** { *; }
+-keep class org.vosk.** { *; }
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class * extends com.sun.jna.** { public *; }
+-dontwarn java.awt.**
+-dontwarn com.sun.jna.**
 -dontwarn org.apache.commons.compress.**
 -dontwarn org.tukaani.xz.**
 -dontwarn com.github.luben.zstd.**

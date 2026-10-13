@@ -1,14 +1,10 @@
 package com.semo.keyboard.domain.logic
 
-/**
- * تصحيح تلقائي محافظ (مثل iOS): الاختصارات بدون فاصلة علوية (dont → don't)،
- * أخطاء إملائية شائعة، وهمزات عربية شائعة. جدول ثابت بدل مطابقة تقريبية،
- * لأن القاموس المدمج صغير والمطابقة التقريبية كانت رح تغيّر كلمات سليمة.
- */
+import android.content.Context
+
 object AutoCorrect {
 
-    private val table: Map<String, String> = mapOf(
-        // اختصارات إنكليزية
+    private val english: Map<String, String> = mapOf(
         "i" to "I", "im" to "I'm", "ive" to "I've", "i'm" to "I'm", "i'll" to "I'll", "i've" to "I've", "i'd" to "I'd",
         "dont" to "don't", "cant" to "can't", "wont" to "won't", "didnt" to "didn't", "doesnt" to "doesn't",
         "isnt" to "isn't", "arent" to "aren't", "wasnt" to "wasn't", "werent" to "weren't",
@@ -16,35 +12,67 @@ object AutoCorrect {
         "havent" to "haven't", "hasnt" to "hasn't", "hadnt" to "hadn't",
         "youre" to "you're", "theyre" to "they're", "thats" to "that's", "whats" to "what's",
         "hes" to "he's", "shes" to "she's",
-        // أخطاء إملائية شائعة
         "teh" to "the", "adn" to "and", "taht" to "that", "thier" to "their", "becuase" to "because",
         "recieve" to "receive", "definately" to "definitely", "seperate" to "separate",
-        "occured" to "occurred", "wich" to "which", "alot" to "a lot", "untill" to "until", "goign" to "going",
-        // همزات عربية شائعة
-        "الى" to "إلى", "انا" to "أنا", "انت" to "أنت", "اكيد" to "أكيد", "اهلا" to "أهلا", "اين" to "أين",
-        "اخي" to "أخي", "اختي" to "أختي", "ابي" to "أبي", "امي" to "أمي", "لاكن" to "لكن",
-        "هاذا" to "هذا", "هاذه" to "هذه", "هاذي" to "هذي", "ذالك" to "ذلك", "اللذي" to "الذي", "اللتي" to "التي",
-        "اذا" to "إذا", "او" to "أو", "اي" to "أي", "اكثر" to "أكثر", "اكبر" to "أكبر", "احسن" to "أحسن",
-        "افضل" to "أفضل", "اجمل" to "أجمل", "اول" to "أول", "ايضا" to "أيضا", "امس" to "أمس", "امام" to "أمام",
-        "اهم" to "أهم", "احمد" to "أحمد", "الاسلام" to "الإسلام", "اسلام" to "إسلام", "اللة" to "الله",
-        "لماذه" to "لماذا", "حتي" to "حتى", "متي" to "متى", "مستشفي" to "مستشفى", "لاكنه" to "لكنه",
-        "انشالله" to "إن شاء الله", "انشاءالله" to "إن شاء الله", "ماشاءالله" to "ما شاء الله",
-        "الاردن" to "الأردن", "الامارات" to "الإمارات", "اسرائيل" to "إسرائيل", "الانترنت" to "الإنترنت",
-        "الاخ" to "الأخ", "الاخت" to "الأخت", "الاب" to "الأب", "الام" to "الأم", "الان" to "الآن"
+        "occured" to "occurred", "wich" to "which", "alot" to "a lot", "untill" to "until", "goign" to "going"
     )
 
-    /** يرجع الكلمة المصحّحة، أو null لو ما تحتاج تصحيح */
+    private const val ARABIC_ASSET = "dict/ar_fix.txt"
+    private const val MIN_STEM = 4
+    private val prefixes = listOf("وب", "ول", "وك", "و", "ب", "ل", "ك")
+
+    @Volatile
+    private var arabic: Map<String, String> = emptyMap()
+
+    fun attach(context: Context) {
+        if (arabic.isNotEmpty()) return
+        val loaded = HashMap<String, String>(4096)
+        runCatching {
+            context.applicationContext.assets.open(ARABIC_ASSET).bufferedReader(Charsets.UTF_8).useLines { lines ->
+                for (line in lines) {
+                    val tab = line.indexOf('\t')
+                    if (tab <= 0) continue
+                    val right = line.substring(tab + 1).trim()
+                    if (right.isNotEmpty()) loaded[line.substring(0, tab)] = right
+                }
+            }
+        }
+        if (loaded.isNotEmpty()) {
+            arabic = loaded
+            ModelVersion.bump()
+        }
+    }
+
     fun fix(word: String): String? {
-        if (word.isEmpty() || word.length > 14) return null
-        val fixed = table[word.lowercase()] ?: return null
+        if (word.isEmpty() || word.length > 20) return null
+        if (ArabicText.isArabicWord(word)) return fixArabic(word)
+        if (word.length > 14) return null
+        val fixed = english[word.lowercase()] ?: return null
         if (fixed == word) return null
         val result = when {
-            // الضمير I والاختصارات اللي تبدأ به تُكتب كبيرة دائمًا
             fixed.startsWith("I") -> fixed
             word.length > 1 && word.all { !it.isLetter() || it.isUpperCase() } -> fixed.uppercase()
             word.first().isUpperCase() -> fixed.replaceFirstChar { it.uppercase() }
             else -> fixed
         }
         return if (result == word) null else result
+    }
+
+    private fun fixArabic(word: String): String? {
+        val table = arabic
+        if (table.isEmpty()) return null
+        table[word]?.let { return it.takeIf { r -> r != word } }
+        for (prefix in prefixes) {
+            if (!word.startsWith(prefix)) continue
+            val rest = word.substring(prefix.length)
+            if (rest.length < MIN_STEM) continue
+            val hit = table[rest] ?: continue
+            return prefix + hit
+        }
+        if (word.length >= 5 && word.startsWith("لل")) {
+            val hit = table["ال" + word.substring(2)]
+            if (hit != null && hit.startsWith("ال")) return "لل" + hit.substring(2)
+        }
+        return null
     }
 }

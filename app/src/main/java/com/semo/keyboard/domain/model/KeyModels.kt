@@ -281,6 +281,7 @@ data class SemoSettings(
     val translateRecents: List<String> = emptyList(),
     val voiceDialect: VoiceDialect = VoiceDialect.AUTO,
     val voiceOfflineFirst: Boolean = false,
+    val voiceBuiltinFirst: Boolean = false,
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCacheClear: Boolean = true
@@ -355,6 +356,7 @@ data class KeyboardUiState(
     val translateRecents: List<String> = emptyList(),
     val voiceDialect: VoiceDialect = VoiceDialect.AUTO,
     val voiceOfflineFirst: Boolean = false,
+    val voiceBuiltinFirst: Boolean = false,
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCacheClear: Boolean = true
@@ -400,5 +402,6 @@ enum class VoiceDialect(val tag: String?) {
 class VoiceOptions(
     val offlineFirst: Boolean = false,
     val bias: List<String> = emptyList(),
-    val rank: ((String) -> Double)? = null
+    val rank: ((String) -> Double)? = null,
+    val builtinFirst: Boolean = false
 )

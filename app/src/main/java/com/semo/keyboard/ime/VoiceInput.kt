@@ -73,6 +73,46 @@ class VoiceInput(
     private var triedBaseTag = false
     private var level = 0f
     private var levelAt = 0L
+    private var vosk: VoskVoice? = null
+    private var usingBuiltin = false
+
+    private val builtinCallback = object : Callback {
+        override fun onStatus(status: VoiceStatus) {
+            when (status) {
+                VoiceStatus.PAUSED, VoiceStatus.FAILED, VoiceStatus.UNAVAILABLE, VoiceStatus.NETWORK, VoiceStatus.NO_PERMISSION -> {
+                    running = false
+                    usingBuiltin = false
+                }
+                else -> Unit
+            }
+            callback.onStatus(status)
+        }
+
+        override fun onPartial(text: String) = callback.onPartial(text)
+        override fun onFinal(text: String) = callback.onFinal(text)
+        override fun onLevel(level: Float) = callback.onLevel(level)
+    }
+
+    private fun arabicTag(): Boolean = tag.substringBefore('-').equals("ar", ignoreCase = true)
+
+    private fun builtinReady(): Boolean = arabicTag() && VoskModelManager.isReady(context)
+
+    private fun startBuiltin() {
+        destroyRecognizer()
+        main.removeCallbacks(restartTask)
+        main.removeCallbacks(stopTask)
+        stopping = false
+        running = true
+        usingBuiltin = true
+        val engine = vosk ?: VoskVoice(context, builtinCallback).also { vosk = it }
+        engine.start()
+    }
+
+    private fun tryBuiltin(): Boolean {
+        if (usingBuiltin || !builtinReady()) return false
+        startBuiltin()
+        return true
+    }
 
     private val restartTask = Runnable { if (running && !stopping) listen() }
     private val stopTask = Runnable { if (stopping) finishStop() }
@@ -92,11 +132,17 @@ class VoiceInput(
         forceOnline = false
         triedOffline = false
         triedBaseTag = false
+        usingBuiltin = false
         if (!hasPermission()) {
             callback.onStatus(VoiceStatus.NO_PERMISSION)
             return
         }
+        if (builtinReady() && options.builtinFirst) {
+            startBuiltin()
+            return
+        }
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            if (tryBuiltin()) return
             callback.onStatus(VoiceStatus.UNAVAILABLE)
             return
         }
@@ -106,6 +152,10 @@ class VoiceInput(
     }
 
     fun finish() {
+        if (usingBuiltin) {
+            vosk?.finish()
+            return
+        }
         if (!running) {
             callback.onStatus(VoiceStatus.PAUSED)
             return
@@ -121,6 +171,8 @@ class VoiceInput(
     }
 
     fun cancel() {
+        vosk?.cancel()
+        usingBuiltin = false
         running = false
         stopping = false
         main.removeCallbacks(restartTask)
@@ -138,6 +190,7 @@ class VoiceInput(
     }
 
     private fun fail(status: VoiceStatus) {
+        if ((status == VoiceStatus.UNAVAILABLE || status == VoiceStatus.NETWORK) && tryBuiltin()) return
         running = false
         stopping = false
         main.removeCallbacks(restartTask)

@@ -370,6 +370,7 @@ class SemoKeyboardService :
         (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.addPrimaryClipChangedListener(clipListener)
 
         // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
+        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.AutoCorrect.attach(applicationContext) } }
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
         hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
     }
@@ -557,9 +558,7 @@ class SemoKeyboardService :
         if (::viewModel.isInitialized) viewModel.openVoice()
     }
 
-    private fun detectNavButtons(): Boolean = runCatching {
-        android.provider.Settings.Secure.getInt(contentResolver, "navigation_mode", 2) < 2
-    }.getOrDefault(false)
+    private fun detectNavButtons(): Boolean = com.semo.keyboard.util.NavigationMode.usesButtons(this)
 
     private fun startCacheCycle() {
         serviceScope.launch {
@@ -729,6 +728,7 @@ class SemoKeyboardService :
         }
         voiceInput?.cancel()
         voiceInput = null
+        VoskModelManager.release()
         serviceScope.cancel()
         mainHandler.removeCallbacks(cursorMovedTask)
         feedbackHandler.post {

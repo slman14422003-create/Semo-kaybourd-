@@ -51,6 +51,26 @@ object ArabicText {
         return out.distinct()
     }
 
+    private const val ENDING_RANK_LIMIT = 30_000
+
+    fun endingFix(word: String, language: com.semo.keyboard.domain.model.KeyboardLanguage): String? {
+        if (word.length < 4) return null
+        if (BigDictionary.rankOf(word, language) >= 0) return null
+        val stem = word.dropLast(1)
+        val candidate = when (word.last()) {
+            'ه' -> stem + 'ة'
+            'ي' -> stem + 'ى'
+            else -> return null
+        }
+        val rank = BigDictionary.rankOf(candidate, language)
+        if (rank !in 0 until ENDING_RANK_LIMIT) return null
+        if (word.last() == 'ه') {
+            val stemRank = BigDictionary.rankOf(stem, language)
+            if (stemRank in 0 until rank) return null
+        }
+        return BigDictionary.wordAt(rank, language) ?: candidate
+    }
+
     fun canonicalHamza(word: String, language: com.semo.keyboard.domain.model.KeyboardLanguage): String? {
         if (word.length < 4 || word.any { it in HAMZA_FORMS || it in '\u064B'..'\u0652' }) return null
         val rank = BigDictionary.rankOf(word, language)

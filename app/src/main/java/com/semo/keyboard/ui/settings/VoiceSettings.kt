@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,9 @@ import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.VoiceDialect
 import com.semo.keyboard.ime.OfflinePack
 import com.semo.keyboard.ime.OfflineSpeech
+import com.semo.keyboard.ime.VoskFailure
+import com.semo.keyboard.ime.VoskModelManager
+import com.semo.keyboard.ime.VoskState
 import com.semo.keyboard.ime.VoiceLanguages
 import com.semo.keyboard.ui.appString
 import com.semo.keyboard.ui.theme.SemoPalette
@@ -66,6 +70,8 @@ internal fun VoicePage(repo: SettingsRepository, settings: SemoSettings, onBack:
     val busy = remember { mutableStateMapOf<String, Boolean>() }
     val progress = remember { mutableStateMapOf<String, Int>() }
     var message by remember { mutableStateOf("") }
+    val builtin by VoskModelManager.state.collectAsState()
+    LaunchedEffect(Unit) { VoskModelManager.refresh(context) }
 
     val arabicName = appString(R.string.lang_arabic)
     val rows = remember(settings.voiceDialect, settings.enabledLanguages) {
@@ -123,6 +129,75 @@ internal fun VoicePage(repo: SettingsRepository, settings: SemoSettings, onBack:
                     CheckDot(selected, 22)
                 }
             }
+        }
+
+        Section(appString(R.string.voice_builtin_title)) {
+            Text(
+                appString(R.string.voice_builtin_hint),
+                color = SemoPalette.TextHint,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(14.dp)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconBadge(R.drawable.ic_ios_mic, if (builtin == VoskState.Ready) IconGreen else IconBlue)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(appString(R.string.lang_arabic), color = SemoPalette.TextPrimary, fontSize = 15.sp)
+                    val status = when (val st = builtin) {
+                        is VoskState.Downloading -> appString(R.string.voice_builtin_status_downloading) + " " + st.percent + "%"
+                        is VoskState.Extracting -> appString(R.string.voice_builtin_status_extracting) + " " + st.percent + "%"
+                        VoskState.Ready -> appString(R.string.voice_builtin_status_ready)
+                        else -> appString(R.string.voice_builtin_status_missing)
+                    }
+                    Text(status, color = SemoPalette.TextHint, fontSize = 12.sp)
+                }
+                when (builtin) {
+                    is VoskState.Downloading, is VoskState.Extracting -> SolidButton(
+                        text = appString(R.string.voice_builtin_cancel),
+                        enabled = true,
+                        modifier = Modifier.width(104.dp)
+                    ) { VoskModelManager.cancel() }
+                    VoskState.Ready -> SolidButton(
+                        text = appString(R.string.voice_builtin_delete),
+                        enabled = true,
+                        modifier = Modifier.width(104.dp)
+                    ) { VoskModelManager.delete(context) }
+                    else -> SolidButton(
+                        text = downloadLabel,
+                        enabled = true,
+                        modifier = Modifier.width(104.dp)
+                    ) { VoskModelManager.download(context) }
+                }
+            }
+            (builtin as? VoskState.Failed)?.let { failed ->
+                Text(
+                    appString(
+                        when (failed.reason) {
+                            VoskFailure.NETWORK -> R.string.voice_builtin_failed_network
+                            VoskFailure.SPACE -> R.string.voice_builtin_failed_space
+                            VoskFailure.CORRUPT -> R.string.voice_builtin_failed_corrupt
+                            VoskFailure.UNKNOWN -> R.string.voice_builtin_failed_unknown
+                        }
+                    ),
+                    color = SemoPalette.TextSecondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+            Divider()
+            SwitchRow(
+                appString(R.string.voice_builtin_pref_title),
+                R.drawable.ic_ios_mic,
+                IconOrange,
+                settings.voiceBuiltinFirst,
+                subtitle = appString(R.string.voice_builtin_pref_hint)
+            ) { scope.launch { repo.setVoiceBuiltinFirst(it) } }
         }
 
         Section(appString(R.string.voice_offline_title)) {

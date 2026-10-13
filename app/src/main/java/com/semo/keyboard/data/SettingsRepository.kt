@@ -195,6 +195,7 @@ class SettingsRepository(context: Context) {
         val TRANSLATE_TARGET = stringPreferencesKey("translate_target")
         val VOICE_DIALECT = stringPreferencesKey("voice_dialect")
         val VOICE_OFFLINE_FIRST = booleanPreferencesKey("voice_offline_first")
+        val VOICE_BUILTIN_FIRST = booleanPreferencesKey("voice_builtin_first")
         val TRANSLATE_RECENTS = stringPreferencesKey("translate_recents")
         val TOOLBAR_TRANSLATE_SEEN = booleanPreferencesKey("toolbar_translate_seen")
         val TOOLBAR_VOICE_SEEN = booleanPreferencesKey("toolbar_voice_seen")
@@ -249,6 +250,7 @@ class SettingsRepository(context: Context) {
                 translateTarget = p[Keys.TRANSLATE_TARGET] ?: TranslateLanguages.defaultTarget(),
                 voiceDialect = p[Keys.VOICE_DIALECT].toEnumOr(VoiceDialect.AUTO),
                 voiceOfflineFirst = p[Keys.VOICE_OFFLINE_FIRST] ?: false,
+                voiceBuiltinFirst = p[Keys.VOICE_BUILTIN_FIRST] ?: false,
                 translateRecents = p[Keys.TRANSLATE_RECENTS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
             )
         }
@@ -257,6 +259,7 @@ class SettingsRepository(context: Context) {
     suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[Keys.THEME_MODE] = mode.name } }
     suspend fun setVoiceDialect(v: VoiceDialect) { store.edit { it[Keys.VOICE_DIALECT] = v.name } }
     suspend fun setVoiceOfflineFirst(v: Boolean) { store.edit { it[Keys.VOICE_OFFLINE_FIRST] = v } }
+    suspend fun setVoiceBuiltinFirst(v: Boolean) { store.edit { it[Keys.VOICE_BUILTIN_FIRST] = v } }
     suspend fun setAppLanguage(language: AppLanguage) { store.edit { it[Keys.APP_LANGUAGE] = language.name } }
     suspend fun setAutoCacheClear(v: Boolean) { store.edit { it[Keys.AUTO_CACHE_CLEAR] = v } }
     suspend fun setKeyboardTheme(theme: KeyboardTheme) { store.edit { it[Keys.KEYBOARD_THEME] = theme.name } }

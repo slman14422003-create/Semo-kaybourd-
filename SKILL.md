@@ -58,5 +58,19 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Navigation-buttons mode: height and inset math in KeyboardScreen made non-throwing. Root cause of the reported crash not reproduced without a stack trace.
 - Not yet verified by a Gradle build.
 
+## Built-in Arabic voice engine, navigation mode detection, bigger Arabic autocorrect (v3.9.0, versionCode 31)
+- Problem: Google offline Arabic pack shows "not available on this device" (ar-SY) on some phones, and the system recognizer cannot be forced to install it.
+- Fix: ime/VoskModelManager.kt downloads the open-source Vosk Arabic model vosk-model-ar-mgb2-0.4 (Apache 2.0, about 333 MB zip) from https://alphacephei.com/vosk/models/ with resume, unpacks it to filesDir/vosk/ar (zip-slip guarded, .ready marker) and exposes StateFlow<VoskState>. The process-level scope keeps downloading when the settings screen closes.
+- ime/VoskVoice.kt records with AudioRecord (16 kHz mono, VOICE_RECOGNITION), feeds org.vosk.Recognizer, posts partial/final text and mic level through VoiceInput.Callback. Model is released 90 s after the last use (VoskModelManager.idle).
+- ime/VoiceInput.kt: for Arabic tags uses the built-in engine when the model is installed and (voice_builtin_first is on, or the system recognizer is unavailable, language unsupported, or network/offline failed). New setting voice_builtin_first (SemoSettings, KeyboardUiState, VoiceOptions.builtinFirst).
+- Settings page Voice typing has a new section "Built-in Arabic engine" (download, cancel, delete, prefer switch); strings voice_builtin_* in values and values-ar.
+- Dependency com.alphacephei:vosk-android:0.3.75 (pulls JNA). ProGuard keeps org.vosk and com.sun.jna.
+- Limits: standard Arabic works best, dialects less; big model needs RAM and about 1 GB free storage; no checksum is enforced (size check plus structure check am/final.mdl).
+- Navigation mode: util/NavigationMode.kt votes between Samsung navigation_bar_gesture_while_hidden, Settings.Secure navigation_mode and config_navBarInteractionMode; KeyboardScreen also treats tappable inset or an edge-to-edge nav inset of 40dp or more as button mode. In button mode the utility row (globe and hide button) is not drawn, the globe moves into the bottom letter row and the system back/hide arrow is the only hide control. Gesture mode is unchanged.
+- Arabic autocorrect: the Arabic table moved out of code into assets/dict/ar_fix.txt (about 1,680 tab-separated pairs: hamza on alef, wrong hamza before forms VII to X, ta marbuta, alef maqsura, hamza on waw and ya, fixed phrases, thanks to the generator kept outside the project). AutoCorrect.attach(context) loads it from the service onCreate. Prefix handling (و ب ل ك, وب ول وك, لل) only for stems of 4 or more letters so valid words such as واحد, واضح, فاخر stay untouched.
+- ArabicText.endingFix: dictionary-aware ه to ة (only when the ة form is more frequent than the stem) and ي to ى. SuggestionEngine.smartFix for Arabic is skipped until the dictionary has at least 3,000 words, to avoid false corrections with the tiny built-in list.
+- Deliberately not mapped (ambiguous): انه انها انك انني, اعداد, احياء, اشكال, اشعار, امسك, انهار, and words whose ه form is a common pronoun form (عمله, دوره, كسره...).
+- Not yet verified by a Gradle build; check CI output first if something fails.
+
 ## Ideas for next steps
 - Optional per-app or per-field source language override; swap button; translate selected text only.

@@ -185,6 +185,7 @@ object SuggestionEngine {
 
     /** رتبة الكلمة الشائعة التي نسمح للاستبدال التلقائي بالتصحيح إليها (الأشيع فقط، حذرًا من تغيير كلمات سليمة) */
     private const val COMMON_RANK = 15_000
+    private const val MIN_ARABIC_DICTIONARY = 3_000
 
     /** هل الكلمة معروفة: متعلَّمة، أو بالقاموس، أو بقائمة الكلمات الإنكليزية الصالحة */
     fun isKnown(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): Boolean {
@@ -274,7 +275,9 @@ object SuggestionEngine {
 
     private fun smartFixUncached(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
         if (language.script == Script.ARABIC) {
+            if (BigDictionary.size(language) < MIN_ARABIC_DICTIONARY) return null
             ArabicText.canonicalHamza(word, language)?.let { return it }
+            ArabicText.endingFix(word, language)?.let { return it }
             val clitic = ArabicText.clitic(word)
             if (clitic.isNotEmpty() && !isKnown(word, language, learnedKeys)) {
                 val stem = word.substring(clitic.length)

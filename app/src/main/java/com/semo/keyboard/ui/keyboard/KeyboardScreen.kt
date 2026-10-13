@@ -217,7 +217,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val density = LocalDensity.current
     val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).coerceAtLeast(0).toDp() } else 0.dp
     val tappableBottom = runCatching { WindowInsets.tappableElement.getBottom(density) }.getOrDefault(0)
-    val insetNavButtons = tappableBottom > 0
+    val insetNavButtons = tappableBottom > 0 || (edgeToEdgeIme && navInset >= 40.dp)
     LaunchedEffect(insetNavButtons) { viewModel.setNavInset(insetNavButtons) }
     val navButtons = state.navButtons
     // صف الأيقونات بنفس ارتفاع شريط التنقل بالضبط، وأيقونة الكرة تتوسّط ارتفاعه تمامًا، لأن النظام

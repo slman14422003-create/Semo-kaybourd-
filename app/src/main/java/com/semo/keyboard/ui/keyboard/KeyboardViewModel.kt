@@ -252,6 +252,7 @@ class KeyboardViewModel(
                 voice = t.voice,
                 voiceDialect = s.voiceDialect,
                 voiceOfflineFirst = s.voiceOfflineFirst,
+                voiceBuiltinFirst = s.voiceBuiltinFirst,
                 navButtons = t.navSetting || t.navInset,
                 translateTarget = s.translateTarget,
                 translateRecents = s.translateRecents
@@ -648,7 +649,7 @@ class KeyboardViewModel(
                 w.any { c -> c.isDigit() } || SuggestionEngine.isKnown(w.trim(), lang, keys)
             }.toDouble() / words.size
         }
-        return VoiceOptions(state.voiceOfflineFirst, bias, rank)
+        return VoiceOptions(state.voiceOfflineFirst, bias, rank, state.voiceBuiltinFirst)
     }
 
     fun openVoiceSettings() {
