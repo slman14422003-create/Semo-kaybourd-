@@ -75,6 +75,36 @@ class VoiceInput(
     private var levelAt = 0L
     private var vosk: VoskVoice? = null
     private var usingBuiltin = false
+    private val cues by lazy { VoiceCuePlayer(context) }
+    private val muter by lazy { SystemBeepMuter(context) }
+    private var beginTask: Runnable? = null
+
+    private fun playCue(cue: VoiceCue): Boolean = runCatching { cues.play(cue, options.cueVolume) }.getOrDefault(false)
+
+    private fun cancelBegin() {
+        beginTask?.let { main.removeCallbacks(it) }
+        beginTask = null
+    }
+
+    private fun beginWithCue(action: () -> Unit) {
+        running = true
+        if (!playCue(VoiceCue.START)) {
+            action()
+            return
+        }
+        val task = Runnable {
+            beginTask = null
+            if (running) action()
+        }
+        beginTask = task
+        main.postDelayed(task, START_DELAY_MS)
+    }
+
+    fun release() {
+        cancelBegin()
+        runCatching { cues.release() }
+        muter.restore()
+    }
 
     private val builtinCallback = object : Callback {
         override fun onStatus(status: VoiceStatus) {
@@ -138,21 +168,26 @@ class VoiceInput(
             return
         }
         if (builtinReady() && options.builtinFirst) {
-            startBuiltin()
+            callback.onStatus(VoiceStatus.STARTING)
+            beginWithCue { startBuiltin() }
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            if (tryBuiltin()) return
+            if (builtinReady()) {
+                callback.onStatus(VoiceStatus.STARTING)
+                beginWithCue { startBuiltin() }
+                return
+            }
             callback.onStatus(VoiceStatus.UNAVAILABLE)
             return
         }
-        running = true
         callback.onStatus(VoiceStatus.STARTING)
-        listen()
+        beginWithCue { listen() }
     }
 
     fun finish() {
         if (usingBuiltin) {
+            playCue(VoiceCue.END)
             vosk?.finish()
             return
         }
@@ -160,17 +195,27 @@ class VoiceInput(
             callback.onStatus(VoiceStatus.PAUSED)
             return
         }
+        playCue(VoiceCue.END)
+        cancelBegin()
         stopping = true
         main.removeCallbacks(restartTask)
         if (!inFlight) {
             finishStop()
             return
         }
+        muter.mute(MUTE_STOP_MS)
         runCatching { recognizer?.stopListening() }
         main.postDelayed(stopTask, 2500)
     }
 
+    fun cancelByUser() {
+        val wasActive = running || usingBuiltin
+        cancel()
+        if (wasActive) playCue(VoiceCue.CANCEL)
+    }
+
     fun cancel() {
+        cancelBegin()
         vosk?.cancel()
         usingBuiltin = false
         running = false
@@ -203,6 +248,7 @@ class VoiceInput(
         val r = recognizer
         recognizer = null
         inFlight = false
+        if (r != null) muter.mute(MUTE_END_MS)
         if (r != null) runCatching {
             r.setRecognitionListener(null)
             r.cancel()
@@ -231,6 +277,7 @@ class VoiceInput(
             return
         }
         inFlight = true
+        muter.mute(MUTE_START_MS)
         val started = runCatching { r.startListening(buildIntent()) }.isSuccess
         if (!started) {
             inFlight = false
@@ -285,6 +332,7 @@ class VoiceInput(
 
     private fun handleResults(results: Bundle?) {
         inFlight = false
+        muter.mute(MUTE_END_MS)
         val text = best(results)
         if (text != null) {
             silentRounds = 0
@@ -300,6 +348,7 @@ class VoiceInput(
 
     private fun handleError(error: Int) {
         inFlight = false
+        muter.mute(MUTE_END_MS)
         if (!running) return
         if (stopping) {
             finishStop()
@@ -368,7 +417,7 @@ class VoiceInput(
 
         override fun onBufferReceived(buffer: ByteArray?) = Unit
 
-        override fun onEndOfSpeech() = Unit
+        override fun onEndOfSpeech() = muter.mute(MUTE_END_MS)
 
         override fun onError(error: Int) = handleError(error)
 
@@ -383,6 +432,10 @@ class VoiceInput(
     }
 
     private companion object {
+        const val START_DELAY_MS = 170L
+        const val MUTE_START_MS = 1000L
+        const val MUTE_END_MS = 700L
+        const val MUTE_STOP_MS = 1100L
         const val MAX_SILENT_ROUNDS = 2
         const val RANK_WEIGHT = 0.6
         const val ERROR_NETWORK_TIMEOUT = 1

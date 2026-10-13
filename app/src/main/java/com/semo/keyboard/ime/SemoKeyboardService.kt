@@ -85,6 +85,13 @@ private const val FIELD_READ_MAX = 4500
 private const val START_READ_MS = 100L
 private const val DELETE_FEEDBACK_GAP_MS = 35L
 private const val POLL_IDLE_MS = 1200L
+private const val SHOT_WINDOW_S = 300L
+private val SHOT_POLL_DELAYS = longArrayOf(0L)
+private val SHOT_SHOW_DELAYS = longArrayOf(0L, 700L)
+private val SHOT_EVENT_DELAYS = longArrayOf(250L, 500L, 900L, 1600L, 2600L)
+private val CLIP_FORCE_DELAYS = longArrayOf(0L, 60L, 150L, 300L, 600L, 1200L)
+private val CLIP_POLL_DELAYS = longArrayOf(0L, 60L, 150L, 300L, 600L)
+private const val CLIP_MAX_FAILS = 3
 
 /**
  * خدمة لوحة المفاتيح. تستضيف واجهة Compose داخل نافذة الـ IME.
@@ -297,7 +304,7 @@ class SemoKeyboardService :
                 // فحص الحافظة خفيف (بصمة زمن فقط)، لكن فحص لقطات الشاشة يسأل MediaStore فعليًا
                 // (أثقل)؛ نشغّله كل دورتين بدل كل دورة لتخفيف الحمل على التخزين دون تأخير محسوس
                 pollTick++
-                if (pollTick % 4 == 0) captureScreenshot()
+                if (pollTick % 2 == 0) captureScreenshot(SHOT_POLL_DELAYS)
             }
             mainHandler.postDelayed(this, 2500)
         }
@@ -313,17 +320,30 @@ class SemoKeyboardService :
 
     private fun latestScreenshot(): Shot? {
         val media = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        val cutoff = System.currentTimeMillis() / 1000 - 180
+        val cutoff = System.currentTimeMillis() / 1000 - SHOT_WINDOW_S
+        val nameCol = android.provider.MediaStore.Images.Media.DISPLAY_NAME
         val like = if (Build.VERSION.SDK_INT >= 29)
-            "(${android.provider.MediaStore.Images.Media.DISPLAY_NAME} LIKE '%creenshot%' OR ${android.provider.MediaStore.Images.Media.RELATIVE_PATH} LIKE '%creenshot%')"
-        else "${android.provider.MediaStore.Images.Media.DATA} LIKE '%creenshot%'"
+            "($nameCol LIKE '%creenshot%' OR $nameCol LIKE 'Screen%' OR ${android.provider.MediaStore.Images.Media.RELATIVE_PATH} LIKE '%creenshot%')"
+        else "(${android.provider.MediaStore.Images.Media.DATA} LIKE '%creenshot%' OR $nameCol LIKE 'Screen%')"
         val sel = "${android.provider.MediaStore.Images.Media.DATE_ADDED} >= ? AND $like"
+        val extras = android.os.Bundle().apply {
+            putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, sel)
+            putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf(cutoff.toString()))
+            putStringArray(
+                android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS,
+                arrayOf(android.provider.MediaStore.Images.Media.DATE_ADDED, android.provider.MediaStore.Images.Media._ID)
+            )
+            putInt(
+                android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
+                android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+            )
+            putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, 1)
+        }
         contentResolver.query(
             media,
             arrayOf(android.provider.MediaStore.Images.Media._ID, android.provider.MediaStore.Images.Media.MIME_TYPE),
-            sel, arrayOf(cutoff.toString()),
-            // LIMIT 1: نريد فقط أحدث صورة، فلا داعي أن يفرز المزوّد ويرجع كل الصفوف المطابقة
-            "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC LIMIT 1"
+            extras,
+            null
         )?.use { c ->
             if (c.moveToFirst()) {
                 val id = c.getLong(0)
@@ -334,17 +354,31 @@ class SemoKeyboardService :
         return null
     }
 
-    /** لقطات الشاشة التي لا تُنسخ للحافظة تلقائيًا: نلتقط أحدث لقطة (آخر 3 دقائق) لو مُنح إذن الصور */
-    private fun captureScreenshot() {
-        if (passwordField || !viewModel.uiState.value.clipboardEnabled || !hasMediaPermission()) return
+    private val shotTask = Runnable { captureScreenshot(SHOT_EVENT_DELAYS) }
+
+    private val shotObserver = object : android.database.ContentObserver(mainHandler) {
+        override fun onChange(selfChange: Boolean) {
+            mainHandler.removeCallbacks(shotTask)
+            mainHandler.postDelayed(shotTask, 200)
+        }
+    }
+
+    private fun captureScreenshot(delaysMs: LongArray = SHOT_POLL_DELAYS) {
+        if (!::viewModel.isInitialized || passwordField || !viewModel.uiState.value.clipboardEnabled || !hasMediaPermission()) return
         if (shotJob?.isActive == true) return
         shotJob = serviceScope.launch {
-            val shot = withContext(Dispatchers.IO) { runCatching { latestScreenshot() }.getOrNull() } ?: return@launch
-            if (shot.id == lastShotId) return@launch
-            lastShotId = shot.id
-            val name = withContext(Dispatchers.IO) { runCatching { imageStore.saveFromUri(shot.uri, shot.mime) }.getOrNull() } ?: return@launch
-            val stored = clipboardRepository.add(clipImageKey(name, shot.mime)) ?: return@launch
-            viewModel.onClipboardCopied(stored)
+            for (wait in delaysMs) {
+                if (wait > 0L) delay(wait)
+                val shot = withContext(Dispatchers.IO) { runCatching { latestScreenshot() }.getOrNull() } ?: continue
+                if (shot.id == lastShotId) return@launch
+                val name = withContext(Dispatchers.IO) {
+                    runCatching { imageStore.saveFromUri(shot.uri, shot.mime) }.getOrNull()
+                } ?: continue
+                val stored = clipboardRepository.add(clipImageKey(name, shot.mime)) ?: continue
+                lastShotId = shot.id
+                viewModel.onClipboardCopied(stored)
+                return@launch
+            }
         }
     }
 
@@ -368,6 +402,9 @@ class SemoKeyboardService :
         )[KeyboardViewModel::class.java]
 
         (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.addPrimaryClipChangedListener(clipListener)
+        runCatching {
+            contentResolver.registerContentObserver(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, shotObserver)
+        }
 
         // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.AutoCorrect.attach(applicationContext) } }
@@ -417,47 +454,79 @@ class SemoKeyboardService :
      * يحفظ آخر شيء نُسخ بسجل الحافظة (إلا بحقول كلمات المرور أو لو علّم التطبيق النص كحساس).
      * القراءة والحفظ بخيط خلفي مع إعادة محاولة (الحافظة قد لا تكون جاهزة لحظة الإشعار)، والنص الطويل يُحفظ كاملًا بملف.
      */
+    private var clipFailKey: String? = null
+    private var clipFailCount = 0
+
+    private fun noteClipFailure(key: String): Boolean {
+        if (clipFailKey != key) {
+            clipFailKey = key
+            clipFailCount = 0
+        }
+        clipFailCount++
+        return clipFailCount >= CLIP_MAX_FAILS
+    }
+
     private fun captureClipboard(force: Boolean = false) {
         if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
         if (!force && clipJob?.isActive == true) return
         clipJob = serviceScope.launch {
-            // استطلاع دوري: نسأل عن بصمة زمن الحافظة فقط (خفيف) ولا نسحب النص الكامل عبر Binder كل مرة
             val ts = withContext(Dispatchers.IO) {
                 runCatching {
                     (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClipDescription?.timestamp
                 }.getOrNull() ?: 0L
             }
             if (!force && ts != 0L && ts == lastClipTs) return@launch
-            // نحاول القراءة فورًا أولًا (الحافظة جاهزة غالبًا لحظة الإشعار)، ونؤجّل الانتظار
-            // لمحاولات لاحقة فقط لو فشلت الأولى، بدل انتظار ثابت قبل كل قراءة
             var snap: ClipSnap? = null
-            val delays = if (force) longArrayOf(0L, 60L, 120L, 250L) else longArrayOf(0L, 60L, 150L, 300L)
+            val delays = if (force) CLIP_FORCE_DELAYS else CLIP_POLL_DELAYS
             for (attempt in delays.indices) {
                 if (delays[attempt] > 0L) delay(delays[attempt])
                 snap = withContext(Dispatchers.IO) { runCatching { readClip() }.getOrNull() }
                 if (snap != null && (snap.text != null || snap.imageMime != null)) break
             }
-            if (ts != 0L && snap != null) lastClipTs = ts
             val s = snap ?: return@launch
+            fun markHandled() {
+                if (ts != 0L) lastClipTs = ts
+            }
             if (s.imageMime != null && s.uri != null) {
                 val id = s.uri.toString()
-                if (!force && id == lastCapturedClip) return@launch
+                if (!force && id == lastCapturedClip) {
+                    markHandled()
+                    return@launch
+                }
+                val name = withContext(Dispatchers.IO) { runCatching { imageStore.saveFromUri(s.uri, s.imageMime) }.getOrNull() }
+                val stored = if (name != null) clipboardRepository.add(clipImageKey(name, s.imageMime)) else null
+                if (stored == null) {
+                    if (noteClipFailure(id)) markHandled()
+                    return@launch
+                }
                 lastCapturedClip = id
-                val name = withContext(Dispatchers.IO) { runCatching { imageStore.saveFromUri(s.uri, s.imageMime) }.getOrNull() } ?: return@launch
-                val stored = clipboardRepository.add(clipImageKey(name, s.imageMime)) ?: return@launch
+                markHandled()
                 viewModel.onClipboardCopied(stored)
                 return@launch
             }
-            val text = s.text ?: return@launch
+            val text = s.text
+            if (text == null || text.isBlank()) {
+                markHandled()
+                return@launch
+            }
             val key = withContext(Dispatchers.Default) { clipKey(text) }
-            if (!force && key == lastCapturedClip) return@launch
-            lastCapturedClip = key
+            if (!force && key == lastCapturedClip) {
+                markHandled()
+                return@launch
+            }
             var stored = clipboardRepository.add(text)
             if (stored == null) {
                 delay(300)
                 stored = clipboardRepository.add(text)
             }
-            if (stored != null) viewModel.onClipboardCopied(stored)
+            if (stored == null) {
+                if (noteClipFailure(key)) markHandled()
+                return@launch
+            }
+            clipFailKey = null
+            lastCapturedClip = key
+            markHandled()
+            viewModel.onClipboardCopied(stored)
         }
     }
 
@@ -690,6 +759,7 @@ class SemoKeyboardService :
         KeyboardStatusHelper.setImeVisible(this, true)
         if (::viewModel.isInitialized) viewModel.setNavSetting(detectNavButtons())
         captureClipboard()
+        captureScreenshot(SHOT_SHOW_DELAYS)
         mainHandler.removeCallbacks(pollTask)
         mainHandler.postDelayed(pollTask, 600)
         if (pendingVoice) mainHandler.postDelayed({ if (pendingVoice && isInputViewShown) startPendingVoice() }, 250)
@@ -726,7 +796,10 @@ class SemoKeyboardService :
         runCatching {
             (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipListener)
         }
+        runCatching { contentResolver.unregisterContentObserver(shotObserver) }
+        mainHandler.removeCallbacks(shotTask)
         voiceInput?.cancel()
+        voiceInput?.release()
         voiceInput = null
         VoskModelManager.release()
         serviceScope.cancel()
@@ -846,7 +919,7 @@ class SemoKeyboardService :
         }
 
         override fun voiceCancel() {
-            voiceInput?.cancel()
+            voiceInput?.cancelByUser()
             commitVoiceLeftover()
         }
 

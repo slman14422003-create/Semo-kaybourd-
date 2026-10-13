@@ -2,7 +2,12 @@ package com.semo.keyboard.ui.keyboard
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -91,10 +96,23 @@ internal fun TranslateBar(
     val accentBrush = Brush.linearGradient(
         listOf(colors.keyAccent, colors.keyAccent.copy(alpha = 0.72f))
     )
+    val enter = rememberBarEnter()
+    val glow by animateFloatAsState(
+        targetValue = if (ui.loading) 0.8f else if (hasResult) 0.4f else 0f,
+        animationSpec = scaledTween(scale, 280),
+        label = "translateGlow"
+    )
+    val pulse by rememberInfiniteTransition(label = "langPulse").animateFloat(
+        initialValue = 1f,
+        targetValue = if (ui.loading) 1.06f else 1f,
+        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+        label = "langPulseValue"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(stripHeight)
+            .barEntrance(enter)
             .padding(horizontal = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -111,8 +129,8 @@ internal fun TranslateBar(
                 modifier = Modifier
                     .padding(horizontal = 2.dp)
                     .graphicsLayer {
-                        scaleX = press
-                        scaleY = press
+                        scaleX = press * pulse
+                        scaleY = press * pulse
                     }
                     .height(pillHeight)
                     .clip(pillShape)
@@ -143,17 +161,14 @@ internal fun TranslateBar(
             }
         }
         Spacer(Modifier.width(4.dp))
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(pillHeight)
-                .clip(pillShape)
-                .background(colors.chip.copy(alpha = 0.92f))
-                .border(1.5.dp, border, pillShape)
-                .clickable {
-                    if (ui.error) viewModel.retryTranslate() else viewModel.applyTranslation()
-                },
-            contentAlignment = Alignment.CenterStart
+        BarCapsule(
+            colors = colors,
+            height = pillHeight,
+            borderColor = border,
+            glow = glow,
+            glowColor = if (ui.error) BarDanger else colors.keyAccent,
+            modifier = Modifier.weight(1f),
+            onClick = { if (ui.error) viewModel.retryTranslate() else viewModel.applyTranslation() }
         ) {
             if (ui.loading) Shimmer(colors.keyAccent, Modifier.fillMaxSize())
             Row(
@@ -237,17 +252,9 @@ internal fun TranslateBar(
             }
         }
         Spacer(Modifier.width(4.dp))
-        PressBox(modifier = Modifier.size(width = 44.dp, height = stripHeight), onClick = {
+        BarCloseButton(colors, stripHeight, pillHeight) {
             viewModel.onSelectionTick()
             viewModel.closeTranslate()
-        }) { pressed ->
-            Box(
-                modifier = Modifier
-                    .size(pillHeight - 8.dp)
-                    .clip(CircleShape)
-                    .background(if (pressed) colors.keyPressed else colors.keySpecial),
-                contentAlignment = Alignment.Center
-            ) { CloseGlyph(colors.text, 11.dp) }
         }
     }
 }

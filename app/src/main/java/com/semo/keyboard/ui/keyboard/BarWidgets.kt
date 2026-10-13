@@ -1,9 +1,26 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import com.semo.keyboard.ui.anim.LocalAnimScale
+import com.semo.keyboard.ui.anim.scaledSpring
+import com.semo.keyboard.ui.theme.SemoKeyboardColors
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -212,3 +229,93 @@ internal fun fadeEdges(): Brush = Brush.horizontalGradient(
     0.93f to Color.Black,
     1f to Color.Transparent
 )
+
+@Composable
+internal fun rememberBarEnter(): State<Float> {
+    val scale = LocalAnimScale.current
+    val enter = remember { Animatable(if (scale <= 0.001f) 1f else 0f) }
+    LaunchedEffect(scale) { enter.animateTo(1f, scaledSpring(scale, 0.82f, 420f)) }
+    return enter.asState()
+}
+
+internal fun Modifier.barEntrance(enter: State<Float>): Modifier = graphicsLayer {
+    val e = enter.value
+    alpha = e.coerceIn(0f, 1f)
+    translationY = (1f - e) * 8.dp.toPx()
+    val s = 0.96f + 0.04f * e
+    scaleX = s
+    scaleY = s
+}
+
+@Composable
+internal fun BarCapsule(
+    colors: SemoKeyboardColors,
+    height: Dp,
+    borderColor: Color,
+    glow: Float,
+    glowColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val shape = RoundedCornerShape(height / 2)
+    Box(
+        modifier = modifier
+            .height(height)
+            .drawBehind {
+                if (glow > 0.01f) {
+                    val grow = 3.dp.toPx() * glow
+                    drawRoundRect(
+                        color = glowColor.copy(alpha = 0.22f * glow),
+                        topLeft = Offset(-grow, -grow),
+                        size = Size(size.width + grow * 2f, size.height + grow * 2f),
+                        cornerRadius = CornerRadius(size.height / 2f + grow)
+                    )
+                }
+            }
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(colors.chip.copy(alpha = 0.97f), colors.chip.copy(alpha = 0.84f))
+                )
+            )
+            .border(1.5.dp, borderColor, shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.CenterStart,
+        content = content
+    )
+}
+
+@Composable
+internal fun BarCloseButton(
+    colors: SemoKeyboardColors,
+    stripHeight: Dp,
+    pillHeight: Dp,
+    onClick: () -> Unit
+) {
+    val scale = LocalAnimScale.current
+    PressBox(modifier = Modifier.size(width = 44.dp, height = stripHeight), onClick = onClick) { pressed ->
+        val press by animateFloatAsState(
+            targetValue = if (pressed) 0.84f else 1f,
+            animationSpec = scaledSpring(scale, 0.55f, 600f),
+            label = "closePress"
+        )
+        val spin by animateFloatAsState(
+            targetValue = if (pressed) 90f else 0f,
+            animationSpec = scaledSpring(scale, 0.7f, 380f),
+            label = "closeSpin"
+        )
+        Box(
+            modifier = Modifier
+                .size(pillHeight - 8.dp)
+                .graphicsLayer {
+                    scaleX = press
+                    scaleY = press
+                    rotationZ = spin
+                }
+                .clip(CircleShape)
+                .background(if (pressed) colors.keyPressed else colors.keySpecial),
+            contentAlignment = Alignment.Center
+        ) { CloseGlyph(colors.text, 11.dp) }
+    }
+}

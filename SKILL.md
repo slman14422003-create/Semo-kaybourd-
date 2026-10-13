@@ -72,5 +72,12 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Deliberately not mapped (ambiguous): انه انها انك انني, اعداد, احياء, اشكال, اشعار, امسك, انهار, and words whose ه form is a common pronoun form (عمله, دوره, كسره...).
 - Not yet verified by a Gradle build; check CI output first if something fails.
 
+## Clipboard fixes, voice cues, bar and toolbar design (v3.9.2, versionCode 33)
+- Screenshots: MediaStore query uses a Bundle with QUERY_ARG_LIMIT (LIMIT inside sortOrder is rejected on Android 11+ and was swallowed by runCatching). ContentObserver on MediaStore.Images in SemoKeyboardService triggers captureScreenshot with retries; lastShotId is set only after a successful save.
+- Clipboard capture: lastCapturedClip and lastClipTs are set only after ClipboardRepository.add succeeds; failure counter CLIP_MAX_FAILS; longer read retries. MAX_TEXT_LENGTH is 1,000,000. Long-text cards show a length badge.
+- Voice cues: res/raw/voice_start, voice_end, voice_cancel; ime/VoiceCues.kt (VoiceCuePlayer, SystemBeepMuter). VoiceInput.beginWithCue delays recognition 170ms; cancelByUser plays the cancel cue; VoiceOptions.cueVolume comes from the key sound setting. SystemBeepMuter mutes only STREAM_MUSIC in short windows.
+- UI: BarWidgets.kt has rememberBarEnter, barEntrance, BarCapsule, BarCloseButton shared by TranslateBar and VoiceBar. KeyboardScreen.StripIconButton takes tint and active; toolTint(item) holds the per-tool colors.
+- Not yet verified by a Gradle build.
+
 ## Ideas for next steps
 - Optional per-app or per-field source language override; swap button; translate selected text only.

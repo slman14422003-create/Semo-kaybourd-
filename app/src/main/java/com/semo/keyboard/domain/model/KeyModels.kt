@@ -403,5 +403,6 @@ class VoiceOptions(
     val offlineFirst: Boolean = false,
     val bias: List<String> = emptyList(),
     val rank: ((String) -> Double)? = null,
-    val builtinFirst: Boolean = false
+    val builtinFirst: Boolean = false,
+    val cueVolume: Float = 0f
 )

@@ -98,11 +98,18 @@ internal fun VoiceBar(
         animationSpec = tween(90),
         label = "micScale"
     )
+    val enter = rememberBarEnter()
+    val glow by animateFloatAsState(
+        targetValue = if (listening) 0.3f + level.value * 0.7f else if (failed) 0.5f else 0f,
+        animationSpec = tween(140),
+        label = "voiceGlow"
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(stripHeight)
+            .barEntrance(enter)
             .padding(horizontal = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -125,7 +132,10 @@ internal fun VoiceBar(
                             scaleY = press * micScale
                         }
                         .clip(CircleShape)
-                        .background(micColor, CircleShape),
+                        .background(
+                            Brush.linearGradient(listOf(micColor, micColor.copy(alpha = 0.76f))),
+                            CircleShape
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -139,18 +149,19 @@ internal fun VoiceBar(
                 }
             }
         }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(pillHeight)
-                .clip(pillShape)
-                .background(colors.chip.copy(alpha = 0.92f))
-                .border(1.5.dp, border, pillShape)
-                .clickable(enabled = failed || ui.status == VoiceStatus.PAUSED) {
+        BarCapsule(
+            colors = colors,
+            height = pillHeight,
+            borderColor = border,
+            glow = glow,
+            glowColor = if (failed) BarDanger else colors.keyAccent,
+            modifier = Modifier.weight(1f),
+            onClick = if (failed || ui.status == VoiceStatus.PAUSED) {
+                {
                     if (ui.status == VoiceStatus.NETWORK || ui.status == VoiceStatus.UNAVAILABLE) viewModel.openVoiceSettings()
                     else viewModel.toggleVoice()
-                },
-            contentAlignment = Alignment.CenterStart
+                }
+            } else null
         ) {
             Row(
                 modifier = Modifier
@@ -218,17 +229,9 @@ internal fun VoiceBar(
             }
         }
         Spacer(Modifier.width(4.dp))
-        PressBox(modifier = Modifier.size(width = 44.dp, height = stripHeight), onClick = {
+        BarCloseButton(colors, stripHeight, pillHeight) {
             viewModel.onSelectionTick()
             viewModel.closeVoice()
-        }) { pressed ->
-            Box(
-                modifier = Modifier
-                    .size(pillHeight - 8.dp)
-                    .clip(CircleShape)
-                    .background(if (pressed) colors.keyPressed else colors.keySpecial),
-                contentAlignment = Alignment.Center
-            ) { CloseGlyph(colors.text, 11.dp) }
         }
     }
 }

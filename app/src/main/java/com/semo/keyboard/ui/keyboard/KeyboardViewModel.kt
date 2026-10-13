@@ -649,7 +649,13 @@ class KeyboardViewModel(
                 w.any { c -> c.isDigit() } || SuggestionEngine.isKnown(w.trim(), lang, keys)
             }.toDouble() / words.size
         }
-        return VoiceOptions(state.voiceOfflineFirst, bias, rank, state.voiceBuiltinFirst)
+        return VoiceOptions(
+            state.voiceOfflineFirst,
+            bias,
+            rank,
+            state.voiceBuiltinFirst,
+            if (state.soundEnabled) state.soundVolume.coerceAtLeast(0.4f) else 0f
+        )
     }
 
     fun openVoiceSettings() {

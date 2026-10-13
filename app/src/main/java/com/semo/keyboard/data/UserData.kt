@@ -206,7 +206,7 @@ class ClipboardRepository(context: Context) {
         /** أطول من هذا يُحفظ بملف مستقل (الأكواد الطويلة والمقالات) */
         const val INLINE_MAX = 1500
         /** أقصى طول نص يُحفظ (200 ألف حرف)؛ الأطول يُتجاهل بدل أن يُلصق مقطوعًا */
-        const val MAX_TEXT_LENGTH = 500_000
+        const val MAX_TEXT_LENGTH = 1_000_000
         const val PREVIEW_LENGTH = 400
         const val MAX_UNPINNED = 40
         const val MAX_UNPINNED_LONG = 15

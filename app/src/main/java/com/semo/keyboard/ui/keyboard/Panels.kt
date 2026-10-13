@@ -964,6 +964,19 @@ private fun ClipCard(
                 )
             }
         }
+        if (item.text.isClipLong()) {
+            val n = remember(item.text) { item.text.clipLongLength() }
+            Text(
+                text = if (n >= 1000) "${n / 1000}K" else "$n",
+                color = colors.textMuted,
+                fontSize = 10.sp,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 8.dp, bottom = 6.dp)
+                    .background(colors.chip, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
+            )
+        }
         if (kind == ClipKind.IMAGE) {
             PressBox(
                 modifier = Modifier
