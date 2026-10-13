@@ -215,8 +215,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // حيث تقع هذه الأيقونات بمستوى مؤشر الرجوع للرئيسية)، فتتنسّق مع شريط One UI السفلي.
     val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
     val density = LocalDensity.current
-    val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).toDp() } else 0.dp
-    val tappableBottom = WindowInsets.tappableElement.getBottom(density)
+    val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).coerceAtLeast(0).toDp() } else 0.dp
+    val tappableBottom = runCatching { WindowInsets.tappableElement.getBottom(density) }.getOrDefault(0)
     val insetNavButtons = tappableBottom > 0
     LaunchedEffect(insetNavButtons) { viewModel.setNavInset(insetNavButtons) }
     val navButtons = state.navButtons
@@ -230,7 +230,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // رفع الدائرتين عن أسفل الشاشة: نزيد ارتفاع الصف الأخير بمقدار الرفع ونرفع مركزيهما معه
     val raise = state.bottomRaiseDp.dp
     val utilRowHeight = if (navButtons) 0.dp else utilHeight + raise
-    val globeCenter = (navCenter + raise + state.globeOffsetDp.dp).coerceIn(14.dp, utilRowHeight - 14.dp)
+    val globeMax = (utilRowHeight - 14.dp).coerceAtLeast(14.dp)
+    val globeCenter = (navCenter + raise + state.globeOffsetDp.dp).coerceAtLeast(14.dp).coerceAtMost(globeMax)
     // صفحات الإيموجي/الحافظة/التحرير: شريطها السفلي كان يقع تحت زر إخفاء الكيبورد (يتداخل مع لمس النظام)،
     // فنحجز منطقة شريط التنقل أسفل الصفحة ونقصّر المحتوى بنفس المقدار
     val bottomReserve = if (edgeToEdgeIme && !navButtons) utilHeight else 0.dp

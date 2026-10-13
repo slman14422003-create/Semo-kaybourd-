@@ -33,8 +33,9 @@ interface InputBridge {
     fun performEdit(action: EditAction)
     /** الانتقال للإدخال الصوتي بالنظام (لوحة صوتية مفعّلة بالجهاز) */
     fun startVoiceInput()
-    fun voiceStart(languageTag: String)
+    fun voiceStart(languageTag: String, options: com.semo.keyboard.domain.model.VoiceOptions)
     fun voiceFinish()
     fun voiceCancel()
     fun openSettings()
+    fun openVoiceSettings()
 }

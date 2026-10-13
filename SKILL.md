@@ -49,5 +49,14 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Keyboard page transitions use one timing family (fade 240ms, slide 360ms IosPush, exit fade 100ms); emoji font-support list is prewarmed on a background thread at service start to avoid a hitch on first open.
 - Not yet verified by a Gradle build.
 
+## Voice typing: dialects, offline packs, better capture (v3.8.0, versionCode 30)
+- VoiceDialect enum (KeyModels.kt) with Arabic region tags; settings keys voice_dialect and voice_offline_first. VoiceLanguages.tagFor takes the dialect (AUTO follows device region).
+- VoiceOptions (offlineFirst, bias words, rank function) is passed through InputBridge.voiceStart. The view model builds bias strings from learned words and a rank function from SuggestionEngine.isKnown.
+- VoiceInput: asks for 8 alternatives, re-ranks them by recognizer confidence plus dictionary match, sends EXTRA_BIASING_STRINGS, can use the on-device recognizer first and falls back to online (and the reverse on network errors).
+- ime/OfflineSpeech.kt: checkRecognitionSupport and triggerModelDownload (API 33+, progress listener on API 34+), system settings fallback for older devices.
+- Settings page SettingsPage.VOICE (ui/settings/VoiceSettings.kt): dialect list, prefer-offline switch, per-language pack status and download. The voice bar opens it on NETWORK or UNAVAILABLE via InputBridge.openVoiceSettings and SettingsDeepLink.
+- Navigation-buttons mode: height and inset math in KeyboardScreen made non-throwing. Root cause of the reported crash not reproduced without a stack trace.
+- Not yet verified by a Gradle build.
+
 ## Ideas for next steps
 - Optional per-app or per-field source language override; swap button; translate selected text only.

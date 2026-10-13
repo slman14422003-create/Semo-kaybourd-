@@ -14,6 +14,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
 import com.semo.keyboard.domain.model.KeyboardLanguage
+import com.semo.keyboard.domain.model.VoiceDialect
+import com.semo.keyboard.domain.model.VoiceOptions
 import com.semo.keyboard.domain.model.VoiceStatus
 import java.util.Locale
 
@@ -28,9 +30,14 @@ object VoiceLanguages {
         "id" to "id-ID", "nl" to "nl-NL", "pl" to "pl-PL", "uk" to "uk-UA"
     )
 
-    fun tagFor(language: KeyboardLanguage, device: Locale = Locale.getDefault()): String {
+    fun tagFor(
+        language: KeyboardLanguage,
+        device: Locale = Locale.getDefault(),
+        dialect: VoiceDialect = VoiceDialect.AUTO
+    ): String {
         val code = language.code
         if (code == "ar") {
+            dialect.tag?.let { return it }
             val country = device.country.uppercase(Locale.ROOT)
             return if (country in arabCountries) "ar-$country" else "ar-SA"
         }
@@ -59,6 +66,9 @@ class VoiceInput(
     private var silentRounds = 0
     private var busyRetries = 0
     private var preferOffline = false
+    private var forceOnline = false
+    private var usingOnDevice = false
+    private var options = VoiceOptions()
     private var triedOffline = false
     private var triedBaseTag = false
     private var level = 0f
@@ -72,12 +82,14 @@ class VoiceInput(
     fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    fun start(languageTag: String) {
+    fun start(languageTag: String, voiceOptions: VoiceOptions = VoiceOptions()) {
         cancel()
         tag = languageTag
+        options = voiceOptions
         silentRounds = 0
         busyRetries = 0
         preferOffline = false
+        forceOnline = false
         triedOffline = false
         triedBaseTag = false
         if (!hasPermission()) {
@@ -146,12 +158,14 @@ class VoiceInput(
     }
 
     private fun create(): SpeechRecognizer? {
+        val wantOnDevice = (preferOffline || (options.offlineFirst && !forceOnline)) &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrDefault(false)
         val r = runCatching {
-            if (preferOffline && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-            ) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+            if (wantOnDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
             else SpeechRecognizer.createSpeechRecognizer(context)
         }.getOrNull() ?: return null
+        usingOnDevice = wantOnDevice
         r.setRecognitionListener(listener)
         return r
     }
@@ -177,30 +191,38 @@ class VoiceInput(
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, tag)
         putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 8)
         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)
         putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2200L)
         putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1800L)
         putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 1200L)
         putExtra("android.speech.extra.ENABLE_FORMATTING", "quality")
         putExtra("android.speech.extra.MASK_OFFENSIVE_WORDS", false)
+        if (options.bias.isNotEmpty()) {
+            putStringArrayListExtra("android.speech.extra.BIASING_STRINGS", ArrayList(options.bias))
+        }
     }
 
     private fun best(bundle: Bundle?): String? {
         val list = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: return null
         if (list.isEmpty()) return null
-        val scores = bundle.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
-        var index = 0
-        if (scores != null && scores.size == list.size) {
-            var top = -1f
-            for (i in list.indices) {
-                if (list[i].isNotBlank() && scores[i] > top) {
-                    top = scores[i]
-                    index = i
-                }
+        val raw = bundle.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
+        val scores = raw?.takeIf { it.size == list.size && it.any { v -> v > 0f } }
+        val rank = options.rank
+        var index = -1
+        var top = Double.NEGATIVE_INFINITY
+        for (i in list.indices) {
+            val text = list[i].trim()
+            if (text.isEmpty()) continue
+            val confidence = scores?.get(i)?.toDouble() ?: (1.0 / (1.0 + i * 0.35))
+            val known = if (rank != null) runCatching { rank(text) }.getOrDefault(0.0) else 0.0
+            val value = confidence + known * RANK_WEIGHT
+            if (value > top) {
+                top = value
+                index = i
             }
         }
-        return list[index].trim().takeIf { it.isNotEmpty() }
+        return if (index >= 0) list[index].trim() else null
     }
 
     private fun scheduleRestart(delayMs: Long = 150L) {
@@ -243,7 +265,12 @@ class VoiceInput(
             }
             ERROR_INSUFFICIENT_PERMISSIONS -> fail(VoiceStatus.NO_PERMISSION)
             ERROR_LANGUAGE_NOT_SUPPORTED, ERROR_LANGUAGE_UNAVAILABLE -> {
-                if (!triedBaseTag && tag.contains('-')) {
+                if (usingOnDevice && !forceOnline) {
+                    forceOnline = true
+                    preferOffline = false
+                    destroyRecognizer()
+                    scheduleRestart(100L)
+                } else if (!triedBaseTag && tag.contains('-')) {
                     triedBaseTag = true
                     tag = tag.substringBefore('-')
                     preferOffline = false
@@ -260,6 +287,7 @@ class VoiceInput(
     private fun retryOfflineOr(status: VoiceStatus) {
         if (!triedOffline) {
             triedOffline = true
+            forceOnline = false
             preferOffline = true
             destroyRecognizer()
             scheduleRestart(100L)
@@ -303,6 +331,7 @@ class VoiceInput(
 
     private companion object {
         const val MAX_SILENT_ROUNDS = 2
+        const val RANK_WEIGHT = 0.6
         const val ERROR_NETWORK_TIMEOUT = 1
         const val ERROR_NETWORK = 2
         const val ERROR_SERVER = 4

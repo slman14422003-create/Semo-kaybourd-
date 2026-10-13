@@ -38,6 +38,7 @@ import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ShiftState
 import com.semo.keyboard.domain.model.TextShortcut
 import com.semo.keyboard.domain.model.TranslateUi
+import com.semo.keyboard.domain.model.VoiceOptions
 import com.semo.keyboard.domain.model.VoiceStatus
 import com.semo.keyboard.domain.model.VoiceUi
 import com.semo.keyboard.ime.VoiceLanguages
@@ -249,6 +250,8 @@ class KeyboardViewModel(
                 clipEdit = t.clipEdit,
                 translate = t.translate,
                 voice = t.voice,
+                voiceDialect = s.voiceDialect,
+                voiceOfflineFirst = s.voiceOfflineFirst,
                 navButtons = t.navSetting || t.navInset,
                 translateTarget = s.translateTarget,
                 translateRecents = s.translateRecents
@@ -624,6 +627,35 @@ class KeyboardViewModel(
         if (transient.value.navInset != v) transient.update { it.copy(navInset = v) }
     }
 
+    private fun voiceTag(): String {
+        val state = uiState.value
+        return VoiceLanguages.tagFor(state.language, dialect = state.voiceDialect)
+    }
+
+    private fun voiceOptions(): VoiceOptions {
+        val state = uiState.value
+        val lang = state.language
+        val keys = learnedKeys.value
+        val bias = learnedWords.value.asReversed()
+            .asSequence()
+            .filter { it.length > 1 && SuggestionEngine.languageOf(it, lang) == lang }
+            .take(VOICE_BIAS_MAX)
+            .toList()
+        val rank: (String) -> Double = { text ->
+            val words = text.split(' ', '\n').filter { it.isNotBlank() }
+            if (words.isEmpty()) 0.0
+            else words.count { w ->
+                w.any { c -> c.isDigit() } || SuggestionEngine.isKnown(w.trim(), lang, keys)
+            }.toDouble() / words.size
+        }
+        return VoiceOptions(state.voiceOfflineFirst, bias, rank)
+    }
+
+    fun openVoiceSettings() {
+        closeVoice()
+        bridge.openVoiceSettings()
+    }
+
     fun openVoice() {
         transient.update {
             it.copy(
@@ -636,7 +668,7 @@ class KeyboardViewModel(
             )
         }
         translateJob?.cancel()
-        bridge.voiceStart(VoiceLanguages.tagFor(uiState.value.language))
+        bridge.voiceStart(voiceTag(), voiceOptions())
     }
 
     fun closeVoice() {
@@ -652,7 +684,7 @@ class KeyboardViewModel(
             VoiceStatus.LISTENING, VoiceStatus.STARTING -> bridge.voiceFinish()
             else -> {
                 transient.update { st -> st.voice?.let { st.copy(voice = it.copy(status = VoiceStatus.STARTING, text = "")) } ?: st }
-                bridge.voiceStart(VoiceLanguages.tagFor(uiState.value.language))
+                bridge.voiceStart(voiceTag(), voiceOptions())
             }
         }
     }
@@ -1132,6 +1164,7 @@ class KeyboardViewModel(
         const val SUGGEST_READ_MS = 400L
         const val FRESH_CLIP_MS = 180_000L
         const val CLIP_EDIT_MAX = 200_000
+        const val VOICE_BIAS_MAX = 120
         const val DOUBLE_TAP_MS = 350L
     }
 }

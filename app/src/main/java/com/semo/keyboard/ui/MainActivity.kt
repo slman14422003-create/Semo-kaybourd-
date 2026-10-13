@@ -117,6 +117,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
         )
         super.onCreate(savedInstanceState)
+        com.semo.keyboard.ui.settings.SettingsDeepLink.page.value = intent?.getStringExtra(EXTRA_PAGE)
         settingsRepository = SettingsRepository(applicationContext)
         clipboardRepository = ClipboardRepository(applicationContext)
         learnedWordsRepository = LearnedWordsRepository(applicationContext)
@@ -130,6 +131,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        com.semo.keyboard.ui.settings.SettingsDeepLink.page.value = intent.getStringExtra(EXTRA_PAGE)
+    }
+
+    companion object {
+        const val EXTRA_PAGE = "settings_page"
+        const val PAGE_VOICE = "voice"
     }
 }
 

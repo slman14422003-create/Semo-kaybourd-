@@ -99,7 +99,10 @@ internal fun VoiceBar(
                 .weight(1f)
                 .height(34.dp)
                 .background(colors.chip, RoundedCornerShape(17.dp))
-                .clickable(enabled = failed || ui.status == VoiceStatus.PAUSED) { viewModel.toggleVoice() }
+                .clickable(enabled = failed || ui.status == VoiceStatus.PAUSED) {
+                    if (ui.status == VoiceStatus.NETWORK || ui.status == VoiceStatus.UNAVAILABLE) viewModel.openVoiceSettings()
+                    else viewModel.toggleVoice()
+                }
                 .padding(horizontal = 14.dp),
             contentAlignment = Alignment.CenterStart
         ) {

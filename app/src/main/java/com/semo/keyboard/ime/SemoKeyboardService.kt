@@ -534,7 +534,7 @@ class SemoKeyboardService :
         voicePrefixValue = null
     }
 
-    private fun startVoice(languageTag: String) {
+    private fun startVoice(languageTag: String, options: com.semo.keyboard.domain.model.VoiceOptions) {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             if (::viewModel.isInitialized) viewModel.onVoiceStatus(com.semo.keyboard.domain.model.VoiceStatus.NO_PERMISSION)
             VoiceBus.onPermission = { granted ->
@@ -549,7 +549,7 @@ class SemoKeyboardService :
             return
         }
         val engine = voiceInput ?: VoiceInput(applicationContext, voiceCallback).also { voiceInput = it }
-        engine.start(languageTag)
+        engine.start(languageTag, options)
     }
 
     private fun startPendingVoice() {
@@ -838,7 +838,8 @@ class SemoKeyboardService :
             this@SemoKeyboardService.switchToVoiceInput()
         }
 
-        override fun voiceStart(languageTag: String) = this@SemoKeyboardService.startVoice(languageTag)
+        override fun voiceStart(languageTag: String, options: com.semo.keyboard.domain.model.VoiceOptions) =
+            this@SemoKeyboardService.startVoice(languageTag, options)
 
         override fun voiceFinish() {
             voiceInput?.finish()
@@ -872,6 +873,17 @@ class SemoKeyboardService :
         override fun openSettings() {
             runCatching {
                 startActivity(Intent(this@SemoKeyboardService, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                requestHideSelf(0)
+            }
+        }
+
+        override fun openVoiceSettings() {
+            runCatching {
+                startActivity(
+                    Intent(this@SemoKeyboardService, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_PAGE, MainActivity.PAGE_VOICE)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                )
                 requestHideSelf(0)
             }
         }

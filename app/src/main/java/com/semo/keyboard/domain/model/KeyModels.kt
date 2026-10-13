@@ -279,6 +279,8 @@ data class SemoSettings(
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translateTarget: String = "en",
     val translateRecents: List<String> = emptyList(),
+    val voiceDialect: VoiceDialect = VoiceDialect.AUTO,
+    val voiceOfflineFirst: Boolean = false,
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCacheClear: Boolean = true
@@ -351,6 +353,8 @@ data class KeyboardUiState(
     val navButtons: Boolean = false,
     val translateTarget: String = "en",
     val translateRecents: List<String> = emptyList(),
+    val voiceDialect: VoiceDialect = VoiceDialect.AUTO,
+    val voiceOfflineFirst: Boolean = false,
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCacheClear: Boolean = true
@@ -371,4 +375,30 @@ enum class VoiceStatus { STARTING, LISTENING, PAUSED, NO_PERMISSION, UNAVAILABLE
 data class VoiceUi(
     val status: VoiceStatus = VoiceStatus.STARTING,
     val text: String = ""
+)
+
+enum class VoiceDialect(val tag: String?) {
+    AUTO(null),
+    SYRIA("ar-SY"),
+    LEBANON("ar-LB"),
+    JORDAN("ar-JO"),
+    PALESTINE("ar-PS"),
+    IRAQ("ar-IQ"),
+    EGYPT("ar-EG"),
+    SAUDI("ar-SA"),
+    UAE("ar-AE"),
+    KUWAIT("ar-KW"),
+    QATAR("ar-QA"),
+    YEMEN("ar-YE"),
+    SUDAN("ar-SD"),
+    LIBYA("ar-LY"),
+    TUNISIA("ar-TN"),
+    ALGERIA("ar-DZ"),
+    MOROCCO("ar-MA")
+}
+
+class VoiceOptions(
+    val offlineFirst: Boolean = false,
+    val bias: List<String> = emptyList(),
+    val rank: ((String) -> Double)? = null
 )
