@@ -93,4 +93,13 @@
     <string name="voice_builtin_pref_title">Use built-in Arabic first</string>
     <string name="voice_builtin_pref_hint">Skips the system recognizer for Arabic. When off, the built-in engine still takes over whenever the system one is unavailable.</string>
     <string name="voice_builtin_always_on">Always on automatically: once the built-in engine is downloaded, Arabic never reaches the system or Google recognizer.</string>
+    <string name="suggest_removed">Removed \u201C%1$s\u201D from suggestions</string>
+    <string name="suggest_undo">Undo</string>
+    <string name="suggest_remove_action">Remove word from suggestions</string>
+    <string name="suggest_clip_image">Image</string>
+    <string name="blocked_title">Removed suggestions</string>
+    <string name="blocked_hint">Words you remove with a long press on the suggestion bar never show up in suggestions and are never learned again. Tap Restore to bring a word back.</string>
+    <string name="blocked_empty">No removed words</string>
+    <string name="blocked_restore">Restore</string>
+    <string name="blocked_restore_all">Restore all removed words</string>
 </resources>

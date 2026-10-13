@@ -145,6 +145,7 @@ class KeyboardViewModel(
         val recentEmojis: List<String> = emptyList(),
         /** الكلمة الجارية كما كُتبت (تظهر بين علامتي اقتباس) */
         val literal: String = "",
+        val removedWord: String? = null,
         val mathResult: MathResult? = null,
         /** آخر كلمة كُتبت بالسحب وبدائلها، لاستبدالها باختيار بديل من الشريط */
         val swipeWord: String? = null,
@@ -186,6 +187,74 @@ class KeyboardViewModel(
     /** الكلمات التي رفض المستخدم تصحيحها التلقائي سابقًا (رجع عنها فورًا بالحذف)؛ لا تُصحَّح ثانيةً */
     private val ignoredCorrections: StateFlow<Set<String>> =
         learnedWordsRepository.ignoredCorrections.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    private val blockedKeys: StateFlow<Set<String>> =
+        learnedWordsRepository.blocked
+            .map { list ->
+                val keys: Set<String> = list.mapTo(HashSet<String>()) { BigDictionary.key(it) }
+                keys
+            }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    @Volatile
+    private var optimisticBlocked: Set<String> = emptySet()
+
+    private var removedSnapshot: LearnedWordsRepository.BlockSnapshot? = null
+    private var removedJob: Job? = null
+
+    private fun allowed(text: String): Boolean {
+        val blocked = blockedKeys.value
+        val optimistic = optimisticBlocked
+        if (blocked.isEmpty() && optimistic.isEmpty()) return true
+        val k = BigDictionary.key(text.trim())
+        if (k in blocked || k in optimistic) return false
+        return k.split(' ').none { it.isNotEmpty() && (it in blocked || it in optimistic) }
+    }
+
+    fun removeSuggestion(raw: String) {
+        val word = raw.trim().trim('\u201C', '\u201D', '"').trim()
+        if (word.isEmpty() || word.none { it.isLetter() }) return
+        val state = uiState.value
+        if (state.hapticEnabled) bridge.keyFeedback(false, true, KeyFeedback.LONG_PRESS)
+        val key = BigDictionary.key(word)
+        optimisticBlocked = optimisticBlocked + key
+        pendingWords.removeAll { BigDictionary.key(it) == key }
+        refreshSuggestions()
+        viewModelScope.launch(Dispatchers.Default) {
+            val snapshot = learnedWordsRepository.blockWord(word)
+            if (snapshot == null) {
+                optimisticBlocked = optimisticBlocked - key
+                return@launch
+            }
+            removedSnapshot = snapshot
+            transient.update { it.copy(removedWord = word) }
+            removedJob?.cancel()
+            removedJob = viewModelScope.launch {
+                delay(REMOVED_NOTICE_MS)
+                dismissRemoved()
+            }
+        }
+    }
+
+    fun undoRemoveSuggestion() {
+        val snapshot = removedSnapshot ?: return
+        removedJob?.cancel()
+        removedSnapshot = null
+        val key = BigDictionary.key(snapshot.word)
+        transient.update { it.copy(removedWord = null) }
+        viewModelScope.launch(Dispatchers.Default) {
+            learnedWordsRepository.restore(snapshot)
+            optimisticBlocked = optimisticBlocked - key
+            refreshSuggestions()
+        }
+    }
+
+    private fun dismissRemoved() {
+        removedJob?.cancel()
+        removedSnapshot = null
+        if (transient.value.removedWord != null) transient.update { it.copy(removedWord = null) }
+    }
 
     private val shortcuts: StateFlow<List<TextShortcut>> =
         shortcutsRepository.shortcuts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -231,6 +300,7 @@ class KeyboardViewModel(
                 bottomRaiseDp = s.bottomRaiseDp,
                 suggestions = t.suggestions,
                 literal = t.literal,
+                removedWord = t.removedWord,
                 mathResult = t.mathResult,
                 toolbarOpen = t.toolbarOpen,
                 clipItems = clips,
@@ -339,6 +409,7 @@ class KeyboardViewModel(
 
     private fun handleKey(action: KeyAction, feedback: Boolean) {
         val state = uiState.value
+        if (transient.value.removedWord != null) dismissRemoved()
         if (feedback) {
             bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, feedbackKind(action), state.soundVolume)
         }
@@ -462,10 +533,10 @@ class KeyboardViewModel(
             fixed = shortcuts.value.firstOrNull { it.abbr.equals(word, ignoreCase = true) }?.expansion
         }
         if (fixed == null && state.autoCorrect && word.lowercase() !in ignoredCorrections.value) {
-            fixed = AutoCorrect.fix(word)
+            fixed = AutoCorrect.fix(word)?.takeIf { allowed(it) }
             if (fixed == null) {
                 val language = SuggestionEngine.languageOf(word, state.language)
-                fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value)
+                fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value)?.takeIf { allowed(it) }
             }
         }
         val result = fixed ?: return null
@@ -485,7 +556,9 @@ class KeyboardViewModel(
         // فك المسار على خيط خلفي: مع القاموس الكبير قد يأخذ عشرات الميلي ثانية
         viewModelScope.launch {
             val candidates = withContext(Dispatchers.Default) {
-                SwipeDecoder.decode(path, dictionary, learned, limit = 3, language = lang)
+                SwipeDecoder.decode(path, dictionary, learned, limit = 3 + SUGGEST_EXTRA, language = lang)
+                    .filter { allowed(it) }
+                    .take(3)
             }
             if (candidates.isNotEmpty()) commitSwipe(candidates)
         }
@@ -1075,7 +1148,7 @@ class KeyboardViewModel(
         var clear = false
         val swipe = t.swipeWord
         if (swipe != null) {
-            if (before.endsWith("$swipe ")) return SuggestionResult(t.swipeAlternates, "", null, false)
+            if (before.endsWith("$swipe ")) return SuggestionResult(t.swipeAlternates.filter { allowed(it) }, "", null, false)
             clear = true
         }
 
@@ -1089,21 +1162,23 @@ class KeyboardViewModel(
             val base = when {
                 atStart -> {
                     val lang = state.language
-                    (NgramModel.starters(lang, 3) + SuggestionEngine.starters(lang))
-                        .distinctBy { it.lowercase() }.take(3)
+                    (NgramModel.starters(lang, 3 + SUGGEST_EXTRA) + SuggestionEngine.starters(lang))
+                        .distinctBy { it.lowercase() }.filter { allowed(it) }.take(3)
                 }
                 state.nextWord -> {
                     val lang = if (prevWord.isNotEmpty()) SuggestionEngine.languageOf(prevWord, state.language) else state.language
                     if (prevWord.isNotEmpty()) {
                         val ctx = lastWords(trimmed, 3)
                         val prev2 = if (ctx.size >= 2) ctx[ctx.size - 2] else ""
-                        val words = NextWordModel.predict(prevWord, lang, learnedBigrams.value, 3, prev2)
+                        val words = NextWordModel.predict(prevWord, lang, learnedBigrams.value, 3 + SUGGEST_EXTRA, prev2)
+                            .filter { allowed(it) }.take(3)
                         val withPhrase = if (words.isNotEmpty()) {
                             val phrase = fitPhrase(NextWordModel.phrase(lang, learnedBigrams.value, ctx, words[0], 4))
+                                ?.takeIf { allowed(it) }
                             if (phrase != null) listOfNotNull(words[0], phrase, words.getOrNull(1)) else words
                         } else words
-                        withPhrase.ifEmpty { SuggestionEngine.starters(lang) }
-                    } else SuggestionEngine.starters(lang)
+                        withPhrase.ifEmpty { SuggestionEngine.starters(lang).filter { allowed(it) } }
+                    } else SuggestionEngine.starters(lang).filter { allowed(it) }
                 }
                 else -> emptyList()
             }
@@ -1114,18 +1189,20 @@ class KeyboardViewModel(
         val ctxPrev = ctxWords.lastOrNull() ?: ""
         val ctxPrev2 = if (ctxWords.size >= 2) ctxWords[0] else ""
         var completions = SuggestionEngine.suggest(
-            word, language, learnedWords.value, limit = 3,
+            word, language, learnedWords.value, limit = 3 + SUGGEST_EXTRA,
             context = ctxPrev, bigrams = learnedBigrams.value, context2 = ctxPrev2
-        ).filter { !it.equals(word, ignoreCase = true) }
+        ).filter { !it.equals(word, ignoreCase = true) && allowed(it) }.take(3)
         // الكلمة غير معروفة وما كفت الإكمالات: نكمّل بتصحيحات «هل تقصد»
         if (completions.size < 2 && state.spellCheck) {
-            completions = (completions + SuggestionEngine.corrections(word, language, learnedKeys.value, limit = 2))
+            completions = (completions + SuggestionEngine.corrections(word, language, learnedKeys.value, limit = 2 + SUGGEST_EXTRA)
+                .filter { allowed(it) })
                 .distinctBy { it.lowercase() }
         }
         // تتمة الجملة: من أفضل إكمال نكمل بكلمات مرجّحة (الخانة الثانية) بدل إكمال ثانٍ
         var list = completions.take(2)
         if (completions.isNotEmpty() && state.nextWord) {
             val phrase = fitPhrase(NextWordModel.phrase(language, learnedBigrams.value, ctxWords, completions[0], 4))
+                ?.takeIf { allowed(it) }
             if (phrase != null) list = listOf(completions[0], phrase)
         }
         val emoji = if (state.suggestEmojis) EmojiSuggestions.forWord(word) else null
@@ -1173,6 +1250,8 @@ class KeyboardViewModel(
         const val CLIP_EDIT_MAX = 200_000
         const val VOICE_BIAS_MAX = 120
         const val DOUBLE_TAP_MS = 350L
+        const val SUGGEST_EXTRA = 3
+        const val REMOVED_NOTICE_MS = 4000L
     }
 }
 

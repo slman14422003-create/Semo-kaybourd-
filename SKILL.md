@@ -81,3 +81,14 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 
 ## Ideas for next steps
 - Optional per-app or per-field source language override; swap button; translate selected text only.
+
+## Icon hiding fix, permanent word removal from suggestions (v3.9.4, versionCode 35)
+- Hide icon root cause: since Android 10 the launcher shows a synthesized icon (opens App info) for any non-system app that requests permissions and has a launcher activity enabled by default in the manifest, even if that activity is disabled at runtime. The LAUNCHER alias (.ui.MainActivityLauncher) is now android:enabled="false" in the manifest and is switched on at runtime only while the icon should show. AppIconVisibility.isIconVisible is true only for COMPONENT_ENABLED_STATE_ENABLED; setIconVisible skips no-op writes.
+- MainActivity keeps MAIN + category INFO so the installer Open button and App info Open button still work without a launcher entry.
+- SettingsRepository.syncAppIcon() applies the saved hide_app_icon value; called from MainActivity.onCreate and SemoKeyboardService.onCreate (background). setHideAppIcon applies the state immediately. The old LaunchedEffect in PrivacyPage was removed.
+- Existing installs: after updating, an icon that was never hidden reappears once the app or the keyboard has started once. Some launchers need a restart to drop the old synthesized icon.
+- Suggestion bar: long press on a suggestion or on the typed word removes it for good. LearnedWordsRepository gets blocked_words (blocked flow, blockWord returns a BlockSnapshot, restore, unblockWord, clearBlocked); blockWord deletes the word and its bigram pairs from learning, learnBatch skips blocked words. blocked_words is kept on reset and included in backup.
+- KeyboardViewModel: blockedKeys + optimisticBlocked, allowed() filters starters, next-word, completions, corrections, phrases, swipe alternates and auto-correct targets; limits are raised by SUGGEST_EXTRA so the bar stays full. removeSuggestion, undoRemoveSuggestion, dismissRemoved; the notice auto-dismisses after 4 s or on the next key.
+- Strip UI (KeyboardScreen): SuggestionCell with press highlight, tap and long press through detectTapGestures, font shrink for long phrases, accessibility long-click label; RemovedNotice (trash icon, message, Undo pill, countdown line) crossfades in place of the slots. Strings suggest_* and blocked_* in values and values-ar; keyboardString() picks the keyboard language.
+- Settings, Dictionary page: new section listing removed words with Restore and Restore all.
+- Not yet verified by a Gradle build.

@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         com.semo.keyboard.ui.settings.SettingsDeepLink.page.value = intent?.getStringExtra(EXTRA_PAGE)
         settingsRepository = SettingsRepository(applicationContext)
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { runCatching { settingsRepository.syncAppIcon() } }
         clipboardRepository = ClipboardRepository(applicationContext)
         learnedWordsRepository = LearnedWordsRepository(applicationContext)
         shortcutsRepository = ShortcutsRepository(applicationContext)

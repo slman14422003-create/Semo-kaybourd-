@@ -393,6 +393,7 @@ class SemoKeyboardService :
         startCacheCycle()
         prewarmAssets()
         val settingsRepository = SettingsRepository(applicationContext)
+        ioHandler.post { runCatching { kotlinx.coroutines.runBlocking { settingsRepository.syncAppIcon() } } }
         clipboardRepository = ClipboardRepository(applicationContext)
         val learnedRepository = LearnedWordsRepository(applicationContext)
         val shortcutsRepository = ShortcutsRepository(applicationContext)

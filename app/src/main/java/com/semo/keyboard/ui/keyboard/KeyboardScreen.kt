@@ -15,6 +15,12 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedContent
@@ -717,18 +723,175 @@ private fun StripIconButton(
     }
 }
 
-private data class SuggestionSlot(val text: String, val bold: Boolean, val onClick: () -> Unit)
+private data class SuggestionSlot(
+    val text: String,
+    val bold: Boolean,
+    val onClick: () -> Unit,
+    val onLongPress: (() -> Unit)? = null
+)
 
 /** اختصار التعبير الحسابي الطويل كي يتسع بالشريط */
 private fun shortExpression(expr: String): String =
     if (expr.length > 22) "…" + expr.takeLast(21) else expr
 
-/**
- * شريط الاقتراحات بنمط iOS QuickType: ثلاث خانات تفصلها خطوط رفيعة؛ الأولى الكلمة كما كُتبت بين
- * علامتي اقتباس، والثانية الاقتراح الأول (بخط عريض). وعند كتابة عملية حسابية يظهر ناتجها بدل الخانات.
- */
+@Composable
+private fun keyboardString(rtl: Boolean, id: Int, vararg args: Any): String {
+    val base = LocalContext.current
+    return remember(rtl, id, args.toList()) {
+        val config = android.content.res.Configuration(base.resources.configuration)
+        config.setLocale(java.util.Locale(if (rtl) "ar" else "en"))
+        base.createConfigurationContext(config).getString(id, *args)
+    }
+}
+
 @Composable
 private fun RowScope.SuggestionsRow(
+    state: KeyboardUiState,
+    colors: SemoKeyboardColors,
+    viewModel: KeyboardViewModel
+) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+    ) {
+        Crossfade(targetState = state.removedWord, animationSpec = tween(160), label = "removedSwap") { removed ->
+            if (removed != null) {
+                RemovedNotice(removed, colors, state.language.rtl, viewModel)
+            } else {
+                SuggestionSlots(state, colors, viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemovedNotice(
+    word: String,
+    colors: SemoKeyboardColors,
+    rtl: Boolean,
+    viewModel: KeyboardViewModel
+) {
+    val message = keyboardString(rtl, R.string.suggest_removed, word)
+    val undo = keyboardString(rtl, R.string.suggest_undo)
+    val progress = remember(word) { Animatable(1f) }
+    LaunchedEffect(word) {
+        progress.snapTo(1f)
+        progress.animateTo(0f, tween(4000, easing = LinearEasing))
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_clip_trash),
+                contentDescription = null,
+                tint = colors.keyAccent,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = message,
+                color = colors.suggestion,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(textDirection = TextDirection.Content),
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.keyAccent.copy(alpha = 0.16f))
+                    .clickable { viewModel.undoRemoveSuggestion() }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = undo,
+                    color = colors.keyAccent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth(progress.value)
+                .height(2.dp)
+                .background(colors.keyAccent.copy(alpha = 0.55f))
+        )
+    }
+}
+
+@Composable
+private fun SuggestionCell(
+    slot: SuggestionSlot,
+    colors: SemoKeyboardColors,
+    longPressLabel: String,
+    modifier: Modifier
+) {
+    val current by rememberUpdatedState(slot)
+    var pressed by remember { mutableStateOf(false) }
+    val fill by animateColorAsState(
+        if (pressed) colors.divider.copy(alpha = 0.55f) else Color.Transparent,
+        tween(if (pressed) 60 else 180),
+        label = "slotFill"
+    )
+    val size = when {
+        slot.text.length > 26 -> 13.sp
+        slot.text.length > 20 -> 15.sp
+        else -> 17.sp
+    }
+    Box(
+        modifier = modifier
+            .padding(horizontal = 3.dp, vertical = 5.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(fill)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        try {
+                            tryAwaitRelease()
+                        } finally {
+                            pressed = false
+                        }
+                    },
+                    onTap = { current.onClick() },
+                    onLongPress = { current.onLongPress?.invoke() }
+                )
+            }
+            .semantics(mergeDescendants = true) {
+                onClick { current.onClick(); true }
+                if (current.onLongPress != null) {
+                    onLongClick(longPressLabel) { current.onLongPress?.invoke(); true }
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = slot.text,
+            color = colors.suggestion,
+            fontSize = size,
+            fontWeight = if (slot.bold) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(textDirection = TextDirection.Content),
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun SuggestionSlots(
     state: KeyboardUiState,
     colors: SemoKeyboardColors,
     viewModel: KeyboardViewModel
@@ -737,8 +900,7 @@ private fun RowScope.SuggestionsRow(
     if (math != null) {
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
+                .fillMaxSize()
                 .clickable { viewModel.onMathChosen() },
             contentAlignment = Alignment.Center
         ) {
@@ -756,28 +918,36 @@ private fun RowScope.SuggestionsRow(
     }
 
     val latestClip = if (state.literal.isEmpty() && state.clipboardEnabled) state.freshClip else null
+    val longPressLabel = keyboardString(state.language.rtl, R.string.suggest_remove_action)
+
+    fun wordSlot(text: String, bold: Boolean): SuggestionSlot = SuggestionSlot(
+        text = text,
+        bold = bold,
+        onClick = { viewModel.onSuggestionChosen(text) },
+        onLongPress = if (text.any { it.isLetter() }) ({ viewModel.removeSuggestion(text) }) else null
+    )
 
     val slots = buildList {
         if (latestClip != null) {
-            state.suggestions.take(2).forEach { word ->
-                add(SuggestionSlot(word, false) { viewModel.onSuggestionChosen(word) })
-            }
+            state.suggestions.take(2).forEach { word -> add(wordSlot(word, false)) }
         } else if (state.literal.isNotEmpty()) {
-            add(SuggestionSlot("“${state.literal}”", false) { viewModel.onSuggestionChosen(state.literal) })
-            state.suggestions.take(2).forEachIndexed { index, word ->
-                add(SuggestionSlot(word, index == 0) { viewModel.onSuggestionChosen(word) })
-            }
+            val literal = state.literal
+            add(
+                SuggestionSlot(
+                    text = "\u201C$literal\u201D",
+                    bold = false,
+                    onClick = { viewModel.onSuggestionChosen(literal) },
+                    onLongPress = { viewModel.removeSuggestion(literal) }
+                )
+            )
+            state.suggestions.take(2).forEachIndexed { index, word -> add(wordSlot(word, index == 0)) }
         } else {
-            state.suggestions.take(3).forEach { word ->
-                add(SuggestionSlot(word, false) { viewModel.onSuggestionChosen(word) })
-            }
+            state.suggestions.take(3).forEach { word -> add(wordSlot(word, false)) }
         }
     }
 
     Row(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxHeight(),
+        modifier = Modifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         slots.forEachIndexed { index, slot ->
@@ -789,24 +959,14 @@ private fun RowScope.SuggestionsRow(
                         .background(colors.divider)
                 )
             }
-            Box(
+            SuggestionCell(
+                slot = slot,
+                colors = colors,
+                longPressLabel = longPressLabel,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickable(onClick = slot.onClick),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = slot.text,
-                    color = colors.suggestion,
-                    fontSize = 17.sp,
-                    fontWeight = if (slot.bold) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(textDirection = TextDirection.Content),
-                    modifier = Modifier.padding(horizontal = 6.dp)
-                )
-            }
+            )
         }
         if (latestClip != null) {
             if (slots.isNotEmpty()) {
@@ -834,11 +994,11 @@ private fun RowScope.SuggestionsRow(
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    text = if (latestClip.isClipImage()) tr(state.language.rtl, "صورة", "Image")
+                    text = if (latestClip.isClipImage()) keyboardString(state.language.rtl, R.string.suggest_clip_image)
                     else latestClip.clipDisplayText().replace('\n', ' ').trim().let { t ->
                         if (latestClip.isClipLong()) {
                             val n = latestClip.clipLongLength()
-                            t + "  ·  " + (if (n >= 1000) "${n / 1000}K" else "$n")
+                            t + "  \u00B7  " + (if (n >= 1000) "${n / 1000}K" else "$n")
                         } else t
                     },
                     color = colors.suggestion,

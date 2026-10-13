@@ -93,4 +93,13 @@
     <string name="voice_builtin_pref_title">استخدام المحرك العربي المدمج أولًا</string>
     <string name="voice_builtin_pref_hint">يتجاوز تعرّف النظام للعربية. وعند الإيقاف يتولى المحرك المدمج تلقائيًا كلما كان تعرّف النظام غير متاح.</string>
     <string name="voice_builtin_always_on">مفعّل تلقائيًا دائمًا: بمجرد تنزيل المحرك المدمج، ما في أي اتصال بمحرك النظام أو Google للعربية.</string>
+    <string name="suggest_removed">تم حذف \u00AB%1$s\u00BB من الاقتراحات</string>
+    <string name="suggest_undo">تراجع</string>
+    <string name="suggest_remove_action">حذف الكلمة من الاقتراحات</string>
+    <string name="suggest_clip_image">صورة</string>
+    <string name="blocked_title">الكلمات المحذوفة من الاقتراحات</string>
+    <string name="blocked_hint">الكلمات اللي بتحذفها بالضغط المطوّل على شريط الاقتراحات ما بترجع تظهر بالاقتراحات ولا بتتعلّمها اللوحة ثاني. اضغط استعادة لترجّع كلمة.</string>
+    <string name="blocked_empty">ما في كلمات محذوفة</string>
+    <string name="blocked_restore">استعادة</string>
+    <string name="blocked_restore_all">استعادة كل الكلمات المحذوفة</string>
 </resources>

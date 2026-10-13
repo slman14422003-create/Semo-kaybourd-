@@ -330,6 +330,7 @@ data class KeyboardUiState(
     val suggestions: List<String> = emptyList(),
     /** الكلمة الجارية كما كُتبت: تظهر بين علامتي اقتباس بأول خانة (مثل iOS) */
     val literal: String = "",
+    val removedWord: String? = null,
     val mathResult: MathResult? = null,
     val toolbarOpen: Boolean = false,
     val clipItems: List<ClipItem> = emptyList(),

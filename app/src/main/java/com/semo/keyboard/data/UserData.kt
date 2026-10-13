@@ -226,6 +226,90 @@ class LearnedWordsRepository(context: Context) {
     private val key = stringPreferencesKey("learned_words")
     private val pairKey = stringPreferencesKey("learned_bigrams")
     private val ignoredKey = stringPreferencesKey("ignored_corrections")
+    private val blockedKey = stringPreferencesKey("blocked_words")
+
+    class BlockSnapshot(val word: String, val count: Int, val pairs: List<Triple<String, String, Int>>)
+
+    val blocked: Flow<List<String>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> p[blockedKey] }
+        .distinctUntilChanged()
+        .map { raw -> raw.orEmpty().split(SEP).filter { it.isNotEmpty() } }
+
+    suspend fun blockWord(word: String): BlockSnapshot? {
+        if (!appContext.isUserStorageUnlocked()) return null
+        val w = clean(word).lowercase()
+        if (w.isEmpty() || w.length > 60) return null
+        val k = BigDictionary.key(w)
+        var snapshot: BlockSnapshot? = null
+        store.edit { p ->
+            val blockedList = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList()).toMutableList()
+            blockedList.removeAll { BigDictionary.key(it) == k }
+            blockedList.add(0, w)
+            while (blockedList.size > MAX_BLOCKED) blockedList.removeAt(blockedList.size - 1)
+            p[blockedKey] = blockedList.joinToString(SEP)
+
+            val tokens = k.split(' ').filter { it.isNotEmpty() }
+            val words = decodeWords(p[key]).toMutableList()
+            val pairs = decodeRawPairs(p[pairKey]).toMutableList()
+            var removedCount = 0
+            val removedPairs = ArrayList<Triple<String, String, Int>>()
+            if (tokens.size == 1) {
+                words.firstOrNull { BigDictionary.key(it.first) == k }?.let { removedCount = it.second }
+                words.removeAll { BigDictionary.key(it.first) == k }
+                val gone = pairs.filter { pr -> pr.first.split(' ').any { BigDictionary.key(it) == k } || BigDictionary.key(pr.second) == k }
+                removedPairs.addAll(gone)
+                pairs.removeAll(gone)
+            } else {
+                for (i in 0 until tokens.size - 1) {
+                    val gone = pairs.filter { it.first.split(' ').lastOrNull()?.let { t -> BigDictionary.key(t) } == tokens[i] && BigDictionary.key(it.second) == tokens[i + 1] }
+                    removedPairs.addAll(gone)
+                    pairs.removeAll(gone)
+                }
+            }
+            p[key] = words.joinToString(SEP) { it.first + FIELD + it.second }
+            p[pairKey] = pairs.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+            snapshot = BlockSnapshot(w, removedCount, removedPairs)
+        }
+        return snapshot
+    }
+
+    suspend fun restore(snapshot: BlockSnapshot) {
+        if (!appContext.isUserStorageUnlocked()) return
+        val k = BigDictionary.key(snapshot.word)
+        store.edit { p ->
+            val blockedList = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList()).toMutableList()
+            blockedList.removeAll { BigDictionary.key(it) == k }
+            p[blockedKey] = blockedList.joinToString(SEP)
+            if (snapshot.count > 0) {
+                val words = decodeWords(p[key]).toMutableList()
+                words.removeAll { BigDictionary.key(it.first) == k }
+                words.add(0, clean(snapshot.word) to snapshot.count)
+                p[key] = words.joinToString(SEP) { it.first + FIELD + it.second }
+            }
+            if (snapshot.pairs.isNotEmpty()) {
+                val pairs = decodeRawPairs(p[pairKey]).toMutableList()
+                for (t in snapshot.pairs) {
+                    if (pairs.none { it.first == t.first && it.second == t.second }) pairs.add(t)
+                }
+                p[pairKey] = pairs.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+            }
+        }
+    }
+
+    suspend fun unblockWord(word: String) {
+        if (!appContext.isUserStorageUnlocked()) return
+        val k = BigDictionary.key(clean(word).lowercase())
+        store.edit { p ->
+            val list = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList()).toMutableList()
+            list.removeAll { BigDictionary.key(it) == k }
+            p[blockedKey] = list.joinToString(SEP)
+        }
+    }
+
+    suspend fun clearBlocked() {
+        if (!appContext.isUserStorageUnlocked()) return
+        store.edit { p -> p.remove(blockedKey) }
+    }
 
     /** الأكثر استعمالًا أولًا، ومع التساوي الأحدث أولًا (الترتيب المستقر يحفظ الحداثة) */
     val words: Flow<List<String>> = appContext.credentialPrefsFlow()
@@ -269,11 +353,14 @@ class LearnedWordsRepository(context: Context) {
         if (newWords.isEmpty() && newPairs.isEmpty()) return
         if (!appContext.isUserStorageUnlocked()) return
         store.edit { p ->
+            val blockedKeys = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList())
+                .mapTo(HashSet<String>()) { BigDictionary.key(it) }
             if (newWords.isNotEmpty()) {
                 val list = decodeWords(p[key]).toMutableList()
                 for (raw in newWords) {
                     val w = clean(raw)
                     if (w.length < 3 || w.length > 30) continue
+                    if (blockedKeys.isNotEmpty() && BigDictionary.key(w.lowercase()) in blockedKeys) continue
                     val old = list.indexOfFirst { it.first == w }
                     val count = if (old >= 0) list.removeAt(old).second + 1 else 1
                     list.add(0, w to count.coerceAtMost(MAX_COUNT))
@@ -290,6 +377,7 @@ class LearnedWordsRepository(context: Context) {
                     val a = clean(if (prev.contains(' ')) prev else BigDictionary.key(prev))
                     val b = clean(next)
                     if (a.isEmpty() || a.length > 61 || b.length < 2 || b.length > 30) continue
+                    if (blockedKeys.isNotEmpty() && (BigDictionary.key(b.lowercase()) in blockedKeys || a.split(' ').any { BigDictionary.key(it) in blockedKeys })) continue
                     val old = list.indexOfFirst { it.first == a && it.second == b }
                     val count = if (old >= 0) list.removeAt(old).third + 1 else 1
                     list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
@@ -352,6 +440,7 @@ class LearnedWordsRepository(context: Context) {
         const val MAX_PAIRS = 3000
         const val MAX_COUNT = 1000
         const val MAX_IGNORED = 500
+        const val MAX_BLOCKED = 2000
     }
 }
 

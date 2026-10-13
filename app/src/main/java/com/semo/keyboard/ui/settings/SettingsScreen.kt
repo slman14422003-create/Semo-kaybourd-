@@ -861,6 +861,7 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var confirmClearAll by remember { mutableStateOf(false) }
+    val blocked by learnedRepo.blocked.collectAsState(initial = emptyList())
     val filtered = remember(learned, query) {
         if (query.isBlank()) learned else learned.filter { it.contains(query.trim()) }
     }
@@ -954,6 +955,52 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
                 }
             }
         }
+        Section(com.semo.keyboard.ui.appString(R.string.blocked_title)) {
+            Text(
+                com.semo.keyboard.ui.appString(R.string.blocked_hint),
+                color = SemoPalette.TextSecondary,
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(14.dp)
+            )
+            Divider()
+            if (blocked.isEmpty()) {
+                Text(
+                    com.semo.keyboard.ui.appString(R.string.blocked_empty),
+                    color = SemoPalette.TextHint,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(14.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                ) {
+                    items(blocked, key = { it }) { word ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { scope.launch { learnedRepo.unblockWord(word) } }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(word, color = SemoPalette.TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                            Text(
+                                com.semo.keyboard.ui.appString(R.string.blocked_restore),
+                                color = SemoPalette.Accent,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Divider()
+                    }
+                }
+                ActionRow(com.semo.keyboard.ui.appString(R.string.blocked_restore_all)) {
+                    scope.launch { learnedRepo.clearBlocked() }
+                }
+            }
+        }
         Hint(L("ما بيتعلّم شي بحقول كلمات المرور. كل شي بيتخزن على جهازك فقط."))
     }
 }
@@ -979,10 +1026,6 @@ private fun PrivacyPage(
     val mediaLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { mediaGranted = it }
-    // يحافظ على تطابق حالة أيقونة الإطلاق الفعلية مع الإعداد المحفوظ (احتياطًا لأي تعارض)
-    LaunchedEffect(settings.hideAppIcon) {
-        com.semo.keyboard.util.AppIconVisibility.setIconVisible(ctx, !settings.hideAppIcon)
-    }
     SubPage(L("الحافظة والخصوصية"), onBack) {
         Section(L("الحافظة")) {
             SwitchRow(L("حفظ سجل الحافظة"), R.drawable.ic_tool_clipboard, IconBlue, settings.clipboardEnabled) {

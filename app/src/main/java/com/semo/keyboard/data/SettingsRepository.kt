@@ -147,6 +147,7 @@ private inline fun <reified T : Enum<T>> String?.toEnumOr(default: T): T =
  */
 class SettingsRepository(context: Context) {
 
+    private val appCtx = context.applicationContext
     private val store = context.applicationContext.semoSettingsStore()
 
     private object Keys {
@@ -262,7 +263,15 @@ class SettingsRepository(context: Context) {
     suspend fun setVoiceDialect(v: VoiceDialect) { store.edit { it[Keys.VOICE_DIALECT] = v.name } }
     suspend fun setVoiceOfflineFirst(v: Boolean) { store.edit { it[Keys.VOICE_OFFLINE_FIRST] = v } }
     suspend fun setVoiceBuiltinFirst(v: Boolean) { store.edit { it[Keys.VOICE_BUILTIN_FIRST] = v } }
-    suspend fun setHideAppIcon(v: Boolean) { store.edit { it[Keys.HIDE_APP_ICON] = v } }
+    suspend fun setHideAppIcon(v: Boolean) {
+        store.edit { it[Keys.HIDE_APP_ICON] = v }
+        com.semo.keyboard.util.AppIconVisibility.setIconVisible(appCtx, !v)
+    }
+
+    suspend fun syncAppIcon() {
+        val hide = store.data.first()[Keys.HIDE_APP_ICON] ?: false
+        com.semo.keyboard.util.AppIconVisibility.setIconVisible(appCtx, !hide)
+    }
     suspend fun setAppLanguage(language: AppLanguage) { store.edit { it[Keys.APP_LANGUAGE] = language.name } }
     suspend fun setAutoCacheClear(v: Boolean) { store.edit { it[Keys.AUTO_CACHE_CLEAR] = v } }
     suspend fun setKeyboardTheme(theme: KeyboardTheme) { store.edit { it[Keys.KEYBOARD_THEME] = theme.name } }
@@ -349,7 +358,7 @@ class SettingsRepository(context: Context) {
 
     private companion object {
         val KEEP_ON_RESET = setOf(
-            "learned_words", "learned_bigrams", "ignored_corrections", "text_shortcuts", "clipboard_items", "last_cache_clear"
+            "learned_words", "learned_bigrams", "ignored_corrections", "blocked_words", "text_shortcuts", "clipboard_items", "last_cache_clear"
         )
     }
 }
