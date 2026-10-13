@@ -161,7 +161,7 @@ private fun Root(
                 }
                 if (en != isEnabled) isEnabled = en
                 if (sel != isSelected) isSelected = sel
-                delay(900)
+                delay(1500)
             }
         }
     }

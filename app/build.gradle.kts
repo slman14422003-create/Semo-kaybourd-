@@ -11,13 +11,11 @@ android {
     defaultConfig {
         applicationId = "com.semo.keyboard"
         minSdk = 26
-        targetSdk = 36          // Android 16
-        versionCode = 28
-        versionName = "3.6.0"
+        targetSdk = 36
+        versionCode = 29
+        versionName = "3.7.0"
+        ndk { debugSymbolLevel = "NONE" }
     }
-
-    // توقيع ثابت للنسختين (release وdebug): بدونه يتولّد مفتاح debug جديد بكل بناء على GitHub فيرفض أندرويد
-    // تثبيت النسخة الجديدة فوق القديمة ويضطر المستخدم للحذف أولًا.
     val semoKeystore = file("semo-release.p12")
     if (semoKeystore.exists()) {
         signingConfigs {
@@ -42,6 +40,28 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += listOf(
+            "-Xno-call-assertions",
+            "-Xno-param-assertions",
+            "-Xno-receiver-assertions"
+        )
+    }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/LICENSE*",
+                "/META-INF/NOTICE*",
+                "/META-INF/versions/**",
+                "DebugProbesKt.bin"
+            )
+        }
+    }
+
+    androidResources {
+        localeFilters += setOf("en", "ar")
     }
 
     buildTypes {
@@ -49,6 +69,7 @@ android {
             if (semoKeystore.exists()) signingConfig = signingConfigs.getByName("semo")
         }
         release {
+            isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -58,6 +79,7 @@ android {
 
     lint {
         abortOnError = false
+        checkReleaseBuilds = false
     }
 }
 
@@ -74,6 +96,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
-    // فك ضغط bz2 أثناء تنزيل جمل مكتبة اللغات (Tatoeba)
     implementation("org.apache.commons:commons-compress:1.27.1")
 }

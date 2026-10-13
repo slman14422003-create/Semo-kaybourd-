@@ -266,22 +266,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
 
     // مضاعِف سرعة الحركة من الإعدادات (0 = إيقاف الحركة تمامًا)
     val animScale = state.animationSpeed.multiplier
-    // تلاشٍ ناعم عند تبديل صفحة المفاتيح (حروف/أرقام/رموز) أو اللغة.
-    // خفيف ومختصر خصيصًا لتبديل 123↔ABC↔رموز (كان يُحسّ بتقطّع): بداية أقرب للوضوح (0.55 بدل 0.35)
-    // ومدة أقصر (120ms) فتبدو فورية تقريبًا بدل أنيميشن محسوس.
     val pageAlpha = remember { Animatable(1f) }
-    LaunchedEffect(state.page, animScale) {
-        if (state.page == KeyboardPage.LETTERS || state.page == KeyboardPage.SYMBOLS_1 ||
-            state.page == KeyboardPage.SYMBOLS_2 || state.page == KeyboardPage.NUMPAD
-        ) {
-            if (animScale <= 0.001f) {
-                pageAlpha.snapTo(1f)
-            } else {
-                pageAlpha.snapTo(0.55f)
-                pageAlpha.animateTo(1f, scaledTween(animScale, 160, easing = IosEaseOut))
-            }
-        }
-    }
     // تبديل اللغة: المفاتيح تنزلق من جهة اتجاه الكتابة الجديدة مع تلاشٍ ونابض ناعم بدل وميض الشفافية
     val langShift = remember { Animatable(0f) }
     var lastLanguage by remember { mutableStateOf(state.language) }
@@ -346,23 +331,9 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     }
                 }
 
-                AnimatedContent(
-                    targetState = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
-                        state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE) state.page else KeyboardPage.LETTERS,
-                    transitionSpec = {
-                        if (targetState != KeyboardPage.LETTERS) {
-                            // التأخير الصغير يخفي لحظة تركيب اللوحة الجديدة (الأثقل) خلف اللوحة القديمة فلا يظهر تقطيع
-                            (fadeIn(scaledTween(animScale, 240, delayMillis = 30, easing = IosEaseOut)) +
-                                slideInVertically(scaledTween(animScale, 360, delayMillis = 30, easing = IosPush)) { it / 28 }) togetherWith
-                                fadeOut(scaledTween(animScale, 100, easing = IosEaseOut)) using SizeTransform(clip = false) { _, _ -> snap() }
-                        } else {
-                            fadeIn(scaledTween(animScale, 240, delayMillis = 30, easing = IosEaseOut)) togetherWith
-                                fadeOut(scaledTween(animScale, 100, easing = IosEaseOut)) using
-                                SizeTransform(clip = false) { _, _ -> snap() }
-                        }
-                    },
-                    label = "page"
-                ) { shownPage ->
+                val shownPage = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
+                    state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE) state.page else KeyboardPage.LETTERS
+                run {
                 when (shownPage) {
                     KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
                     KeyboardPage.CLIPBOARD -> ClipboardPanel(

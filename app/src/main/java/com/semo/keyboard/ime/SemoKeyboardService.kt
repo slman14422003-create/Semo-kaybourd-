@@ -296,9 +296,9 @@ class SemoKeyboardService :
                 // فحص الحافظة خفيف (بصمة زمن فقط)، لكن فحص لقطات الشاشة يسأل MediaStore فعليًا
                 // (أثقل)؛ نشغّله كل دورتين بدل كل دورة لتخفيف الحمل على التخزين دون تأخير محسوس
                 pollTick++
-                if (pollTick % 2 == 0) captureScreenshot()
+                if (pollTick % 4 == 0) captureScreenshot()
             }
-            mainHandler.postDelayed(this, 1500)
+            mainHandler.postDelayed(this, 2500)
         }
     }
 

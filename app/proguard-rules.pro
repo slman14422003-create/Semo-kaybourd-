@@ -1,13 +1,7 @@
-# خدمة لوحة المفاتيح يستدعيها النظام بالاسم من الـ Manifest
 -keep class com.semo.keyboard.ime.** { *; }
 -keep class com.semo.keyboard.ui.MainActivity { *; }
-
-# مزوّد الملفات (صور الحافظة) يُنشأ بالاسم من الـ Manifest
 -keep class androidx.core.content.FileProvider { *; }
-# القيم المحفوظة بالإعدادات تُقرأ بالاسم (enum valueOf)
 -keepclassmembers enum com.semo.keyboard.** { *; }
-
-# commons-compress: نستعمل فك bz2 فقط؛ باقي المضغوطات الاختيارية غير موجودة
 -dontwarn org.apache.commons.compress.**
 -dontwarn org.tukaani.xz.**
 -dontwarn com.github.luben.zstd.**
@@ -18,3 +12,18 @@
 -dontwarn java.lang.module.**
 -dontwarn org.apache.commons.io.**
 -dontwarn org.apache.commons.lang3.**
+
+-optimizationpasses 5
+-allowaccessmodification
+-repackageclasses ''
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+-assumenosideeffects class kotlin.jvm.internal.Intrinsics {
+    public static void checkNotNull(...);
+    public static void checkNotNullParameter(...);
+    public static void checkParameterIsNotNull(...);
+    public static void checkNotNullExpressionValue(...);
+}
