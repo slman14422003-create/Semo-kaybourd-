@@ -249,5 +249,10 @@
 "لكل لغة قاموس ونموذج جمل للإكمال وتوقّع الكلمة التالية، بيشتغلوا بعد التنزيل بدون إنترنت. ": "Each language has a dictionary and a sentence model for completion and next-word prediction. They work offline after downloading. ",
 "فعّل اللغات اللي بدك إياها بدورة زر الكرة الأرضية. تنزيل القاموس ونموذج الجمل لكل لغة من صفحة «التنزيلات والتخزين» بالإعدادات.": "Enable the languages you want in the globe button cycle. Download each language's dictionary and sentence model from the Downloads and storage page in settings.",
 "فتح صفحة التنزيلات والتخزين": "Open Downloads and storage",
-"القاموس ونموذج الجمل لكل لغة (إنكليزي، عربي، وغيرهم) بيتنزّلوا من صفحة «التنزيلات والتخزين».": "The dictionary and sentence model for each language (English, Arabic and more) are downloaded from the Downloads and storage page."
+"القاموس ونموذج الجمل لكل لغة (إنكليزي، عربي، وغيرهم) بيتنزّلوا من صفحة «التنزيلات والتخزين».": "The dictionary and sentence model for each language (English, Arabic and more) are downloaded from the Downloads and storage page.",
+"نسخة قديمة أصغر وأقل دقة، اضغط «تحديث» لقاموس أضخم ونموذج جمل أكبر": "Older, smaller and less accurate version. Tap Update for a much larger dictionary and sentence model",
+"«قياسي» خفيف وسريع ويناسب كل الأجهزة. «الأدق» أحدث نموذج مدرَّب متاح وأعلى دقة، لكنه أكبر وأبطأ بالتحميل، والكبير منه (فوق 700 MB) يحتاج جهازًا بذاكرة 6 GB أو أكثر.": "“Standard” is light and fast and suits every device. “Most accurate” is the newest trained model available with the highest accuracy, but it is larger and slower to load; the big ones (over 700 MB) need a device with 6 GB RAM or more.",
+"الأدق": "Most accurate",
+"قديم": "Old",
+"ذاكرة الجهاز لا تكفي لهذا النموذج الكبير، جرّب «قياسي» أو «الأدق» الأخف.": "This device does not have enough memory for this large model. Try “Standard” or a lighter “Most accurate” option."
 }

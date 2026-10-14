@@ -101,8 +101,10 @@ internal fun LanguageDownloadsBlock(repo: SettingsRepository, settings: SemoSett
             val hasModel = remember(refresh, active) { DictionaryManager.hasModel(context, lang) }
             val bytes = remember(refresh, active) { DictionaryManager.downloadedBytes(context, lang) }
             val running = active == lang
+            val outdated = remember(refresh, active) { DictionaryManager.isOutdated(context, lang) }
             val state = when {
                 running -> progress.ifEmpty { L("جاري الاتصال...") }
+                outdated -> L("نسخة قديمة أصغر وأقل دقة، اضغط «تحديث» لقاموس أضخم ونموذج جمل أكبر")
                 hasWords && hasModel -> L("منزَّلة: قاموس + نموذج جمل") + " · " + Formatter.formatShortFileSize(context, bytes)
                 hasWords -> L("منزَّلة: قاموس فقط") + " · " + Formatter.formatShortFileSize(context, bytes)
                 lang.builtIn -> L("مدمجة (تنزيل القاموس الكامل اختياري)")

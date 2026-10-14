@@ -168,7 +168,7 @@ object NgramModel {
         lines: List<String>,
         minWordFreq: Int,
         minCount: Int,
-        vocabSize: Int = 24_000,
+        vocabSize: Int = 80_000,
         topBi: Int = 8,
         topTri: Int = 5
     ): Model {
@@ -207,12 +207,12 @@ object NgramModel {
                     val a = seq[i]
                     val b = seq[i + 1]
                     if (a < 0 || b < 0) continue
-                    biCounter.add((a.toLong() shl 15) or b.toLong())
+                    biCounter.add((a.toLong() shl 20) or b.toLong())
                     if (i + 2 < n) {
                         val c = seq[i + 2]
                         // سياق ثلاثي يبدأ بكلمة حقيقية فقط (لا بداية جملة)
                         if (c >= 0 && a >= 2) {
-                            triCounter.add((a.toLong() shl 30) or (b.toLong() shl 15) or c.toLong())
+                            triCounter.add((a.toLong() shl 40) or (b.toLong() shl 20) or c.toLong())
                         }
                     }
                 }
@@ -223,16 +223,16 @@ object NgramModel {
         val biGroups = HashMap<Int, ArrayList<Long>>()
         biCounter.forEach { key, count ->
             if (count >= minCount) {
-                val a = (key shr 15).toInt()
-                val b = (key and 0x7FFFL).toInt()
+                val a = (key shr 20).toInt()
+                val b = (key and 0xFFFFFL).toInt()
                 biGroups.getOrPut(a) { ArrayList() }.add((count.toLong() shl 32) or b.toLong())
             }
         }
         val triGroups = HashMap<Long, ArrayList<Long>>()
         triCounter.forEach { key, count ->
             if (count >= minCount) {
-                val ctx = key shr 15
-                val c = (key and 0x7FFFL).toInt()
+                val ctx = key shr 20
+                val c = (key and 0xFFFFFL).toInt()
                 triGroups.getOrPut(ctx) { ArrayList() }.add((count.toLong() shl 32) or c.toLong())
             }
         }
@@ -260,8 +260,8 @@ object NgramModel {
         }
         val tri = HashMap<String, Cont>(triGroups.size * 2)
         for ((ctx, list) in triGroups) {
-            val a = (ctx shr 15).toInt()
-            val b = (ctx and 0x7FFFL).toInt()
+            val a = (ctx shr 20).toInt()
+            val b = (ctx and 0xFFFFFL).toInt()
             tri[BigDictionary.key(words[a]) + " " + BigDictionary.key(words[b])] = toCont(list, topTri)
         }
         return Model(bi, tri)

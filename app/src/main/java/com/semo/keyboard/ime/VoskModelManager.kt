@@ -25,7 +25,7 @@ import org.vosk.LibVosk
 import org.vosk.LogLevel
 import org.vosk.Model
 
-enum class VoskFailure { NETWORK, SPACE, CORRUPT, UNKNOWN }
+enum class VoskFailure { NETWORK, SPACE, CORRUPT, MEMORY, UNKNOWN }
 
 sealed interface VoskState {
     object Missing : VoskState
@@ -35,30 +35,71 @@ sealed interface VoskState {
     data class Failed(val reason: VoskFailure) : VoskState
 }
 
-class VoskModelSpec(val code: String, val url: String, val bytes: Long) {
+enum class VoskTier { STANDARD, ACCURATE }
+
+class VoskModelSpec(val code: String, val tier: VoskTier, val id: String, val bytes: Long) {
+    val url: String get() = "https://alphacephei.com/vosk/models/vosk-model-$id.zip"
     val megabytes: Int get() = ((bytes + 500_000L) / 1_000_000L).toInt()
+    val sizeLabel: String get() = if (bytes >= 1_000_000_000L) "%.1f GB".format(bytes / 1_000_000_000.0) else "$megabytes MB"
 }
 
 object VoskModels {
-    private const val BASE = "https://alphacephei.com/vosk/models/"
+    private const val HEAVY_BYTES = 700_000_000L
+    private const val MIN_RAM_BYTES = 5_000_000_000L
 
-    val all: Map<String, VoskModelSpec> = listOf(
-        VoskModelSpec("ar", BASE + "vosk-model-ar-mgb2-0.4.zip", 333_241_610L),
-        VoskModelSpec("en", BASE + "vosk-model-small-en-us-0.15.zip", 41_205_931L),
-        VoskModelSpec("fr", BASE + "vosk-model-small-fr-0.22.zip", 42_233_323L),
-        VoskModelSpec("es", BASE + "vosk-model-small-es-0.42.zip", 39_817_833L),
-        VoskModelSpec("de", BASE + "vosk-model-small-de-0.15.zip", 46_499_967L),
-        VoskModelSpec("tr", BASE + "vosk-model-small-tr-0.3.zip", 36_855_784L),
-        VoskModelSpec("ru", BASE + "vosk-model-small-ru-0.22.zip", 46_236_750L),
-        VoskModelSpec("fa", BASE + "vosk-model-small-fa-0.42.zip", 53_431_220L),
-        VoskModelSpec("pt", BASE + "vosk-model-small-pt-0.3.zip", 32_453_112L),
-        VoskModelSpec("it", BASE + "vosk-model-small-it-0.22.zip", 49_665_141L),
-        VoskModelSpec("nl", BASE + "vosk-model-small-nl-0.22.zip", 40_441_176L),
-        VoskModelSpec("pl", BASE + "vosk-model-small-pl-0.22.zip", 52_979_372L),
-        VoskModelSpec("uk", BASE + "vosk-model-small-uk-v3-small.zip", 143_914_407L)
+    private fun std(code: String, id: String, bytes: Long) = VoskModelSpec(code, VoskTier.STANDARD, id, bytes)
+    private fun acc(code: String, id: String, bytes: Long) = VoskModelSpec(code, VoskTier.ACCURATE, id, bytes)
+
+    val standard: Map<String, VoskModelSpec> = listOf(
+        std("ar", "small-ar-0.3", 104_351_896L),
+        std("en", "small-en-us-0.15", 41_205_931L),
+        std("fr", "small-fr-0.22", 42_233_323L),
+        std("es", "small-es-0.42", 39_817_833L),
+        std("de", "small-de-0.15", 46_499_967L),
+        std("tr", "small-tr-0.3", 36_855_784L),
+        std("ru", "small-ru-0.22", 46_236_750L),
+        std("fa", "small-fa-0.42", 53_431_220L),
+        std("pt", "small-pt-0.3", 32_453_112L),
+        std("it", "small-it-0.22", 49_665_141L),
+        std("nl", "small-nl-0.22", 40_441_176L),
+        std("pl", "small-pl-0.22", 52_979_372L),
+        std("uk", "small-uk-v3-small", 143_914_407L)
     ).associateBy { it.code }
 
-    fun specFor(code: String): VoskModelSpec? = all[code]
+    val accurate: Map<String, VoskModelSpec> = listOf(
+        acc("ar", "ar-0.22-linto-1.1.0", 1_377_395_170L),
+        acc("en", "en-us-0.22-lgraph", 130_557_655L),
+        acc("fr", "fr-0.22", 1_523_026_348L),
+        acc("es", "es-0.42", 1_484_681_703L),
+        acc("de", "de-0.21", 2_031_717_803L),
+        acc("ru", "ru-0.42", 1_937_602_113L),
+        acc("fa", "fa-0.42", 1_667_089_770L),
+        acc("pt", "pt-fb-v0.1.1-pruned", 1_223_922_169L),
+        acc("it", "it-0.22", 1_306_765_292L),
+        acc("nl", "nl-spraakherkenning-0.6-lgraph", 105_951_663L),
+        acc("uk", "uk-v3-lgraph", 340_762_018L)
+    ).associateBy { it.code }
+
+    /** كل أكواد اللغات التي لها نموذج (قياسي على الأقل) */
+    val all: Map<String, VoskModelSpec> get() = standard
+
+    fun specFor(code: String): VoskModelSpec? = standard[code]
+
+    fun spec(code: String, tier: VoskTier): VoskModelSpec? =
+        if (tier == VoskTier.STANDARD) standard[code] else accurate[code]
+
+    fun byId(code: String, id: String): VoskModelSpec? =
+        listOfNotNull(standard[code], accurate[code]).firstOrNull { it.id == id }
+
+    /** النماذج الضخمة (فوق 700 ميغابايت) تحتاج ذاكرة جهاز كبيرة وإلا تُغلق اللوحة عند التحميل */
+    fun needsBigRam(spec: VoskModelSpec): Boolean = spec.bytes >= HEAVY_BYTES
+
+    fun deviceRamOk(context: android.content.Context): Boolean {
+        val am = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager ?: return true
+        val info = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(info)
+        return info.totalMem >= MIN_RAM_BYTES
+    }
 }
 
 object VoskModelManager {
@@ -68,7 +109,6 @@ object VoskModelManager {
     private const val ROOT = "vosk"
     private const val READY_MARK = ".ready"
     private const val IDLE_RELEASE_MS = 20_000L
-    private const val SPACE_FACTOR = 2L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val main = Handler(Looper.getMainLooper())
@@ -100,6 +140,15 @@ object VoskModelManager {
     private fun tempDir(context: Context, code: String) = File(root(context), "$code.tmp")
 
     fun isReady(context: Context, code: String): Boolean = File(modelDir(context, code), READY_MARK).exists()
+
+    /** معرّف النموذج المنزَّل (العلامة القديمة "1" = النموذج القديم: العربي mgb2 وغيره هو القياسي الحالي) */
+    fun installedId(context: Context, code: String): String? {
+        val mark = File(modelDir(context, code), READY_MARK)
+        if (!mark.exists()) return null
+        val text = runCatching { mark.readText().trim() }.getOrDefault("")
+        if (text.isNotEmpty() && text != "1") return text
+        return if (code == "ar") "ar-mgb2-0.4" else VoskModels.standard[code]?.id
+    }
 
     fun refresh(context: Context) {
         cleanLeftovers(context)
@@ -147,9 +196,13 @@ object VoskModelManager {
 
     fun totalInstalledBytes(context: Context): Long = VoskModels.all.keys.sumOf { installedBytes(context, it) }
 
-    fun download(context: Context, code: String) {
-        val spec = VoskModels.specFor(code) ?: return
+    fun download(context: Context, code: String, tier: VoskTier = VoskTier.STANDARD) {
+        val spec = VoskModels.spec(code, tier) ?: return
         if (downloading(code)) return
+        if (VoskModels.needsBigRam(spec) && !VoskModels.deviceRamOk(context)) {
+            setState(code, VoskState.Failed(VoskFailure.MEMORY))
+            return
+        }
         val app = context.applicationContext
         setState(code, VoskState.Downloading(0))
         val started = scope.launch {
@@ -227,7 +280,7 @@ object VoskModelManager {
         val dir = root(context)
         dir.mkdirs()
         purgeStale(context, spec.code)
-        if (dir.usableSpace < spec.bytes * SPACE_FACTOR) {
+        if (dir.usableSpace < spec.bytes * 3L / 2L) {
             setState(spec.code, VoskState.Failed(VoskFailure.SPACE))
             return
         }
@@ -362,6 +415,6 @@ object VoskModelManager {
             found.copyRecursively(target, overwrite = true)
         }
         temp.deleteRecursively()
-        File(target, READY_MARK).writeText("1")
+        File(target, READY_MARK).writeText(spec.id)
     }
 }

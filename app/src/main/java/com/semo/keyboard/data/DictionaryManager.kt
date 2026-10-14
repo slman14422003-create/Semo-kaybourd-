@@ -31,10 +31,16 @@ object DictionaryManager {
 
     private const val BASE_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018"
     private const val TATOEBA_URL = "https://downloads.tatoeba.org/exports/per_language"
-    private const val MAX_WORDS = 100_000
+    private const val MAX_WORDS = 250_000
+
+    /** كلمات ترددها أقل من هذا بالمصدر غالبًا أخطاء إملائية فلا تدخل القاموس (لأن التدقيق يعتمد عليه) */
+    private const val MIN_WORD_COUNT = 3L
+
+    /** رقم إصدار بيانات القاموس: ما كان أقل منه (قاموس 100 ألف كلمة القديم) يُعرض له «تحديث» */
+    private const val DATA_VERSION = 2
 
     /** أقصى عدد جمل نقرؤه من Tatoeba (القراءة متدفقة فنوقفها عند الحد دون تنزيل الملف كله) */
-    private const val MAX_SENTENCES = 90_000
+    private const val MAX_SENTENCES = 300_000
 
     /** الجمل المدمجة تُكرَّر بالبناء كي لا يقصّها حدّ التكرار الأدنى لجمل المكتبة الكبيرة */
     private const val SEED_REPEAT = 3
@@ -97,6 +103,16 @@ object DictionaryManager {
     private fun modelFile(context: Context, language: KeyboardLanguage): File =
         File(File(context.applicationContext.filesDir, "ngram"), "${language.code}.txt")
 
+    private fun versionFile(context: Context, language: KeyboardLanguage): File =
+        File(File(context.applicationContext.filesDir, "dict"), "${language.code}.ver")
+
+    /** القاموس المنزَّل أقدم من الإصدار الحالي (أصغر وأقل دقة) */
+    fun isOutdated(context: Context, language: KeyboardLanguage): Boolean {
+        if (!hasWords(context, language)) return false
+        val v = runCatching { versionFile(context, language).readText().trim().toInt() }.getOrDefault(1)
+        return v < DATA_VERSION
+    }
+
     fun hasWords(context: Context, language: KeyboardLanguage): Boolean = wordsFile(context, language).exists()
     fun hasModel(context: Context, language: KeyboardLanguage): Boolean = modelFile(context, language).exists()
 
@@ -158,6 +174,7 @@ object DictionaryManager {
         val app = context.applicationContext
         runCatching { wordsFile(app, language).delete() }
         runCatching { modelFile(app, language).delete() }
+        runCatching { versionFile(app, language).delete() }
         if (language.builtIn) load(app, language) else unload(language)
     }
 
@@ -198,6 +215,7 @@ object DictionaryManager {
         val words = fetchWords(language)
         if (words.size < 1000) error("القائمة المنزّلة صغيرة جدًا")
         writeAtomically(wordsFile(app, language), words.joinToString("\n"))
+        runCatching { versionFile(app, language).writeText(DATA_VERSION.toString()) }
         onProgress("جاري بناء فهرس القاموس...")
         BigDictionary.setWords(language, merged(app, language, words))
 
@@ -210,7 +228,7 @@ object DictionaryManager {
             val all = ArrayList<String>(corpus.size + seed.size * SEED_REPEAT)
             all.addAll(corpus)
             repeat(SEED_REPEAT) { all.addAll(seed) }
-            val model = NgramModel.build(all, minWordFreq = 2, minCount = 2)
+            val model = NgramModel.build(all, minWordFreq = 2, minCount = 2, vocabSize = 80_000)
             if (!model.isEmpty) {
                 writeAtomically(modelFile(app, language), NgramModel.serialize(model))
                 NgramModel.set(language, model)
@@ -229,8 +247,8 @@ object DictionaryManager {
     }
 
     private fun fetchWords(language: KeyboardLanguage): List<String> {
-        for (address in urls(language)) {
-            val words = runCatching { fetchWordsFrom(address, language) }.getOrNull()
+        for ((i, address) in urls(language).withIndex()) {
+            val words = runCatching { fetchWordsFrom(address, language, if (i == 0) MIN_WORD_COUNT else 0L) }.getOrNull()
             if (words != null && words.size >= 1000) return words
         }
         error("تعذّر تنزيل القاموس")
@@ -244,7 +262,7 @@ object DictionaryManager {
         return connection
     }
 
-    private fun fetchWordsFrom(address: String, language: KeyboardLanguage): List<String> {
+    private fun fetchWordsFrom(address: String, language: KeyboardLanguage, minCount: Long): List<String> {
         val connection = open(address)
         try {
             if (connection.responseCode != HttpURLConnection.HTTP_OK) error("HTTP " + connection.responseCode)
@@ -252,7 +270,10 @@ object DictionaryManager {
             connection.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
                 for (line in lines) {
                     if (seen.size >= MAX_WORDS) break
-                    val word = clean(line.substringBefore(' ').trim(), language) ?: continue
+                    val parts = line.trim().split(' ')
+                    val count = parts.getOrNull(1)?.toLongOrNull()
+                    if (minCount > 0L && count != null && count < minCount) break
+                    val word = clean(parts[0].trim(), language) ?: continue
                     seen.add(word)
                 }
             }

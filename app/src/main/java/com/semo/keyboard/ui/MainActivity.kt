@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
         val app = applicationContext
         if (!app.isUserStorageUnlocked()) return
         val language = KeyboardLanguage.ARABIC
-        if (DictionaryManager.hasWords(app, language)) return
+        if (DictionaryManager.hasWords(app, language) && !DictionaryManager.isOutdated(app, language)) return
         val prefs = app.getSharedPreferences("dict_auto", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         if (now - prefs.getLong("last_try", 0L) < RETRY_MS) return
