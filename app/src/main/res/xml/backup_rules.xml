@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<full-backup-content>
-    <!-- صور الحافظة ونصوصها الطويلة والقواميس المنزّلة لا تُنسخ احتياطيًا للسحابة -->
-    <exclude domain="file" path="clip_images" />
-    <exclude domain="file" path="clip_texts" />
-    <exclude domain="file" path="dict" />
-</full-backup-content>
