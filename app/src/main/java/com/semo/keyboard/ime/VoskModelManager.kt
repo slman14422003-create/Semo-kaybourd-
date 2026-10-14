@@ -73,7 +73,16 @@ object VoskModelManager {
 
     fun refresh(context: Context) {
         if (job?.isActive == true) return
-        flow.value = if (isReady(context)) VoskState.Ready else VoskState.Missing
+        val ready = isReady(context)
+        if (ready) cleanLeftovers(context)
+        flow.value = if (ready) VoskState.Ready else VoskState.Missing
+    }
+
+    fun cleanLeftovers(context: Context) {
+        if (job?.isActive == true || !isReady(context)) return
+        val dir = root(context)
+        runCatching { File(dir, PART_FILE).delete() }
+        runCatching { File(dir, "ar.tmp").deleteRecursively() }
     }
 
     fun download(context: Context) {
@@ -283,6 +292,7 @@ object VoskModelManager {
             flow.value = VoskState.Failed(VoskFailure.CORRUPT)
             throw Handled()
         }
+        part.delete()
         val target = File(dir, MODEL_DIR)
         release()
         target.deleteRecursively()

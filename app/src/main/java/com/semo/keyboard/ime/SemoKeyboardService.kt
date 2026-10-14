@@ -412,6 +412,7 @@ class SemoKeyboardService :
         // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.AutoCorrect.attach(applicationContext) } }
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
+        ioHandler.post { runCatching { VoskModelManager.cleanLeftovers(applicationContext) } }
         hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
     }
 
