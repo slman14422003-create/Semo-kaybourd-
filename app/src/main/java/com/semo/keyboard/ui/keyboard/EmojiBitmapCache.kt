@@ -55,6 +55,8 @@ internal object EmojiBitmapCache {
         cache.evictAll()
     }
 
+    fun sizeBytes(): Long = cache.size().toLong()
+
     /** يحضّر الصور بالترتيب المعطى (الأقرب لما يراه المستخدم أولًا) ويتوقف فور إلغاء المهمة */
     suspend fun prefetch(order: List<String>) {
         var added = 0

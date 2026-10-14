@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -121,7 +122,10 @@ internal fun CacheBlock(repo: SettingsRepository, settings: SemoSettings) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var status by remember { mutableStateOf("") }
+    var size by remember { mutableStateOf(-1L) }
+    var busy by remember { mutableStateOf(false) }
     val doneTemplate = appString(R.string.cache_cleared)
+    LaunchedEffect(Unit) { size = CacheCleaner.sizeNow(context) }
     SwitchRow(
         title = appString(R.string.cache_auto),
         iconRes = R.drawable.ic_set_hold,
@@ -130,10 +134,15 @@ internal fun CacheBlock(repo: SettingsRepository, settings: SemoSettings) {
         subtitle = appString(R.string.cache_auto_sub)
     ) { v -> scope.launch { repo.setAutoCacheClear(v) } }
     Divider()
-    ActionRow(appString(R.string.cache_clear_now)) {
+    val sizeText = if (size < 0L) "…" else Formatter.formatShortFileSize(context, size)
+    ActionRow(appString(R.string.cache_clear_now) + " (" + sizeText + ")") {
+        if (busy) return@ActionRow
+        busy = true
         scope.launch {
-            val freed = CacheCleaner.clearNow(context)
+            val freed = CacheCleaner.clearNow(context, force = true)
             status = doneTemplate.format(Formatter.formatShortFileSize(context, freed))
+            size = CacheCleaner.sizeNow(context)
+            busy = false
         }
     }
     if (status.isNotEmpty()) StatusLine(status, true)

@@ -78,8 +78,8 @@
     <string name="voice_dialect_tn">Tunisia</string>
     <string name="voice_dialect_dz">Algeria</string>
     <string name="voice_dialect_ma">Morocco</string>
-    <string name="voice_builtin_title">Built-in Arabic engine</string>
-    <string name="voice_builtin_hint">Works without Google speech services and without internet, on any device. Downloads an open-source model (Vosk, Apache 2.0, about 320 MB) from alphacephei.com once. Standard Arabic is recognized best, dialects less accurately. Wi-Fi recommended.\n\nOnce downloaded, Arabic voice input always uses this built-in engine and never touches the system or Google recognizer. The system recognizer is only used before the built-in model is downloaded, or for other languages.</string>
+    <string name="voice_builtin_title">Built-in speech engines</string>
+    <string name="voice_builtin_hint">Work without Google speech services and without internet. Download the model of each language you want once (Vosk, Apache 2.0) from alphacephei.com: Arabic is about 333 MB, other languages 32 to 144 MB. Wi-Fi recommended.\n\nVoice typing uses only these engines, with no system or Google fallback. It keeps listening until you press stop, using the model of the current keyboard language.</string>
     <string name="voice_builtin_status_missing">Not downloaded</string>
     <string name="voice_builtin_status_ready">Ready, works offline</string>
     <string name="voice_builtin_status_downloading">Downloading</string>
@@ -90,7 +90,7 @@
     <string name="voice_builtin_failed_unknown">Something went wrong. Try again.</string>
     <string name="voice_builtin_cancel">Cancel</string>
     <string name="voice_builtin_delete">Delete</string>
-    <string name="voice_builtin_always_on">Always on automatically: once the built-in engine is downloaded, Arabic never reaches the system or Google recognizer.</string>
+    <string name="voice_builtin_always_on">Always on: these engines are the only ones used for voice typing.</string>
     <string name="suggest_removed">Removed \u201C%1$s\u201D from suggestions</string>
     <string name="suggest_undo">Undo</string>
     <string name="suggest_remove_action">Remove word from suggestions</string>
@@ -101,4 +101,5 @@
     <string name="blocked_restore">Restore</string>
     <string name="blocked_restore_all">Restore all removed words</string>
     <string name="smartfix_title">Smart fix (fix the sentence)</string>
+    <string name="voice_lang_no_model">No speech model available for this language</string>
 </resources>

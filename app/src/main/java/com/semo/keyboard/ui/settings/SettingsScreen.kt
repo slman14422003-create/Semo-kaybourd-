@@ -96,7 +96,7 @@ import com.semo.keyboard.domain.model.SpaceBarAction
 
 
 /** صفحات الإعدادات: رئيسية بأقسام مرتبة، وكل قسم صفحة فرعية */
-internal enum class SettingsPage { HOME, LANGUAGES, TYPING, SHORTCUTS, APPEARANCE, TOUCH, VOICE, DICTIONARY, PRIVACY, ABOUT }
+internal enum class SettingsPage { HOME, LANGUAGES, TYPING, SHORTCUTS, APPEARANCE, TOUCH, DOWNLOADS, DICTIONARY, PRIVACY, ABOUT }
 
 internal object SettingsDeepLink {
     val page = androidx.compose.runtime.mutableStateOf<String?>(null)
@@ -118,7 +118,7 @@ internal fun SettingsScreen(
     var page by rememberSaveable { mutableStateOf(SettingsPage.HOME) }
     val deepLink = SettingsDeepLink.page.value
     LaunchedEffect(deepLink) {
-        if (deepLink == "voice") page = SettingsPage.VOICE
+        if (deepLink == "voice" || deepLink == "downloads") page = SettingsPage.DOWNLOADS
         if (deepLink != null) SettingsDeepLink.page.value = null
     }
     // زر الرجوع: من «اختصارات النص» لصفحة الكتابة، ومن أي صفحة أخرى للرئيسية
@@ -163,8 +163,8 @@ internal fun SettingsScreen(
             SettingsPage.SHORTCUTS -> ShortcutsPage(repo, shortcutsRepo, settings) { page = SettingsPage.TYPING }
             SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home)
             SettingsPage.TOUCH -> TouchPage(repo, settings, home)
-            SettingsPage.VOICE -> VoicePage(repo, settings, home)
-            SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.LANGUAGES }
+            SettingsPage.DOWNLOADS -> DownloadsPage(repo, settings, home)
+            SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.DOWNLOADS }
             SettingsPage.PRIVACY -> PrivacyPage(repo, clipboardRepo, settings, home)
             SettingsPage.ABOUT -> AboutPage(repo, onReplay, home)
         }
@@ -315,11 +315,10 @@ private fun HomePage(
             ) { onOpen(SettingsPage.TOUCH) }
             Divider()
             NavRow(
-                com.semo.keyboard.ui.appString(R.string.voice_title),
-                com.semo.keyboard.ui.appString(dialectRes(settings.voiceDialect)) +
-                    if (settings.voiceOfflineFirst) " · " + com.semo.keyboard.ui.appString(R.string.voice_pack_installed_short) else "",
-                R.drawable.ic_ios_mic, IconOrange
-            ) { onOpen(SettingsPage.VOICE) }
+                L("التنزيلات والتخزين"),
+                L("حزم الصوت · القواميس ونماذج الجمل · الكاش"),
+                R.drawable.ic_set_dictionary, IconTeal
+            ) { onOpen(SettingsPage.DOWNLOADS) }
             Divider()
             NavRow(
                 L("القاموس والكلمات"),
@@ -711,9 +710,6 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 Hint(L("حرّكه لفوق أو لتحت حتى تصير الأيقونة بمحاذاة زر إخفاء الكيبورد تمامًا. الوضع التلقائي مضبوط على منتصف شريط التنقل."))
             }
         }
-        Section(com.semo.keyboard.ui.appString(R.string.perf_title)) {
-            CacheBlock(repo, settings)
-        }
     }
 }
 
@@ -837,14 +833,14 @@ private fun DictionaryPage(learnedRepo: LearnedWordsRepository, learned: List<St
     SubPage(L("القاموس والكلمات"), onBack) {
         Section(L("القاموس")) {
             Text(
-                L("القاموس ونموذج الجمل لكل لغة (إنكليزي، عربي، وغيرهم) بيتنزّلوا من مكتبة اللغات."),
+                L("القاموس ونموذج الجمل لكل لغة (إنكليزي، عربي، وغيرهم) بيتنزّلوا من صفحة «التنزيلات والتخزين»."),
                 color = SemoPalette.TextSecondary,
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(14.dp)
             )
             Divider()
-            ActionRow(L("فتح مكتبة اللغات والتنزيل"), onClick = onOpenLanguages)
+            ActionRow(L("فتح صفحة التنزيلات والتخزين"), onClick = onOpenLanguages)
         }
         Section(L("الكلمات المتعلَّمة")) {
             Text(

@@ -515,7 +515,7 @@ class KeyboardViewModel(
                 }
             }
             KeyAction.Globe -> bridge.switchKeyboard()
-            KeyAction.Mic -> bridge.startVoiceInput()
+            KeyAction.Mic -> openVoice()
             KeyAction.HideKeyboard -> bridge.hideKeyboard()
             KeyAction.None -> Unit
         }

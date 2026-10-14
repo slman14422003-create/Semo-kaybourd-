@@ -41,6 +41,15 @@ object DictionaryManager {
 
     @Volatile private var appContext: Context? = null
 
+    /** اللغة الجاري تنزيلها الآن (null = لا تنزيل) ونص التقدم، لتبقى الواجهة صحيحة حتى لو غادر المستخدم الصفحة وعاد */
+    val activeLanguage = kotlinx.coroutines.flow.MutableStateFlow<KeyboardLanguage?>(null)
+    val progressText = kotlinx.coroutines.flow.MutableStateFlow("")
+    val lastResult = kotlinx.coroutines.flow.MutableStateFlow("")
+
+    fun downloadedBytes(context: Context, language: KeyboardLanguage): Long =
+        wordsFile(context, language).let { if (it.exists()) it.length() else 0L } +
+            modelFile(context, language).let { if (it.exists()) it.length() else 0L }
+
     /** نجرّب القائمة الكاملة (نقرأ أول 100 ألف كلمة صالحة فقط) ثم نرجع لقائمة الـ50 ألف لو تعذّرت */
     private fun urls(language: KeyboardLanguage): List<String> {
         val code = language.code
@@ -158,6 +167,26 @@ object DictionaryManager {
 
     /** ينزّل قاموس [language] ونموذج جمله ويحمّلهما. فشل القاموس = فشل كامل، وفشل الجمل وحده لا يمنع القاموس. */
     fun download(
+        context: Context,
+        language: KeyboardLanguage,
+        onProgress: (String) -> Unit
+    ): Result<DownloadInfo> {
+        synchronized(activeLanguage) {
+            if (activeLanguage.value != null) return Result.failure(IllegalStateException("busy"))
+            activeLanguage.value = language
+        }
+        progressText.value = ""
+        try {
+            return downloadInternal(context, language) { message ->
+                progressText.value = message
+                onProgress(message)
+            }
+        } finally {
+            activeLanguage.value = null
+        }
+    }
+
+    private fun downloadInternal(
         context: Context,
         language: KeyboardLanguage,
         onProgress: (String) -> Unit

@@ -220,20 +220,15 @@ internal fun SwitchRow(
 }
 
 /**
- * مكتبة اللغات: كل لغة تُفعَّل لتظهر بدورة الكرة الأرضية، وتُنزَّل لها قاموس شيوع ونموذج جمل
- * (للإكمال وتوقّع الكلمة التالية وتتمة الجمل). العربي والإنكليزي مدمجان، والتنزيل يزيدهما قوة.
+ * مكتبة اللغات: كل لغة تُفعَّل لتظهر بدورة الكرة الأرضية. التنزيل نفسه (قاموس ونموذج جمل) صار من صفحة «التنزيلات والتخزين».
  */
 @Composable
 internal fun LanguageLibraryBlock(repo: SettingsRepository, settings: SemoSettings) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf<KeyboardLanguage?>(null) }
-    var refresh by remember { mutableStateOf(0) }
     Section(L("مكتبة اللغات")) {
         Text(
-            L("فعّل اللغات اللي بدك إياها بدورة زر الكرة الأرضية، ونزّل لكل لغة قاموسها ونموذج جملها (بيشتغلوا بعدها بدون إنترنت). ") +
-                L("القواميس من FrequencyWords (CC-BY-SA 4.0) والجمل من Tatoeba (CC-BY 2.0 FR)."),
+            L("فعّل اللغات اللي بدك إياها بدورة زر الكرة الأرضية. تنزيل القاموس ونموذج الجمل لكل لغة من صفحة «التنزيلات والتخزين» بالإعدادات."),
             color = SemoPalette.TextHint,
             fontSize = 12.sp,
             lineHeight = 18.sp,
@@ -242,8 +237,8 @@ internal fun LanguageLibraryBlock(repo: SettingsRepository, settings: SemoSettin
         KeyboardLanguage.values().forEach { lang ->
             Divider()
             val on = lang in settings.enabledLanguages
-            val hasWords = remember(refresh, busy) { DictionaryManager.hasWords(context, lang) }
-            val hasModel = remember(refresh, busy) { DictionaryManager.hasModel(context, lang) }
+            val hasWords = DictionaryManager.hasWords(context, lang)
+            val hasModel = DictionaryManager.hasModel(context, lang)
             val state = when {
                 hasWords && hasModel -> L("منزَّلة: قاموس + نموذج جمل")
                 hasWords -> L("منزَّلة: قاموس فقط")
@@ -259,45 +254,6 @@ internal fun LanguageLibraryBlock(repo: SettingsRepository, settings: SemoSettin
                     }
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 14.dp, bottom = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SolidButton(
-                    text = if (busy == lang) L("جاري التنزيل...") else if (hasWords) L("تحديث") else L("تنزيل"),
-                    enabled = busy == null,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    scope.launch {
-                        busy = lang
-                        status = L("جاري الاتصال...")
-                        val result = withContext(Dispatchers.IO) {
-                            DictionaryManager.download(context, lang) { message -> status = message }
-                        }
-                        result.onSuccess { info ->
-                            status = "${L("تم تنزيل ")}${lang.nativeName}: ${info.words}${L(" كلمة")}" +
-                                if (info.sentences > 0) "${L(" + نموذج من ")}${info.sentences}${L(" جملة")}" else L(" (تعذّر نموذج الجمل، القاموس يعمل)")
-                            if (lang !in settings.enabledLanguages) repo.setEnabledLanguages(settings.enabledLanguages + lang)
-                        }.onFailure {
-                            status = L("فشل التنزيل، تأكد من الاتصال بالإنترنت ثم أعد المحاولة")
-                        }
-                        busy = null
-                        refresh++
-                    }
-                }
-                if (hasWords) {
-                    SolidButton(text = L("حذف"), enabled = busy == null, modifier = Modifier.weight(1f)) {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { DictionaryManager.delete(context, lang) }
-                            status = "${L("حُذف ما نُزِّل للغة ")}${lang.nativeName}"
-                            refresh++
-                        }
-                    }
-                }
-            }
-        }
-        if (status.isNotEmpty()) {
-            Text(status, color = SemoPalette.TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(14.dp))
         }
     }
 }

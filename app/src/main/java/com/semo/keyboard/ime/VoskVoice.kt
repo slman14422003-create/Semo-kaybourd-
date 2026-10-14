@@ -24,13 +24,13 @@ class VoskVoice(
     var active: Boolean = false
         private set
 
-    fun start() {
+    fun start(code: String) {
         stopLoop(cancelled = true)
         val gen = ++generation
         active = true
         callback.onStatus(VoiceStatus.STARTING)
         Thread({
-            val model = VoskModelManager.loadModel(context)
+            val model = VoskModelManager.loadModel(context, code)
             main.post {
                 if (gen != generation || !active) {
                     if (model != null) VoskModelManager.idle()

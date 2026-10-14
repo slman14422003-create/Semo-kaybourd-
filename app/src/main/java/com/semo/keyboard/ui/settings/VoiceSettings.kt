@@ -29,10 +29,9 @@ import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.VoiceDialect
-import com.semo.keyboard.ime.OfflinePack
-import com.semo.keyboard.ime.OfflineSpeech
 import com.semo.keyboard.ime.VoskFailure
 import com.semo.keyboard.ime.VoskModelManager
+import com.semo.keyboard.ime.VoskModels
 import com.semo.keyboard.ime.VoskState
 import com.semo.keyboard.ime.VoiceLanguages
 import com.semo.keyboard.ui.appString
@@ -60,77 +59,15 @@ internal fun dialectRes(dialect: VoiceDialect): Int = when (dialect) {
     VoiceDialect.MOROCCO -> R.string.voice_dialect_ma
 }
 
-private class PackRow(val tag: String, val name: String)
-
 @Composable
-internal fun VoicePage(repo: SettingsRepository, settings: SemoSettings, onBack: () -> Unit) {
+internal fun VoiceDownloadsBlock() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val packs = remember { mutableStateMapOf<String, OfflinePack>() }
-    val busy = remember { mutableStateMapOf<String, Boolean>() }
-    val progress = remember { mutableStateMapOf<String, Int>() }
-    var message by remember { mutableStateOf("") }
-    val builtin by VoskModelManager.state.collectAsState()
+    val allStates by VoskModelManager.states.collectAsState()
     LaunchedEffect(Unit) { VoskModelManager.refresh(context) }
 
-    val arabicName = appString(R.string.lang_arabic)
-    val rows = remember(settings.voiceDialect, settings.enabledLanguages) {
-        val list = ArrayList<PackRow>()
-        list.add(PackRow(VoiceLanguages.tagFor(KeyboardLanguage.ARABIC, dialect = settings.voiceDialect), arabicName))
-        settings.enabledLanguages.filter { it != KeyboardLanguage.ARABIC }.forEach { lang ->
-            list.add(PackRow(VoiceLanguages.tagFor(lang), lang.nativeName))
-        }
-        list.distinctBy { it.tag }
-    }
-
-    LaunchedEffect(rows) {
-        rows.forEach { row ->
-            OfflineSpeech.check(context, row.tag) { packs[row.tag] = it }
-        }
-    }
-
-    val doneText = appString(R.string.voice_pack_done)
-    val failedText = appString(R.string.voice_pack_failed)
-    val checkingText = appString(R.string.voice_pack_checking)
-    val installedText = appString(R.string.voice_pack_installed)
-    val missingText = appString(R.string.voice_pack_downloadable)
-    val pendingText = appString(R.string.voice_pack_pending)
-    val unsupportedText = appString(R.string.voice_pack_unsupported)
-    val downloadingText = appString(R.string.voice_pack_downloading)
     val downloadLabel = appString(R.string.voice_pack_download)
 
-    SubPage(appString(R.string.voice_title), onBack) {
-        Section(appString(R.string.voice_dialect_title)) {
-            Text(
-                appString(R.string.voice_dialect_hint),
-                color = SemoPalette.TextHint,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(14.dp)
-            )
-            VoiceDialect.values().forEach { dialect ->
-                Divider()
-                val selected = dialect == settings.voiceDialect
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { scope.launch { repo.setVoiceDialect(dialect) } }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconBadge(R.drawable.ic_ios_globe, if (selected) IconGreen else IconGray)
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        appString(dialectRes(dialect)),
-                        color = SemoPalette.TextPrimary,
-                        fontSize = 15.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    CheckDot(selected, 22)
-                }
-            }
-        }
-
+    run {
         Section(appString(R.string.voice_builtin_title)) {
             Text(
                 appString(R.string.voice_builtin_hint),
@@ -139,56 +76,81 @@ internal fun VoicePage(repo: SettingsRepository, settings: SemoSettings, onBack:
                 lineHeight = 18.sp,
                 modifier = Modifier.padding(14.dp)
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconBadge(R.drawable.ic_ios_mic, if (builtin == VoskState.Ready) IconGreen else IconBlue)
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(appString(R.string.lang_arabic), color = SemoPalette.TextPrimary, fontSize = 15.sp)
-                    val status = when (val st = builtin) {
-                        is VoskState.Downloading -> appString(R.string.voice_builtin_status_downloading) + " " + st.percent + "%"
-                        is VoskState.Extracting -> appString(R.string.voice_builtin_status_extracting) + " " + st.percent + "%"
-                        VoskState.Ready -> appString(R.string.voice_builtin_status_ready)
-                        else -> appString(R.string.voice_builtin_status_missing)
-                    }
-                    Text(status, color = SemoPalette.TextHint, fontSize = 12.sp)
-                }
-                when (builtin) {
-                    is VoskState.Downloading, is VoskState.Extracting -> SolidButton(
-                        text = appString(R.string.voice_builtin_cancel),
-                        enabled = true,
-                        modifier = Modifier.width(104.dp)
-                    ) { VoskModelManager.cancel() }
-                    VoskState.Ready -> SolidButton(
-                        text = appString(R.string.voice_builtin_delete),
-                        enabled = true,
-                        modifier = Modifier.width(104.dp)
-                    ) { VoskModelManager.delete(context) }
-                    else -> SolidButton(
-                        text = downloadLabel,
-                        enabled = true,
-                        modifier = Modifier.width(104.dp)
-                    ) { VoskModelManager.download(context) }
-                }
-            }
-            (builtin as? VoskState.Failed)?.let { failed ->
-                Text(
-                    appString(
-                        when (failed.reason) {
-                            VoskFailure.NETWORK -> R.string.voice_builtin_failed_network
-                            VoskFailure.SPACE -> R.string.voice_builtin_failed_space
-                            VoskFailure.CORRUPT -> R.string.voice_builtin_failed_corrupt
-                            VoskFailure.UNKNOWN -> R.string.voice_builtin_failed_unknown
+            KeyboardLanguage.values().forEach { lang ->
+                val spec = VoskModels.specFor(lang.code)
+                Divider()
+                if (spec == null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconBadge(R.drawable.ic_ios_mic, IconGray)
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(lang.nativeName, color = SemoPalette.TextPrimary, fontSize = 15.sp)
+                            Text(appString(R.string.voice_lang_no_model), color = SemoPalette.TextHint, fontSize = 12.sp)
                         }
-                    ),
-                    color = SemoPalette.TextSecondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                )
+                    }
+                } else {
+                    val st = VoskModelManager.stateOf(allStates, lang.code)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconBadge(R.drawable.ic_ios_mic, if (st == VoskState.Ready) IconGreen else IconBlue)
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(lang.nativeName, color = SemoPalette.TextPrimary, fontSize = 15.sp)
+                            val status = when (st) {
+                                is VoskState.Downloading -> appString(R.string.voice_builtin_status_downloading) + " " + st.percent + "%"
+                                is VoskState.Extracting -> appString(R.string.voice_builtin_status_extracting) + " " + st.percent + "%"
+                                VoskState.Ready -> appString(R.string.voice_builtin_status_ready) + " · " +
+                                    android.text.format.Formatter.formatShortFileSize(
+                                        context,
+                                        remember(st) { VoskModelManager.installedBytes(context, lang.code) }
+                                    )
+                                else -> appString(R.string.voice_builtin_status_missing) + " (" + spec.megabytes + " MB)"
+                            }
+                            Text(status, color = SemoPalette.TextHint, fontSize = 12.sp)
+                        }
+                        when (st) {
+                            is VoskState.Downloading, is VoskState.Extracting -> SolidButton(
+                                text = appString(R.string.voice_builtin_cancel),
+                                enabled = true,
+                                modifier = Modifier.width(104.dp)
+                            ) { VoskModelManager.cancel(lang.code) }
+                            VoskState.Ready -> SolidButton(
+                                text = appString(R.string.voice_builtin_delete),
+                                enabled = true,
+                                modifier = Modifier.width(104.dp)
+                            ) { VoskModelManager.delete(context, lang.code) }
+                            else -> SolidButton(
+                                text = downloadLabel,
+                                enabled = true,
+                                modifier = Modifier.width(104.dp)
+                            ) { VoskModelManager.download(context, lang.code) }
+                        }
+                    }
+                    (st as? VoskState.Failed)?.let { failed ->
+                        Text(
+                            appString(
+                                when (failed.reason) {
+                                    VoskFailure.NETWORK -> R.string.voice_builtin_failed_network
+                                    VoskFailure.SPACE -> R.string.voice_builtin_failed_space
+                                    VoskFailure.CORRUPT -> R.string.voice_builtin_failed_corrupt
+                                    VoskFailure.UNKNOWN -> R.string.voice_builtin_failed_unknown
+                                }
+                            ),
+                            color = SemoPalette.TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
             }
             Divider()
             Text(
@@ -198,89 +160,6 @@ internal fun VoicePage(repo: SettingsRepository, settings: SemoSettings, onBack:
                 lineHeight = 18.sp,
                 modifier = Modifier.padding(14.dp)
             )
-        }
-
-        Section(appString(R.string.voice_offline_title)) {
-            Text(
-                appString(R.string.voice_offline_hint),
-                color = SemoPalette.TextHint,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(14.dp)
-            )
-            SwitchRow(
-                appString(R.string.voice_offline_pref_title),
-                R.drawable.ic_ios_mic,
-                IconOrange,
-                settings.voiceOfflineFirst,
-                subtitle = appString(R.string.voice_offline_pref_hint)
-            ) { scope.launch { repo.setVoiceOfflineFirst(it) } }
-            rows.forEach { row ->
-                Divider()
-                val pack = packs[row.tag]
-                val working = busy[row.tag] == true
-                val status = when {
-                    working -> downloadingText + (progress[row.tag]?.takeIf { it > 0 }?.let { " $it%" } ?: "")
-                    pack == null -> checkingText
-                    pack == OfflinePack.INSTALLED -> installedText
-                    pack == OfflinePack.PENDING -> pendingText
-                    pack == OfflinePack.DOWNLOADABLE -> missingText
-                    else -> unsupportedText
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconBadge(R.drawable.ic_ios_mic, if (pack == OfflinePack.INSTALLED) IconGreen else IconBlue)
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(row.name, color = SemoPalette.TextPrimary, fontSize = 15.sp)
-                        Text("${row.tag} · $status", color = SemoPalette.TextHint, fontSize = 12.sp)
-                    }
-                    if (pack == OfflinePack.DOWNLOADABLE || pack == OfflinePack.PENDING || working) {
-                        SolidButton(
-                            text = downloadLabel,
-                            enabled = !working,
-                            modifier = Modifier.width(104.dp)
-                        ) {
-                            busy[row.tag] = true
-                            progress[row.tag] = 0
-                            message = ""
-                            OfflineSpeech.download(
-                                context,
-                                row.tag,
-                                { percent -> progress[row.tag] = percent },
-                                { result ->
-                                    busy[row.tag] = false
-                                    packs[row.tag] = result
-                                    message = if (result == OfflinePack.INSTALLED) doneText else failedText
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            if (message.isNotEmpty()) {
-                Text(message, color = SemoPalette.TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(14.dp))
-            }
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    appString(if (OfflineSpeech.canManage) R.string.voice_unsupported_hint else R.string.voice_old_android_hint),
-                    color = SemoPalette.TextHint,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp
-                )
-                SolidButton(
-                    text = appString(R.string.voice_open_system),
-                    enabled = true,
-                    modifier = Modifier.fillMaxWidth()
-                ) { OfflineSpeech.openSystemSettings(context) }
-            }
         }
     }
 }

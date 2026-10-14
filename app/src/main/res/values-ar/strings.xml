@@ -78,8 +78,8 @@
     <string name="voice_dialect_tn">تونس</string>
     <string name="voice_dialect_dz">الجزائر</string>
     <string name="voice_dialect_ma">المغرب</string>
-    <string name="voice_builtin_title">محرك التعرّف العربي المدمج</string>
-    <string name="voice_builtin_hint">يعمل بدون خدمات الكلام من Google وبدون إنترنت وعلى أي جهاز. ينزّل مرة واحدة نموذجًا مفتوح المصدر (Vosk، رخصة Apache 2.0، حوالي 320 ميغابايت) من alphacephei.com. يتعرّف على الفصحى بأفضل دقة وعلى اللهجات بدقة أقل. يُفضَّل التنزيل عبر Wi-Fi.\n\nبعد التنزيل: الميكروفون بالعربية بيستخدم هاد المحرك المدمج دائمًا ولا يلمس تعرّف النظام أو Google إطلاقًا. محرك النظام بيُستخدم فقط لو لسا ما نزّلت المحرك المدمج، أو للغات الثانية غير العربية.</string>
+    <string name="voice_builtin_title">محركات التعرّف الصوتي المدمجة</string>
+    <string name="voice_builtin_hint">تعمل بدون خدمات الكلام من Google وبدون إنترنت. نزّل نموذج اللغة التي تريدها مرة واحدة (Vosk، رخصة Apache 2.0) من alphacephei.com: العربية حوالي 333 ميغابايت، وباقي اللغات بين 32 و144 ميغابايت. يُفضَّل التنزيل عبر Wi-Fi.\n\nالكتابة الصوتية تعمل بهذه المحركات فقط، بلا أي محرك احتياطي من النظام أو Google. تسمع باستمرار حتى تضغط إيقاف، وتستخدم نموذج لغة الكيبورد الحالية.</string>
     <string name="voice_builtin_status_missing">غير منزَّل</string>
     <string name="voice_builtin_status_ready">جاهز ويعمل بدون إنترنت</string>
     <string name="voice_builtin_status_downloading">جارٍ التنزيل</string>
@@ -90,7 +90,7 @@
     <string name="voice_builtin_failed_unknown">حدث خطأ. أعد المحاولة.</string>
     <string name="voice_builtin_cancel">إلغاء</string>
     <string name="voice_builtin_delete">حذف</string>
-    <string name="voice_builtin_always_on">مفعّل تلقائيًا دائمًا: بمجرد تنزيل المحرك المدمج، ما في أي اتصال بمحرك النظام أو Google للعربية.</string>
+    <string name="voice_builtin_always_on">مفعّل دائماً: هذه المحركات هي الوحيدة للكتابة الصوتية.</string>
     <string name="suggest_removed">تم حذف \u00AB%1$s\u00BB من الاقتراحات</string>
     <string name="suggest_undo">تراجع</string>
     <string name="suggest_remove_action">حذف الكلمة من الاقتراحات</string>
@@ -101,4 +101,5 @@
     <string name="blocked_restore">استعادة</string>
     <string name="blocked_restore_all">استعادة كل الكلمات المحذوفة</string>
     <string name="smartfix_title">كتابة ذكية (تصحيح الجملة)</string>
+    <string name="voice_lang_no_model">لا يوجد نموذج صوتي لهذه اللغة</string>
 </resources>
