@@ -543,7 +543,7 @@ class KeyboardViewModel(
      * اختصار نصي من المستخدم، ثم جدول التصحيح (اختصارات وهمزات)، ثم التصحيح الإملائي الحذر.
      */
     private fun applyAutoCorrect(before: String): Correction? {
-        if (!transient.value.suggestionsAllowed) return null
+        if (!transient.value.suggestionsAllowed || transient.value.fieldKind == FieldKind.URL) return null
         val state = uiState.value
         val word = SuggestionEngine.currentWord(before)
         if (word.isEmpty()) return null
@@ -1047,7 +1047,8 @@ class KeyboardViewModel(
         transient.update { if (it.shift == ShiftState.ON) it.copy(shift = ShiftState.OFF) else it }
     }
 
-    private fun canLearn(): Boolean = uiState.value.suggestionsEnabled && transient.value.suggestionsAllowed
+    private fun canLearn(): Boolean =
+        uiState.value.suggestionsEnabled && transient.value.suggestionsAllowed && transient.value.fieldKind != FieldKind.URL
 
     private fun normalizeForLearning(word: String): String =
         if (word.firstOrNull()?.code?.let { it < 0x0600 } == true) word.lowercase() else word

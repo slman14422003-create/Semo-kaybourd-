@@ -729,7 +729,6 @@ class SemoKeyboardService :
             inputClass != InputType.TYPE_CLASS_TEXT ||
             (isTextClass && (
                 variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
-                    variation == InputType.TYPE_TEXT_VARIATION_URI ||
                     variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
                 )) ||
             ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
