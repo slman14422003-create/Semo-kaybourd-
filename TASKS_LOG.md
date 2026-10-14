@@ -137,3 +137,13 @@
 - دورة الحياة: onDestroy يلغي clipJob ويمسح كل مهام mainHandler (كان pollTask يبقى مجدولًا)، وMainActivity يربط مزامنة الأيقونة بـ lifecycleScope بدل CoroutineScope يتيم.
 - إزالة غير المستخدم: dismissFreshClip، DictionaryManager.isAvailable وhasDownloaded، setVoiceBuiltinFirst وكل سلسلة voiceBuiltinFirst وVoiceOptions.builtinFirst، PasteGreen، IosSnappyDamping وIosBouncyDamping، VoskModelManager.ARABIC_LABEL، نصان voice_builtin_pref_*، سبع أيقونات drawable غير مستعملة، و184 import زائدًا.
 - لم يُبنَ بـ Gradle بعد (لا شبكة ببيئة التنفيذ)؛ راجع مخرجات البناء أولًا لو ظهر خطأ.
+
+## مهمة: ميزة آيفون للترقيم + استقرار التطبيق (3.9.7، versionCode 38)
+- ترقيم بنمط آيفون: بعد اختيار اقتراح أو كلمة من الكتابة بالسحب (تُضاف مسافة تلقائيًا)، كتابة علامة ترقيم (. , ! ? ; : ، ؛ ؟) تحذف تلك المسافة وتضع العلامة، ومع . , ! ? ، ؟ تضيف مسافة بعدها وتفعّل الحرف الكبير بعد نهاية الجملة. العلم autoSpace يُصفَّر مع أي ضغطة أخرى، ولا يعمل بحقول البريد والروابط وكلمات المرور لأن الاقتراحات معطّلة فيها.
+- استقرار: كل launch بالـ ViewModel صار عبر launchSafe مع CoroutineExceptionHandler (استثناء بالخلفية لا يُسقط عملية اللوحة)، وبقية الـ launch الخلفية فيها المعالج نفسه. مخزن DataStore فيه ReplaceFileCorruptionHandler لتفادي كراش متكرر لو تلف ملف الإعدادات.
+- لم يُبنَ بـ Gradle بعد.
+
+## مهمة: تسهيل التحكم بلوحة حقول الروابط والبريد (3.9.8، versionCode 39)
+- صف الأسفل بحقل الرابط (مثل شريط عنوان كروم): شريط المسافة أعرض (3.0 بدل 2.2، وبوضع الأزرار 2.4 بدل 1.8) لأن الكتابة العربية بالبحث تحتاجه، ومفتاح الإدخال أضيق قليلًا (2.0).
+- ضغط مطوّل على النقطة: - _ ~، وعلى /: ? & = # :، وعلى .com: .net .org .sa .edu .io، وعلى @ بحقل البريد: _ - +.
+- لم يُبنَ بـ Gradle بعد.

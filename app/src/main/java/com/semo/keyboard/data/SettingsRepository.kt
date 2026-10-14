@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.semo.keyboard.domain.model.AnimationSpeed
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
@@ -44,7 +45,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 
 /** مخزن الحافظة والكلمات المتعلَّمة: بالتخزين المشفّر (CE) كي لا يُقرأ قبل فك قفل الجهاز */
-internal val Context.semoDataStore by preferencesDataStore(name = "semo_keyboard_settings")
+internal val Context.semoDataStore by preferencesDataStore(
+    name = "semo_keyboard_settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
 
 /**
  * هل فُكّ قفل المستخدم منذ تشغيل الجهاز؟ قبل ذلك (Direct Boot) التخزين المشفّر غير متاح ولا يجوز لمسه.

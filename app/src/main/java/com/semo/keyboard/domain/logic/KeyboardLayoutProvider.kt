@@ -439,14 +439,14 @@ object KeyboardLayoutProvider {
                 left.copy(weight = 1.25f),
                 globe.copy(weight = 1.0f),
                 emoji.copy(weight = 1.0f),
-                KeyDefinition("@", KeyAction.Character("@"), weight = 1.0f),
+                KeyDefinition("@", KeyAction.Character("@"), weight = 1.0f, longPressChars = listOf("_", "-", "+")),
                 KeyDefinition(spaceLabel, KeyAction.Space, weight = 2.6f),
                 KeyDefinition(".", KeyAction.Character("."), weight = 1.0f),
                 enterKey(state.enterKind, state.language).copy(weight = 2.15f)
             ) else listOf(
                 left.copy(weight = 1.25f),
                 emoji.copy(weight = 1.1f),
-                KeyDefinition("@", KeyAction.Character("@"), weight = 1.1f),
+                KeyDefinition("@", KeyAction.Character("@"), weight = 1.1f, longPressChars = listOf("_", "-", "+")),
                 KeyDefinition(spaceLabel, KeyAction.Space, weight = 3.3f),
                 KeyDefinition(".", KeyAction.Character("."), weight = 1.1f),
                 enterKey(state.enterKind, state.language).copy(weight = 2.15f)
@@ -455,19 +455,19 @@ object KeyboardLayoutProvider {
                 left.copy(weight = 1.2f),
                 globe.copy(weight = 0.9f),
                 emoji.copy(weight = 0.9f),
-                KeyDefinition(spaceLabel, KeyAction.Space, weight = 1.8f),
-                KeyDefinition(".", KeyAction.Character("."), weight = 0.8f),
-                KeyDefinition("/", KeyAction.Character("/"), weight = 0.8f),
-                KeyDefinition(".com", KeyAction.Character(".com"), weight = 1.3f),
-                enterKey(state.enterKind, state.language).copy(weight = 2.3f)
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 2.4f),
+                KeyDefinition(".", KeyAction.Character("."), weight = 0.8f, longPressChars = urlDotAlts),
+                KeyDefinition("/", KeyAction.Character("/"), weight = 0.8f, longPressChars = urlSlashAlts),
+                KeyDefinition(".com", KeyAction.Character(".com"), weight = 1.2f, longPressChars = urlDomainAlts),
+                enterKey(state.enterKind, state.language).copy(weight = 2.0f)
             ) else listOf(
                 left.copy(weight = 1.2f),
                 emoji.copy(weight = 1.0f),
-                KeyDefinition(spaceLabel, KeyAction.Space, weight = 2.2f),
-                KeyDefinition(".", KeyAction.Character("."), weight = 0.9f),
-                KeyDefinition("/", KeyAction.Character("/"), weight = 0.9f),
-                KeyDefinition(".com", KeyAction.Character(".com"), weight = 1.5f),
-                enterKey(state.enterKind, state.language).copy(weight = 2.3f)
+                KeyDefinition(spaceLabel, KeyAction.Space, weight = 3.0f),
+                KeyDefinition(".", KeyAction.Character("."), weight = 0.8f, longPressChars = urlDotAlts),
+                KeyDefinition("/", KeyAction.Character("/"), weight = 0.8f, longPressChars = urlSlashAlts),
+                KeyDefinition(".com", KeyAction.Character(".com"), weight = 1.3f, longPressChars = urlDomainAlts),
+                enterKey(state.enterKind, state.language).copy(weight = 2.0f)
             )
             FieldKind.TEXT -> if (nav) listOf(
                 left,
@@ -483,6 +483,10 @@ object KeyboardLayoutProvider {
             )
         }
     }
+
+    private val urlDotAlts = listOf("-", "_", "~")
+    private val urlSlashAlts = listOf("?", "&", "=", "#", ":")
+    private val urlDomainAlts = listOf(".net", ".org", ".sa", ".edu", ".io")
 
     private fun enterKey(kind: EnterKind, language: KeyboardLanguage): KeyDefinition {
         val arabic = language.rtl

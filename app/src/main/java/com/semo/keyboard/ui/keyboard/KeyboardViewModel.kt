@@ -44,6 +44,8 @@ import com.semo.keyboard.domain.model.VoiceStatus
 import com.semo.keyboard.domain.model.VoiceUi
 import com.semo.keyboard.ime.VoiceLanguages
 import com.semo.keyboard.domain.logic.TranslateEngine
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -123,6 +125,13 @@ class KeyboardViewModel(
     }
 
     @Volatile private var lastBefore = ""
+
+    private val safeHandler = CoroutineExceptionHandler { _, _ -> }
+
+    private fun launchSafe(block: suspend CoroutineScope.() -> Unit): Job =
+        viewModelScope.launch(safeHandler, block = block)
+
+    private var autoSpace = false
 
     private fun readBefore(length: Int): String =
         bridge.textBeforeCursorWithin(length, EDIT_READ_MS, false) ?: lastBefore.takeLast(length)
@@ -222,7 +231,7 @@ class KeyboardViewModel(
         optimisticBlocked = optimisticBlocked + key
         pendingWords.removeAll { BigDictionary.key(it) == key }
         refreshSuggestions()
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.Default + safeHandler) {
             val snapshot = learnedWordsRepository.blockWord(word)
             if (snapshot == null) {
                 optimisticBlocked = optimisticBlocked - key
@@ -231,7 +240,7 @@ class KeyboardViewModel(
             removedSnapshot = snapshot
             transient.update { it.copy(removedWord = word) }
             removedJob?.cancel()
-            removedJob = viewModelScope.launch {
+            removedJob = launchSafe {
                 delay(REMOVED_NOTICE_MS)
                 dismissRemoved()
             }
@@ -244,7 +253,7 @@ class KeyboardViewModel(
         removedSnapshot = null
         val key = BigDictionary.key(snapshot.word)
         transient.update { it.copy(removedWord = null) }
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.Default + safeHandler) {
             learnedWordsRepository.restore(snapshot)
             optimisticBlocked = optimisticBlocked - key
             refreshSuggestions()
@@ -362,7 +371,7 @@ class KeyboardViewModel(
         undo = null
         refreshSuggestions()
         // اتصال الحقل قد لا يكون جاهزًا لحظة فتح اللوحة (يرجع نصًا فارغًا) فيبقى الشريط فارغًا: نعيد التحديث بعد لحظة
-        viewModelScope.launch {
+        launchSafe {
             delay(300)
             refreshSuggestions()
         }
@@ -419,6 +428,8 @@ class KeyboardViewModel(
         // أي مفتاح غير الحذف يلغي إمكانية التراجع عن التصحيح التلقائي
         val pendingUndo = undo
         undo = null
+        val hadAutoSpace = autoSpace
+        autoSpace = false
         val swipeWord = transient.value.swipeWord
         if (swipeWord != null && action != KeyAction.Shift) clearSwipe()
 
@@ -426,6 +437,14 @@ class KeyboardViewModel(
             is KeyAction.Character -> {
                 if (transient.value.freshClip != null) transient.update { it.copy(freshClip = null) }
                 val ch = action.char.first()
+                if (hadAutoSpace && ch in AUTO_SPACE_PUNCT && readBefore(1) == " ") {
+                    bridge.deleteSurrounding(1)
+                    bridge.commitText(if (ch in SPACE_AFTER_PUNCT) "$ch " else action.char)
+                    consumeOneShotShift()
+                    if (ch in SENTENCE_END) autoCapitalize(state.language)
+                    refreshSuggestions()
+                    return
+                }
                 // الأرقام ورموز العمليات لا تُنهي كلمة: نتجنّب قراءة النص من التطبيق (استدعاء بين عمليتين) بكل ضغطة رقم
                 if (!ch.isLetter() && !ch.isDigit() && ch != '\'' && ch != '’' && ch !in NON_WORD_END_SYMBOLS) {
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
@@ -485,7 +504,7 @@ class KeyboardViewModel(
                 val cycle = state.enabledLanguages.ifEmpty { listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC) }
                 val next = cycle[(cycle.indexOf(state.language) + 1) % cycle.size]
                 setPage(KeyboardPage.LETTERS)
-                viewModelScope.launch {
+                launchSafe {
                     // قاموس اللغة ونموذج جملها يُحمَّلان بالخلفية لو لم يكونا محمَّلين
                     withContext(Dispatchers.IO) { DictionaryManager.ensureLoaded(next) }
                     settingsRepository.setLanguage(next)
@@ -509,7 +528,7 @@ class KeyboardViewModel(
             bridge.deleteSurrounding(pendingUndo.fixed.length + 1)
             bridge.commitText(pendingUndo.original)
             // المستخدم رجع عن التصحيح فورًا: تعلّم ألّا تُصحَّح هذه الكلمة ثانيةً
-            viewModelScope.launch { learnedWordsRepository.ignoreCorrection(pendingUndo.original) }
+            launchSafe { learnedWordsRepository.ignoreCorrection(pendingUndo.original) }
             return
         }
         if (swipeWord != null && readBefore(swipeWord.length + 1) == "$swipeWord ") {
@@ -554,7 +573,7 @@ class KeyboardViewModel(
         val dictionary = WordLists.forLanguage(lang)
         val learned = learnedWords.value.filter { SuggestionEngine.languageOf(it, lang) == lang }
         // فك المسار على خيط خلفي: مع القاموس الكبير قد يأخذ عشرات الميلي ثانية
-        viewModelScope.launch {
+        launchSafe {
             val candidates = withContext(Dispatchers.Default) {
                 SwipeDecoder.decode(path, dictionary, learned, limit = 3 + SUGGEST_EXTRA, language = lang)
                     .filter { allowed(it) }
@@ -585,6 +604,7 @@ class KeyboardViewModel(
         consumeOneShotShift()
         learnWord(word)
         transient.update { it.copy(swipeWord = word, swipeAlternates = styledList) }
+        autoSpace = true
         refreshSuggestions()
     }
 
@@ -634,6 +654,7 @@ class KeyboardViewModel(
             scheduleLearnFlush()
         }
         consumeOneShotShift()
+        autoSpace = true
         refreshSuggestions()
     }
 
@@ -653,7 +674,7 @@ class KeyboardViewModel(
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
         bridge.commitText(emoji)
         val updated = (listOf(emoji) + state.recentEmojis.filter { it != emoji }).take(MAX_RECENT_EMOJIS)
-        viewModelScope.launch { settingsRepository.setRecentEmojis(updated) }
+        launchSafe { settingsRepository.setRecentEmojis(updated) }
     }
 
     // ---------- شريحة اللصق السريع (نص نُسخ للتو) ----------
@@ -669,7 +690,7 @@ class KeyboardViewModel(
         if (stored.isBlank()) return
         transient.update { it.copy(freshClip = stored) }
         freshClipJob?.cancel()
-        freshClipJob = viewModelScope.launch {
+        freshClipJob = launchSafe {
             delay(FRESH_CLIP_MS)
             transient.update { if (it.freshClip == stored) it.copy(freshClip = null) else it }
         }
@@ -804,7 +825,7 @@ class KeyboardViewModel(
     }
 
     fun setTranslateTarget(code: String) {
-        viewModelScope.launch {
+        launchSafe {
             settingsRepository.setTranslateTarget(code)
             transient.update { if (it.page == KeyboardPage.TRANSLATE) it.copy(page = KeyboardPage.LETTERS) else it }
             translateKey = ""
@@ -829,32 +850,32 @@ class KeyboardViewModel(
 
     private fun refreshTranslate(immediate: Boolean) {
         translateJob?.cancel()
-        translateJob = viewModelScope.launch {
+        translateJob = launchSafe {
             if (!immediate) delay(350)
-            if (transient.value.translate == null) return@launch
+            if (transient.value.translate == null) return@launchSafe
             val target = uiState.value.translateTarget
             if (!transient.value.suggestionsAllowed) {
                 translateKey = ""
                 transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi()) } ?: st }
-                return@launch
+                return@launchSafe
             }
             val text = withContext(suggestDispatcher) { hostBridge.fieldText() }.trim()
             val key = "$target|$text"
-            if (key == translateKey && !transient.value.translate!!.error) return@launch
+            if (key == translateKey && !transient.value.translate!!.error) return@launchSafe
             if (text.isEmpty()) {
                 translateKey = key
                 transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi()) } ?: st }
-                return@launch
+                return@launchSafe
             }
             val cached = TranslateEngine.cached(text, target)
             if (cached != null) {
                 translateKey = key
                 transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi(text, cached.text, cached.detected)) } ?: st }
-                return@launch
+                return@launchSafe
             }
             transient.update { st -> st.translate?.let { st.copy(translate = it.copy(source = text, loading = true, error = false)) } ?: st }
             val result = withContext(Dispatchers.IO) { TranslateEngine.translate(text, target) }
-            if (transient.value.translate == null) return@launch
+            if (transient.value.translate == null) return@launchSafe
             if (result == null) {
                 transient.update { st -> st.translate?.let { st.copy(translate = it.copy(loading = false, error = true)) } ?: st }
             } else {
@@ -879,11 +900,11 @@ class KeyboardViewModel(
             OneHandMode.RIGHT -> OneHandMode.LEFT
             OneHandMode.LEFT -> OneHandMode.OFF
         }
-        viewModelScope.launch { settingsRepository.setOneHand(next) }
+        launchSafe { settingsRepository.setOneHand(next) }
     }
 
     fun setOneHand(mode: OneHandMode) {
-        viewModelScope.launch { settingsRepository.setOneHand(mode) }
+        launchSafe { settingsRepository.setOneHand(mode) }
     }
 
     fun openSettings() = bridge.openSettings()
@@ -893,7 +914,7 @@ class KeyboardViewModel(
     fun onClipPaste(text: String) {
         when {
             text.isClipImage() -> bridge.commitImage(text.clipImageName(), text.clipImageMime())
-            text.isClipLong() -> viewModelScope.launch {
+            text.isClipLong() -> launchSafe {
                 // النص الطويل (كود مثلًا) محفوظ بملف: نقرأه بخيط خلفي ثم نلصقه كاملًا
                 val full = clipboardRepository.fullText(text)?.takeIf { it.isNotEmpty() } ?: text.clipLongPreview()
                 if (full.isNotEmpty()) {
@@ -909,18 +930,18 @@ class KeyboardViewModel(
     }
 
     fun onClipTogglePin(text: String) {
-        viewModelScope.launch { clipboardRepository.togglePin(text) }
+        launchSafe { clipboardRepository.togglePin(text) }
     }
 
     fun onClipDelete(text: String) {
-        viewModelScope.launch { clipboardRepository.remove(text) }
+        launchSafe { clipboardRepository.remove(text) }
     }
 
     /** بدء تعديل عنصر: يُحمَّل نصه الكامل ويُكتب تعديله بلوحة المفاتيح نفسها ثم يُحفظ بالضغط على ✓ */
     fun onClipEditStart(stored: String) {
         if (stored.isClipImage()) return
-        viewModelScope.launch {
-            val full = clipboardRepository.fullText(stored) ?: return@launch
+        launchSafe {
+            val full = clipboardRepository.fullText(stored) ?: return@launchSafe
             transient.update {
                 it.copy(
                     clipEdit = ClipEdit(stored, full),
@@ -940,7 +961,7 @@ class KeyboardViewModel(
     fun onClipEditSave() {
         val edit = transient.value.clipEdit ?: return
         transient.update { it.copy(clipEdit = null, page = KeyboardPage.CLIPBOARD, suggestions = emptyList(), literal = "", mathResult = null) }
-        viewModelScope.launch { clipboardRepository.replace(edit.key, edit.text) }
+        launchSafe { clipboardRepository.replace(edit.key, edit.text) }
     }
 
     fun onClipEditCancel() {
@@ -963,7 +984,7 @@ class KeyboardViewModel(
     }
 
     fun onClipClearUnpinned() {
-        viewModelScope.launch { clipboardRepository.clearUnpinned() }
+        launchSafe { clipboardRepository.clearUnpinned() }
     }
 
     fun onEditAction(action: EditAction) {
@@ -1037,7 +1058,7 @@ class KeyboardViewModel(
 
     private fun scheduleLearnFlush() {
         learnFlushJob?.cancel()
-        learnFlushJob = viewModelScope.launch {
+        learnFlushJob = launchSafe {
             delay(6_000)
             flushLearning()
         }
@@ -1051,7 +1072,7 @@ class KeyboardViewModel(
         val pairs = pendingPairs.toList()
         pendingWords.clear()
         pendingPairs.clear()
-        viewModelScope.launch(Dispatchers.Default) { learnedWordsRepository.learnBatch(words, pairs) }
+        viewModelScope.launch(Dispatchers.Default + safeHandler) { learnedWordsRepository.learnBatch(words, pairs) }
     }
 
     private fun learnWord(word: String) {
@@ -1105,17 +1126,17 @@ class KeyboardViewModel(
      */
     private fun refreshSuggestions() {
         refreshJob?.cancel()
-        refreshJob = viewModelScope.launch {
+        refreshJob = launchSafe {
             delay(30)
             val state = uiState.value
             val t = transient.value
             if (!t.suggestionsAllowed || (!state.suggestionsEnabled && !state.mathResults)) {
                 setSuggestions(emptyList(), "", null)
-                return@launch
+                return@launchSafe
             }
             // قراءة النص من التطبيق (استدعاء بين عمليتين قد يتأخر) وحساب الاقتراحات بخيط خلفي،
             // فلا تتجمد الواجهة حتى لو كان التطبيق ثقيلًا أو القاموس كبيرًا
-            val result = withContext(suggestDispatcher) { computeSuggestions(state, t) } ?: return@launch
+            val result = withContext(suggestDispatcher) { computeSuggestions(state, t) } ?: return@launchSafe
             if (result.clearSwipe) clearSwipe()
             setSuggestions(result.list, result.literal, result.math)
         }
@@ -1234,6 +1255,8 @@ class KeyboardViewModel(
     private companion object {
         val SENTENCE_END = setOf('.', '!', '?', '؟')
         /** علامات الترقيم التي تُنهي الكلمة وتشغّل التصحيح التلقائي */
+        const val AUTO_SPACE_PUNCT = ".,!?;:،؛؟"
+        const val SPACE_AFTER_PUNCT = ".,!?،؟"
         const val AUTOCORRECT_TRIGGERS = ".,!?;:)\"؟،"
         /** رموز العمليات الحسابية: كتابتها لا تشغّل التصحيح ولا تعلّم الكلمة السابقة */
         const val NON_WORD_END_SYMBOLS = "+×÷=*%^<>~|#"
