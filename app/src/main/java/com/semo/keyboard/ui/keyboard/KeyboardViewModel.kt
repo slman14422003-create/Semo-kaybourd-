@@ -28,6 +28,7 @@ import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
 import com.semo.keyboard.domain.model.FieldKind
+import com.semo.keyboard.domain.logic.ArabicText
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
@@ -182,7 +183,7 @@ class KeyboardViewModel(
 
     /** الكلمات المتعلَّمة بصيغة مفتاح البحث (للتدقيق الإملائي: الكلمة المتعلَّمة تُعدّ صحيحة) */
     private val learnedKeys: StateFlow<Set<String>> =
-        learnedWordsRepository.words
+        learnedWordsRepository.trustedWords
             .map { list ->
                 val keys: Set<String> = list.mapTo(HashSet<String>()) { BigDictionary.key(it) }
                 keys
@@ -197,6 +198,9 @@ class KeyboardViewModel(
     /** الكلمات التي رفض المستخدم تصحيحها التلقائي سابقًا (رجع عنها فورًا بالحذف)؛ لا تُصحَّح ثانيةً */
     private val ignoredCorrections: StateFlow<Set<String>> =
         learnedWordsRepository.ignoredCorrections.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    private val learnedFixes: StateFlow<Map<String, String>> =
+        learnedWordsRepository.learnedFixes.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val blockedKeys: StateFlow<Set<String>> =
         learnedWordsRepository.blocked
@@ -528,7 +532,10 @@ class KeyboardViewModel(
             bridge.deleteSurrounding(pendingUndo.fixed.length + 1)
             bridge.commitText(pendingUndo.original)
             // المستخدم رجع عن التصحيح فورًا: تعلّم ألّا تُصحَّح هذه الكلمة ثانيةً
-            launchSafe { learnedWordsRepository.ignoreCorrection(pendingUndo.original) }
+            launchSafe {
+                learnedWordsRepository.ignoreCorrection(pendingUndo.original)
+                learnedWordsRepository.forgetFix(pendingUndo.original)
+            }
             return
         }
         if (swipeWord != null && readBefore(swipeWord.length + 1) == "$swipeWord ") {
@@ -552,16 +559,99 @@ class KeyboardViewModel(
             fixed = shortcuts.value.firstOrNull { it.abbr.equals(word, ignoreCase = true) }?.expansion
         }
         if (fixed == null && state.autoCorrect && word.lowercase() !in ignoredCorrections.value) {
-            fixed = AutoCorrect.fix(word)?.takeIf { allowed(it) }
-            if (fixed == null) {
-                val language = SuggestionEngine.languageOf(word, state.language)
-                fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value)?.takeIf { allowed(it) }
-            }
+            fixed = correctWord(word)
         }
         val result = fixed ?: return null
         if (result == word) return null
         bridge.replaceBeforeCursor(word.length, result)
         return Correction(word, result)
+    }
+
+    private fun correctWord(word: String): String? {
+        if (word.length < 2) return null
+        val lower = word.lowercase()
+        if (lower in ignoredCorrections.value) return null
+        var fixed: String? = learnedFixes.value[lower]?.let { caseLike(word, it) }?.takeIf { allowed(it) }
+        if (fixed == null) fixed = AutoCorrect.fix(word)?.takeIf { allowed(it) }
+        if (fixed == null) {
+            val language = SuggestionEngine.languageOf(word, uiState.value.language)
+            fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value)?.takeIf { allowed(it) }
+        }
+        return fixed?.takeIf { it != word }
+    }
+
+    private fun caseLike(word: String, fixed: String): String = when {
+        word.length > 1 && word.all { !it.isLetter() || it.isUpperCase() } && word.any { it.isLetter() } -> fixed.uppercase()
+        word.firstOrNull()?.isUpperCase() == true -> fixed.replaceFirstChar { it.uppercase() }
+        else -> fixed
+    }
+
+    private fun editDistance(a: String, b: String): Int {
+        if (a == b) return 0
+        var prev = IntArray(b.length + 1) { it }
+        var cur = IntArray(b.length + 1)
+        for (i in 1..a.length) {
+            cur[0] = i
+            for (j in 1..b.length) {
+                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+                cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+            }
+            val t = prev; prev = cur; cur = t
+        }
+        return prev[b.length]
+    }
+
+    private fun recordFix(typed: String, chosen: String) {
+        if (!canLearn() || !uiState.value.autoCorrect) return
+        if (typed.length < 3 || chosen.length < 3 || typed.equals(chosen, ignoreCase = true)) return
+        if (ArabicText.isArabicWord(typed) != ArabicText.isArabicWord(chosen)) return
+        val lang = SuggestionEngine.languageOf(typed, uiState.value.language)
+        if (SuggestionEngine.isKnown(typed, lang, learnedKeys.value)) return
+        if (editDistance(typed.lowercase(), chosen.lowercase()) > 2) return
+        launchSafe { learnedWordsRepository.learnFix(typed, chosen) }
+    }
+
+    private var smartFixUndo: Pair<String, String>? = null
+
+    fun smartFixText() {
+        val state = uiState.value
+        if (!transient.value.suggestionsAllowed || transient.value.fieldKind == FieldKind.URL) return
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
+        val before = bridge.textBeforeCursor(SMART_FIX_WINDOW)
+        if (before.isBlank()) return
+        smartFixUndo?.let { (original, fixedText) ->
+            if (before.endsWith(fixedText)) {
+                bridge.replaceBeforeCursor(fixedText.length, original)
+                smartFixUndo = null
+                refreshSuggestions()
+                return
+            }
+        }
+        var segment = before
+        val atStart = before.length < SMART_FIX_WINDOW
+        if (!atStart) {
+            val cut = segment.indexOfFirst { it.isWhitespace() }
+            segment = if (cut >= 0) segment.substring(cut) else segment
+        }
+        val fixed = smartFixSegment(segment, atStart)
+        if (fixed == segment) return
+        bridge.replaceBeforeCursor(segment.length, fixed)
+        smartFixUndo = segment to fixed
+        undo = null
+        refreshSuggestions()
+    }
+
+    private fun smartFixSegment(segment: String, atStart: Boolean): String {
+        var out = SMART_WORD_REGEX.replace(segment) { m -> correctWord(m.value) ?: m.value }
+        out = out.replace(Regex("(?<=[\\u0600-\\u06FF])\\?"), "\u061F")
+        out = out.replace(Regex("(?<=[\\u0600-\\u06FF]),"), "\u060C")
+        out = out.replace(Regex("[ \\t]{2,}"), " ")
+        out = out.replace(Regex("[ \\t]+(?=[.,!?\u061F\u060C])"), "")
+        out = Regex("(^|[.!?]\\s+)(\\p{Ll})").replace(out) { m ->
+            if (m.groupValues[1].isEmpty() && !atStart) m.value
+            else m.groupValues[1] + m.groupValues[2].uppercase()
+        }
+        return out
     }
 
     // ---------- الكتابة بالسحب ----------
@@ -642,6 +732,7 @@ class KeyboardViewModel(
             val before = readBefore(40)
             val word = SuggestionEngine.currentWord(before)
             learnPair(before, word, suggestion.substringBefore(' '))
+            recordFix(word, suggestion.substringBefore(' '))
             bridge.replaceBeforeCursor(word.length, "$suggestion ")
         }
         // تتمة من عدة كلمات: نتعلّم كل كلمة وكل زوج متتالٍ فيها (لا نحفظ العبارة كلها ككلمة واحدة)
@@ -1254,6 +1345,8 @@ class KeyboardViewModel(
     }
 
     private companion object {
+        const val SMART_FIX_WINDOW = 400
+        val SMART_WORD_REGEX = Regex("[\\p{L}\\p{M}'\u2019]+")
         val SENTENCE_END = setOf('.', '!', '?', '؟')
         /** علامات الترقيم التي تُنهي الكلمة وتشغّل التصحيح التلقائي */
         const val AUTO_SPACE_PUNCT = ".,!?;:،؛؟"

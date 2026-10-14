@@ -100,4 +100,5 @@
     <string name="blocked_empty">ما في كلمات محذوفة</string>
     <string name="blocked_restore">استعادة</string>
     <string name="blocked_restore_all">استعادة كل الكلمات المحذوفة</string>
+    <string name="smartfix_title">كتابة ذكية (تصحيح الجملة)</string>
 </resources>

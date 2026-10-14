@@ -58,10 +58,42 @@ object AutoCorrect {
         return if (result == word) null else result
     }
 
+    private val alPrefixes = listOf("وبال", "وكال", "وفال", "وال", "بال", "كال", "فال")
+
+    private fun squeezeElongation(word: String): String? {
+        if (word.length < 4) return null
+        val sb = StringBuilder(word.length)
+        var i = 0
+        var changed = false
+        while (i < word.length) {
+            var j = i
+            while (j < word.length && word[j] == word[i]) j++
+            val run = j - i
+            if (run >= 3 && word[i].isLetter()) { sb.append(word[i]); changed = true } else sb.append(word, i, j)
+            i = j
+        }
+        if (!changed) return null
+        val result = sb.toString()
+        if (result.length < 2 || result.toSet().size < 2) return null
+        if (result.all { it == 'ه' || it == 'ا' || it == 'ح' }) return null
+        return result
+    }
+
     private fun fixArabic(word: String): String? {
         val table = arabic
+        squeezeElongation(word)?.let { squeezed ->
+            val again = if (table.isNotEmpty()) table[squeezed] else null
+            return again ?: squeezed
+        }
         if (table.isEmpty()) return null
         table[word]?.let { return it.takeIf { r -> r != word } }
+        for (p in alPrefixes) {
+            if (!word.startsWith(p)) continue
+            val stem = "ال" + word.substring(p.length)
+            if (stem.length < 5) continue
+            val hit = table[stem] ?: continue
+            if (hit.startsWith("ال")) return p + hit.substring(2)
+        }
         for (prefix in prefixes) {
             if (!word.startsWith(prefix)) continue
             val rest = word.substring(prefix.length)

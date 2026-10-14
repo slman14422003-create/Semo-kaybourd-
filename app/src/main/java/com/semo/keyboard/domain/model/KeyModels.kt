@@ -128,7 +128,7 @@ enum class KeySpacing(val horizontal: Float, val vertical: Float) {
 }
 
 /** عناصر شريط الأدوات: يختار المستخدم أيها يظهر وبأي ترتيب */
-enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS, TRANSLATE, VOICE }
+enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS, TRANSLATE, VOICE, SMARTFIX }
 
 /** ماذا يفتح مفتاح «123» بصفحة الحروف: لوحة أرقام 3×4 أو صفحة الرموز القديمة */
 enum class NumKeyTarget { NUMPAD, SYMBOLS }

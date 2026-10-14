@@ -122,14 +122,15 @@ private class LegacySettingsMigration(private val app: Context) : DataMigration<
 }
 
 /** عناصر شريط الأدوات المحفوظة (CSV بالترتيب)؛ لو لا شيء محفوظ أو القائمة فارغة نرجع للكل */
-private fun decodeToolbar(raw: String?, translateSeen: Boolean, voiceSeen: Boolean): List<ToolbarItem> {
+private fun decodeToolbar(raw: String?, translateSeen: Boolean, voiceSeen: Boolean, smartSeen: Boolean = true): List<ToolbarItem> {
     if (raw == null) return ToolbarItem.values().toList()
     var list = raw.split(',').mapNotNull { n -> runCatching { enumValueOf<ToolbarItem>(n) }.getOrNull() }.distinct()
     if (list.isEmpty()) return ToolbarItem.values().toList()
     if (!translateSeen && ToolbarItem.TRANSLATE !in list) list = list + ToolbarItem.TRANSLATE
     if (!voiceSeen && ToolbarItem.VOICE !in list) list = list + ToolbarItem.VOICE
+    if (!smartSeen && ToolbarItem.SMARTFIX !in list) list = list + ToolbarItem.SMARTFIX
     // عنصر الحاسبة الجديد: يظهر تلقائيًا لمن لم يحذف أي عنصر من شريطه
-    val others = ToolbarItem.values().filter { it != ToolbarItem.CALC && it != ToolbarItem.TRANSLATE && it != ToolbarItem.VOICE }
+    val others = ToolbarItem.values().filter { it != ToolbarItem.CALC && it != ToolbarItem.TRANSLATE && it != ToolbarItem.VOICE && it != ToolbarItem.SMARTFIX }
     if (ToolbarItem.CALC !in list && others.all { it in list }) return list + ToolbarItem.CALC
     return list
 }
@@ -203,6 +204,7 @@ class SettingsRepository(context: Context) {
         val TRANSLATE_RECENTS = stringPreferencesKey("translate_recents")
         val TOOLBAR_TRANSLATE_SEEN = booleanPreferencesKey("toolbar_translate_seen")
         val TOOLBAR_VOICE_SEEN = booleanPreferencesKey("toolbar_voice_seen")
+        val TOOLBAR_SMARTFIX_SEEN = booleanPreferencesKey("toolbar_smartfix_seen")
         val HIDE_APP_ICON = booleanPreferencesKey("hide_app_icon")
     }
 
@@ -226,7 +228,7 @@ class SettingsRepository(context: Context) {
                 size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
                 keySpacing = p[Keys.KEY_SPACING].toEnumOr(KeySpacing.NORMAL),
                 numKeyTarget = p[Keys.NUM_KEY_TARGET].toEnumOr(NumKeyTarget.SYMBOLS),
-                toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS], p[Keys.TOOLBAR_TRANSLATE_SEEN] ?: false, p[Keys.TOOLBAR_VOICE_SEEN] ?: false),
+                toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS], p[Keys.TOOLBAR_TRANSLATE_SEEN] ?: false, p[Keys.TOOLBAR_VOICE_SEEN] ?: false, p[Keys.TOOLBAR_SMARTFIX_SEEN] ?: false),
                 oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
                 suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,
                 keyPreview = p[Keys.KEY_PREVIEW] ?: true,
@@ -292,6 +294,7 @@ class SettingsRepository(context: Context) {
             it[Keys.TOOLBAR_ITEMS] = v.joinToString(",") { item -> item.name }
             it[Keys.TOOLBAR_TRANSLATE_SEEN] = true
             it[Keys.TOOLBAR_VOICE_SEEN] = true
+            it[Keys.TOOLBAR_SMARTFIX_SEEN] = true
         }
     }
     suspend fun setTranslateTarget(code: String) {
@@ -359,7 +362,7 @@ class SettingsRepository(context: Context) {
 
     private companion object {
         val KEEP_ON_RESET = setOf(
-            "learned_words", "learned_bigrams", "ignored_corrections", "blocked_words", "text_shortcuts", "clipboard_items", "last_cache_clear"
+            "learned_words", "learned_bigrams", "ignored_corrections", "learned_fixes", "blocked_words", "text_shortcuts", "clipboard_items", "last_cache_clear"
         )
     }
 }

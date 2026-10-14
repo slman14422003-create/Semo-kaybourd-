@@ -238,6 +238,7 @@ class LearnedWordsRepository(context: Context) {
     private val pairKey = stringPreferencesKey("learned_bigrams")
     private val ignoredKey = stringPreferencesKey("ignored_corrections")
     private val blockedKey = stringPreferencesKey("blocked_words")
+    private val fixesKey = stringPreferencesKey("learned_fixes")
 
     class BlockSnapshot(val word: String, val count: Int, val pairs: List<Triple<String, String, Int>>)
 
@@ -328,6 +329,49 @@ class LearnedWordsRepository(context: Context) {
         .distinctUntilChanged()
         .map { raw -> decodeWords(raw).sortedByDescending { it.second }.map { it.first } }
 
+    val trustedWords: Flow<List<String>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> p[key] }
+        .distinctUntilChanged()
+        .map { raw -> decodeWords(raw).filter { it.second >= TRUST_COUNT }.map { it.first } }
+
+    val learnedFixes: Flow<Map<String, String>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> p[fixesKey] }
+        .distinctUntilChanged()
+        .map { raw -> decodeFixes(raw).filter { it.third >= FIX_TRUST_COUNT }.associate { it.first to it.second } }
+
+    suspend fun learnFix(typed: String, fixed: String) {
+        if (!appContext.isUserStorageUnlocked()) return
+        val a = clean(typed).lowercase()
+        val b = clean(fixed)
+        if (a.length < 3 || a.length > 30 || b.length < 2 || b.length > 30 || a == b.lowercase()) return
+        store.edit { p ->
+            val list = decodeFixes(p[fixesKey]).toMutableList()
+            val old = list.indexOfFirst { it.first == a }
+            val count = if (old >= 0) {
+                val prev = list.removeAt(old)
+                if (prev.second == b) prev.third + 1 else 1
+            } else 1
+            list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
+            while (list.size > MAX_FIXES) list.removeAt(list.size - 1)
+            p[fixesKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+        }
+    }
+
+    suspend fun forgetFix(typed: String) {
+        if (!appContext.isUserStorageUnlocked()) return
+        val a = clean(typed).lowercase()
+        store.edit { p ->
+            val list = decodeFixes(p[fixesKey]).filterNot { it.first == a }
+            p[fixesKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+        }
+    }
+
+    private fun decodeFixes(raw: String?): List<Triple<String, String, Int>> =
+        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).mapNotNull { e ->
+            val parts = e.split(FIELD)
+            if (parts.size < 3 || parts[0].isEmpty() || parts[1].isEmpty()) null else Triple(parts[0], parts[1], parts[2].toIntOrNull() ?: 1)
+        }
+
     /** كلمة (بصيغة مفتاح البحث) ← الكلمات التي تلتها مرتبة بالأكثر تكرارًا */
     val bigrams: Flow<Map<String, List<String>>> = appContext.credentialPrefsFlow()
         .map { p: Preferences -> p[pairKey] }
@@ -408,6 +452,7 @@ class LearnedWordsRepository(context: Context) {
         store.edit { p ->
             p.remove(key)
             p.remove(pairKey)
+            p.remove(fixesKey)
         }
     }
 
@@ -452,6 +497,9 @@ class LearnedWordsRepository(context: Context) {
         const val MAX_COUNT = 1000
         const val MAX_IGNORED = 500
         const val MAX_BLOCKED = 2000
+        const val MAX_FIXES = 800
+        const val TRUST_COUNT = 3
+        const val FIX_TRUST_COUNT = 2
     }
 }
 

@@ -31,6 +31,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.semo.keyboard.data.ClipboardRepository
+import com.semo.keyboard.data.DictionaryManager
+import com.semo.keyboard.data.isUserStorageUnlocked
+import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.data.ShortcutsRepository
@@ -62,6 +65,7 @@ class MainActivity : ComponentActivity() {
         com.semo.keyboard.ui.settings.SettingsDeepLink.page.value = intent?.getStringExtra(EXTRA_PAGE)
         settingsRepository = SettingsRepository(applicationContext)
         lifecycleScope.launch(Dispatchers.IO) { runCatching { settingsRepository.syncAppIcon() } }
+        lifecycleScope.launch(Dispatchers.IO) { runCatching { autoDownloadArabicDictionary() } }
         clipboardRepository = ClipboardRepository(applicationContext)
         learnedWordsRepository = LearnedWordsRepository(applicationContext)
         shortcutsRepository = ShortcutsRepository(applicationContext)
@@ -76,6 +80,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun autoDownloadArabicDictionary() {
+        val app = applicationContext
+        if (!app.isUserStorageUnlocked()) return
+        val language = KeyboardLanguage.ARABIC
+        if (DictionaryManager.hasWords(app, language)) return
+        val prefs = app.getSharedPreferences("dict_auto", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong("last_try", 0L) < RETRY_MS) return
+        prefs.edit().putLong("last_try", now).apply()
+        DictionaryManager.download(app, language) { }
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -85,6 +101,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_PAGE = "settings_page"
         const val PAGE_VOICE = "voice"
+        private const val RETRY_MS = 6L * 60L * 60L * 1000L
     }
 }
 

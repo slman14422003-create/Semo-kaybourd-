@@ -36,6 +36,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -587,9 +590,12 @@ private fun TopStrip(
             label = "stripContent"
         ) { open ->
             if (open) {
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val fits = 46.dp * state.toolbarItems.size <= maxWidth
+                    val toolsScroll = rememberScrollState()
                 Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    modifier = if (fits) Modifier.fillMaxSize() else Modifier.fillMaxSize().horizontalScroll(toolsScroll),
+                    horizontalArrangement = if (fits) Arrangement.SpaceEvenly else Arrangement.spacedBy(2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // العناصر والترتيب من إعدادات «شريط الأدوات»
@@ -604,8 +610,10 @@ private fun TopStrip(
                         ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.SETTINGS)) { viewModel.openSettings() }
                         ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.TRANSLATE)) { viewModel.openTranslate() }
                         ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.VOICE)) { viewModel.openVoice() }
+                        ToolbarItem.SMARTFIX -> StripIconButton(R.drawable.ic_tool_smartfix, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.SMARTFIX)) { viewModel.smartFixText() }
                         }
                     }
+                }
                 }
             } else {
                 Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
@@ -626,6 +634,7 @@ private fun toolTint(item: ToolbarItem): Color = when (item) {
     ToolbarItem.SETTINGS -> Color(0xFF8E8E93)
     ToolbarItem.TRANSLATE -> Color(0xFF30B0F0)
     ToolbarItem.VOICE -> Color(0xFFFF453A)
+    ToolbarItem.SMARTFIX -> Color(0xFFAF52DE)
 }
 
 @Composable
