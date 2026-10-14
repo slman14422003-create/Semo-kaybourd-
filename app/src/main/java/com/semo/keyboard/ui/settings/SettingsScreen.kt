@@ -46,6 +46,7 @@ import androidx.compose.ui.window.Dialog
 import com.semo.keyboard.update.UpdateCheckResult
 import com.semo.keyboard.update.UpdateInfo
 import com.semo.keyboard.update.UpdateManager
+import com.semo.keyboard.util.Semo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -1113,6 +1114,20 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
             ActionRow(L("التحقق من التحديثات"), onClick = ::startCheck)
             Divider()
             ActionRow(L("إعادة عرض دليل الإعداد"), onClick = onReplay)
+        }
+        val semoApps = remember { Semo.siblings(context) }
+        Section(L("منظومة Semo · المس لفتح التطبيق")) {
+            if (semoApps.isEmpty()) {
+                Text(
+                    L("لا توجد تطبيقات Semo أخرى مثبّتة على هذا الهاتف"),
+                    color = SemoPalette.TextHint, fontSize = 14.sp,
+                    modifier = Modifier.padding(14.dp)
+                )
+            }
+            semoApps.forEachIndexed { idx, app ->
+                if (idx > 0) Divider()
+                ActionRow("${app.label}  ·  ${app.version} (${app.code})", onClick = { Semo.open(context, app.pkg) })
+            }
         }
         Section(com.semo.keyboard.ui.appString(R.string.backup_title)) {
             BackupBlock()

@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui.keyboard
 
+import com.semo.keyboard.util.Semo
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.gestures.FlingBehavior
@@ -1063,6 +1064,13 @@ private fun BoxScope.ClipActionBubble(
                     ClipBubbleRow(R.drawable.ic_clip_edit, tr(arabic, "تعديل", "Edit"), colors.text, arabic, colors, true) {
                         onDismiss()
                         viewModel.onClipEditStart(item.text)
+                    }
+                }
+                val notesReady = remember { Semo.hasNotes(context) }
+                if (kind != ClipKind.IMAGE && notesReady) {
+                    ClipBubbleRow(R.drawable.ic_clip_edit, tr(arabic, "حفظ في الملاحظات", "Save to Notes"), colors.text, arabic, colors, true) {
+                        onDismiss()
+                        Semo.sendToNotes(context, item.text)
                     }
                 }
                 if (linkUrl != null) {

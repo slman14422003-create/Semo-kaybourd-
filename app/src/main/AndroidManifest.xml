@@ -13,6 +13,9 @@
 
     <queries>
         <intent>
+            <action android:name="app.semo.ECOSYSTEM" />
+        </intent>
+        <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
@@ -37,6 +40,10 @@
         android:theme="@style/Theme.Semo"
         android:supportsRtl="true">
 
+        <!-- Semo ecosystem: what this app is, so the other Semo apps can find and use it -->
+        <meta-data android:name="app.semo.ROLE" android:value="keyboard" />
+
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
@@ -46,6 +53,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.INFO" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="app.semo.ECOSYSTEM" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
