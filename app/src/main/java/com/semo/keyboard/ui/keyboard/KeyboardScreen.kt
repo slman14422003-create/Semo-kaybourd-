@@ -1,0 +1,1700 @@
+package com.semo.keyboard.ui.keyboard
+
+import android.os.Build
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import com.semo.keyboard.ui.anim.LocalAnimScale
+import com.semo.keyboard.ui.anim.scaledSpring
+import com.semo.keyboard.ui.anim.scaledTween
+import com.semo.keyboard.ui.anim.IosEaseOut
+import com.semo.keyboard.ui.anim.IosPush
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.tappableElement
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import com.semo.keyboard.R
+import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
+import com.semo.keyboard.domain.model.BackspaceSpeed
+import com.semo.keyboard.domain.model.HoldDelay
+import com.semo.keyboard.domain.model.SpaceBarAction
+import com.semo.keyboard.domain.model.KeyAction
+import com.semo.keyboard.domain.model.clipDisplayText
+import com.semo.keyboard.domain.model.clipLongLength
+import com.semo.keyboard.domain.model.isClipLong
+import com.semo.keyboard.domain.model.isClipImage
+import com.semo.keyboard.domain.model.ToolbarItem
+import com.semo.keyboard.domain.model.KeyDefinition
+import com.semo.keyboard.domain.model.KeyboardPage
+import com.semo.keyboard.domain.model.KeyboardUiState
+import com.semo.keyboard.domain.model.OneHandMode
+import com.semo.keyboard.domain.model.ThemeMode
+import com.semo.keyboard.ui.theme.KeyMetrics
+import com.semo.keyboard.ui.theme.SemoKeyboardColors
+import com.semo.keyboard.ui.theme.keyMetrics
+import com.semo.keyboard.ui.theme.LocalKeyboardScale
+import com.semo.keyboard.ui.theme.semoColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+
+internal fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
+
+/** إعدادات اللمس القابلة للضبط (مهلة الضغط المطوّل، سرعة الحذف، ضغطة المسافة المطوّلة) تصل لكل المفاتيح */
+internal data class TouchTuning(
+    val holdMs: Long = HoldDelay.MEDIUM.millis,
+    val backspace: BackspaceSpeed = BackspaceSpeed.NORMAL,
+    val spaceAction: SpaceBarAction = SpaceBarAction.CURSOR
+)
+
+internal val LocalTouchTuning = staticCompositionLocalOf { TouchTuning() }
+
+/** صف مفاتيح بلا خلفية (أيقونات عائمة) أو فراغات فقط = الصف الأخير تحت المسافة */
+private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
+    row.isNotEmpty() && row.all { it.plain || it.isSpacer }
+
+/**
+ * جذر واجهة اللوحة. نثبّت اتجاه التخطيط LTR دائمًا: مواضع المفاتيح يجب ألا تنعكس
+ * على أجهزة اللغة العربية (RTL)، وإلا ينقلب ترتيب الحروف الإنكليزية والعربية معًا.
+ *
+ * [onChrome] تُبلّغ الخدمة بلون اللوحة ليُلوَّن به شريط التنقل ويُضبط تباين أيقوناته.
+ */
+@Composable
+fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Unit = { _, _ -> }) {
+    val state by viewModel.uiState.collectAsState()
+    val isDark = when (state.themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    val colors = remember(state.style, isDark, state.keyboardTheme) { semoColors(state.style, isDark, state.keyboardTheme) }
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp
+    val screenHeightDp = configuration.screenHeightDp
+    val metrics = remember(state.style, state.size, state.keySpacing, state.keyboardScale, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow) {
+        // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
+        val width = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
+        val base = keyMetrics(state.style, state.size, width, state.keySpacing, state.keyboardScale)
+        if (screenWidthDp > screenHeightDp) {
+            // الوضع الأفقي: العرض كبير فكانت المفاتيح تطلع بأقصى ارتفاع وتغطي معظم الشاشة.
+            // نحصر ارتفاع اللوحة بحوالي نصف الشاشة كي يبقى الحقل النصي ظاهرًا.
+            val rowsCount = if (state.numberRow) 5f else 4f
+            val budget = screenHeightDp * 0.52f - base.stripHeight.value - base.utilHeight.value
+            val keyH = (budget / rowsCount - base.rowSpacing.value).coerceIn(30f, base.keyHeight.value)
+            base.copy(keyHeight = keyH.dp)
+        } else base
+    }
+    val rows = remember(
+        state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
+        state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind,
+        state.hideButtonMode, state.numKeyTarget, state.navButtons
+    ) { KeyboardLayoutProvider.rows(state) }
+    // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل. فبدل ما نترك مساحة فارغة تحت الصف الأخير،
+    // نجعل صف الكرة الأرضية والميكروفون بنفس ارتفاع شريط التنقل ونوسّط أيقوناته فيه (مثل آيفون
+    // حيث تقع هذه الأيقونات بمستوى مؤشر الرجوع للرئيسية)، فتتنسّق مع شريط One UI السفلي.
+    val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
+    val density = LocalDensity.current
+    val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).coerceAtLeast(0).toDp() } else 0.dp
+    val tappableBottom = runCatching { WindowInsets.tappableElement.getBottom(density) }.getOrDefault(0)
+    val insetNavButtons = tappableBottom > 0 || (edgeToEdgeIme && navInset >= 40.dp)
+    LaunchedEffect(insetNavButtons) { viewModel.setNavInset(insetNavButtons) }
+    val navButtons = state.navButtons
+    // صف الأيقونات بنفس ارتفاع شريط التنقل بالضبط، وأيقونة الكرة تتوسّط ارتفاعه تمامًا، لأن النظام
+    // يوسّط أزرار الشريط (زر إخفاء الكيبورد) بنفس المنتصف. ويمكن للمستخدم تعديل الفرق الصغير
+    // بين الأجهزة من الإعدادات (globeOffsetDp).
+    val utilHeight = if (edgeToEdgeIme) maxOf(navInset, 48.dp) else metrics.utilHeight
+    // أزرار النظام (زر إخفاء الكيبورد) تقع بمنتصف شريط ارتفاعه 48dp من أسفل الشاشة حتى لو أبلغ النظام
+    // عن inset أصغر (قياس من جهاز One UI: الـ inset ~24dp بينما مركز الزر على 24dp من الأسفل)
+    val navCenter = utilHeight / 2
+    // رفع الدائرتين عن أسفل الشاشة: نزيد ارتفاع الصف الأخير بمقدار الرفع ونرفع مركزيهما معه
+    val raise = state.bottomRaiseDp.dp
+    val utilRowHeight = if (navButtons) 0.dp else utilHeight + raise
+    val globeMax = (utilRowHeight - 14.dp).coerceAtLeast(14.dp)
+    val globeCenter = (navCenter + raise + state.globeOffsetDp.dp).coerceAtLeast(14.dp).coerceAtMost(globeMax)
+    // صفحات الإيموجي/الحافظة/التحرير: شريطها السفلي كان يقع تحت زر إخفاء الكيبورد (يتداخل مع لمس النظام)،
+    // فنحجز منطقة شريط التنقل أسفل الصفحة ونقصّر المحتوى بنفس المقدار
+    val bottomReserve = if (edgeToEdgeIme && !navButtons) utilHeight else 0.dp
+    // نسخّن فلترة الإيموجي بخيط خلفي كي لا تعلّق فتح لوحة الإيموجي أول مرة
+    // نجهّز الإيموجي بالخلفية قبل أن يفتح المستخدم لوحتها: فلترة الرموز غير المدعومة ثم رسم أول الأقسام لصور جاهزة
+    val warmDensity = LocalDensity.current.density
+    LaunchedEffect(warmDensity) {
+        // بعد ما تستقر اللوحة: التحضير بالخلفية لا يزاحم أول ضغطات الكتابة
+        delay(2_500)
+        withContext(Dispatchers.Default) {
+            EmojiBitmapCache.configure(warmDensity)
+            EmojiBitmapCache.prefetch(supportedEmojiCache.take(2).flatMap { it.emojis }.distinct())
+        }
+    }
+    val rowHeights = remember(rows, metrics, utilRowHeight) {
+        rows.map { if (isUtilityRow(it)) utilRowHeight else metrics.rowHeight }
+    }
+
+    val currentOnChrome by rememberUpdatedState(onChrome)
+    LaunchedEffect(colors.panel, isDark) { currentOnChrome(colors.panel.toArgb(), isDark) }
+
+    // لون اللوحة يمتد خلف الشريط؛ لو كان الشريط أطول من صف الأيقونات نكمّل الفرق بحشوة سفلية
+    val extraBottom = if (edgeToEdgeIme) {
+        if (navButtons) navInset else (navInset - utilHeight).coerceAtLeast(0.dp)
+    } else 8.dp
+
+    val panelShape = RectangleShape
+
+    // ارتفاع صفحات الإيموجي/الحافظة/التحرير = أربعة صفوف + الصف السفلي الإضافي
+    val panelHeight = metrics.rowHeight * 4 + utilRowHeight
+    val sideHeight = metrics.stripHeight + panelHeight
+    val oneHanded = state.oneHand != OneHandMode.OFF
+
+    // وضع لوحة اللمس (ضغطة مطوّلة على المسافة): تختفي الحروف ويتحرك المؤشر بالسحب
+    var trackpad by remember { mutableStateOf(false) }
+    // مسار الإصبع أثناء الكتابة بالسحب
+    val trail = remember { mutableStateListOf<Offset>() }
+    val swipeEnabled = state.swipeTyping && state.page == KeyboardPage.LETTERS &&
+        state.alternates.isEmpty() && !trackpad
+
+    // مضاعِف سرعة الحركة من الإعدادات (0 = إيقاف الحركة تمامًا)
+    val animScale = state.animationSpeed.multiplier
+    val pageAlpha = remember { Animatable(1f) }
+    // تبديل اللغة: المفاتيح تنزلق من جهة اتجاه الكتابة الجديدة مع تلاشٍ ونابض ناعم بدل وميض الشفافية
+    val langShift = remember { Animatable(0f) }
+    var lastLanguage by remember { mutableStateOf(state.language) }
+    LaunchedEffect(state.language) {
+        if (state.language != lastLanguage) {
+            lastLanguage = state.language
+            if (animScale <= 0.001f) {
+                langShift.snapTo(0f)
+                pageAlpha.snapTo(1f)
+            } else {
+                val dir = if (state.language.rtl) 1f else -1f
+                coroutineScope {
+                    launch {
+                        langShift.snapTo(30f * dir)
+                        langShift.animateTo(0f, scaledSpring(animScale, dampingRatio = 0.92f, stiffness = 380f))
+                    }
+                    launch {
+                        pageAlpha.snapTo(0.1f)
+                        pageAlpha.animateTo(1f, scaledTween(animScale, 300, easing = IosEaseOut))
+                    }
+                }
+            }
+        }
+    }
+
+    val tuning = remember(state.holdDelay, state.backspaceSpeed, state.spaceBarAction) {
+        TouchTuning(state.holdDelay.millis, state.backspaceSpeed, state.spaceBarAction)
+    }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+        LocalTouchTuning provides tuning,
+        LocalKeyboardScale provides state.keyboardScale,
+        LocalAnimScale provides animScale
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.panel, panelShape)
+                .padding(bottom = extraBottom)
+        ) {
+            if (state.oneHand == OneHandMode.RIGHT) {
+                OneHandSide(state, colors, sideHeight, viewModel)
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(if (oneHanded) 0.84f else 1f)
+                    .padding(horizontal = metrics.sidePadding)
+            ) {
+                if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
+                    Crossfade(
+                        targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else 0,
+                        animationSpec = scaledTween(animScale, 170),
+                        label = "strip"
+                    ) { mode ->
+                        when (mode) {
+                            1 -> ClipEditBar(state, colors, metrics.stripHeight, viewModel)
+                            2 -> TranslateBar(state, colors, metrics.stripHeight, viewModel)
+                            3 -> VoiceBar(state, colors, metrics.stripHeight, viewModel)
+                            else -> TopStrip(state, colors, metrics, viewModel)
+                        }
+                    }
+                }
+
+                val shownPage = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
+                    state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE) state.page else KeyboardPage.LETTERS
+                run {
+                when (shownPage) {
+                    KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.CLIPBOARD -> ClipboardPanel(
+                        state, colors,
+                        (panelHeight + metrics.stripHeight + 96.dp).coerceAtMost((screenHeightDp * 0.6f).dp),
+                        bottomReserve, viewModel
+                    )
+                    KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.TRANSLATE -> TranslatePanel(state, colors, panelHeight - bottomReserve, viewModel)
+                    KeyboardPage.CALC -> CalcPanel(
+                        state, colors,
+                        // نفس ارتفاع صفحة الحروف (الشريط + المفاتيح) كي لا يرتفع الكيبورد عند فتح الحاسبة
+                        panelHeight + metrics.stripHeight - bottomReserve,
+                        metrics.keyShape, metrics.keyRadius,
+                        metrics.keySpacing.coerceIn(3.dp, 6.dp), 4.dp,
+                        viewModel
+                    )
+                    else -> Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                alpha = pageAlpha.value
+                                translationX = langShift.value * this.density
+                            }
+                            .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis) { path ->
+                                viewModel.onSwipeWord(path)
+                            }
+                    ) {
+                        Column {
+                            rows.forEachIndexed { index, row ->
+                                KeyRow(
+                                    row = row,
+                                    colors = colors,
+                                    metrics = metrics,
+                                    rowHeight = rowHeights[index],
+                                    showPreview = state.keyPreview,
+                                    hideLabels = trackpad,
+                                    isTopRow = index == 0,
+                                    plainCenterFromBottom = globeCenter,
+                                    viewModel = viewModel,
+                                    onTrackpad = { active ->
+                                        trackpad = active
+                                        if (active) viewModel.onTrackpadStart()
+                                    }
+                                )
+                            }
+                        }
+                        SwipeTrail(trail, colors.keyAccent)
+                    }
+                }
+                }
+                if (bottomReserve > 0.dp &&
+                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE)
+                ) {
+                    Spacer(Modifier.height(bottomReserve))
+                }
+            }
+
+            if (state.oneHand == OneHandMode.LEFT) {
+                OneHandSide(state, colors, sideHeight, viewModel)
+            }
+        }
+    }
+}
+
+// ============================ الكتابة بالسحب ============================
+
+/** أثر الإصبع أثناء السحب. القراءة داخل الرسم فقط كي لا تُعاد تركيبة اللوحة مع كل نقطة. */
+@Composable
+private fun BoxScope.SwipeTrail(points: SnapshotStateList<Offset>, color: Color) {
+    Canvas(modifier = Modifier.matchParentSize()) {
+        if (points.size < 2) return@Canvas
+        val path = Path().apply {
+            moveTo(points[0].x, points[0].y)
+            for (i in 1 until points.size) lineTo(points[i].x, points[i].y)
+        }
+        drawPath(
+            path = path,
+            color = color.copy(alpha = 0.85f),
+            style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+    }
+}
+
+/**
+ * يراقب اللمس بمرحلة Initial (قبل المفاتيح) دون أن يستهلك الضغطة الأولى، فتبقى الكتابة العادية سليمة.
+ * عندما يمر الإصبع على 3 حروف مختلفة على الأقل ويبتعد عن نقطة البداية، نعتبرها كتابة بالسحب:
+ * نستهلك الأحداث (فتُلغى ضغطة المفتاح الأصلي) ونرسم الأثر، وعند الرفع نرسل الحروف لفك الكلمة.
+ * تحديد الحرف تحت الإصبع حسابي بحت من أوزان المفاتيح وارتفاعات الصفوف، فلا حاجة لقياس كل مفتاح.
+ */
+private fun Modifier.swipeTyping(
+    enabled: Boolean,
+    rows: List<List<KeyDefinition>>,
+    rowHeights: List<Dp>,
+    trail: SnapshotStateList<Offset>,
+    holdMs: Long,
+    onWord: (List<String>) -> Unit
+): Modifier {
+    if (!enabled) return this
+    return pointerInput(rows, rowHeights, holdMs) {
+        val holdLimit = if (holdMs > 0L) holdMs else viewConfiguration.longPressTimeoutMillis
+        // الحروف التي لها أحرف بديلة: الإمساك عليها = ضغط مطوّل، فلا نحوّله لكتابة بالسحب
+        val altLetters = rows.flatten()
+            .filter { it.longPressChars.isNotEmpty() }
+            .mapNotNull { (it.action as? KeyAction.Character)?.char }
+            .toSet()
+        val heightsPx = rowHeights.map { it.toPx() }
+        val minStep = 3.dp.toPx()
+        val startDistance = 18.dp.toPx()
+
+        fun letterAt(pos: Offset): String? {
+            if (pos.x < 0f || pos.x >= size.width) return null
+            var top = 0f
+            for (i in rows.indices) {
+                val bottom = top + heightsPx[i]
+                if (pos.y < top) return null
+                if (pos.y < bottom) {
+                    val row = rows[i]
+                    val total = row.sumOf { it.weight.toDouble() }.toFloat()
+                    if (total <= 0f) return null
+                    var left = 0f
+                    for (key in row) {
+                        val right = left + size.width * (key.weight / total)
+                        if (pos.x < right) {
+                            val action = key.action
+                            return if (!key.isSpacer && action is KeyAction.Character &&
+                                action.char.length == 1 && action.char[0].isLetter()
+                            ) action.char else null
+                        }
+                        left = right
+                    }
+                    return null
+                }
+                top = bottom
+            }
+            return null
+        }
+
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val first = letterAt(down.position) ?: return@awaitEachGesture
+            val holdable = first in altLetters
+            val letters = ArrayList<String>()
+            letters.add(first)
+            var swiping = false
+            var lastPoint = down.position
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (change.changedToUpIgnoreConsumed()) {
+                        if (swiping) {
+                            change.consume()
+                            onWord(letters.toList())
+                        }
+                        break
+                    }
+                    // إصبع ثانٍ (كتابة سريعة بإصبعين): نترك الكتابة العادية
+                    if (!swiping && event.changes.size > 1) break
+                    // إمساك على حرف له بدائل لمدة الضغط المطوّل: نتوقف كي تعمل فقاعة الأحرف البديلة
+                    if (!swiping && holdable && change.uptimeMillis - down.uptimeMillis >= holdLimit) break
+
+                    val pos = change.position
+                    val letter = letterAt(pos)
+                    if (letter != null && letter != letters.last()) letters.add(letter)
+                    if (!swiping && letters.size >= 3 && (pos - down.position).getDistance() > startDistance) {
+                        swiping = true
+                        trail.clear()
+                        trail.add(down.position)
+                        lastPoint = down.position
+                    }
+                    if (swiping) {
+                        if ((pos - lastPoint).getDistance() >= minStep) {
+                            trail.add(pos)
+                            lastPoint = pos
+                        }
+                        change.consume()
+                    }
+                }
+            } finally {
+                trail.clear()
+            }
+        }
+    }
+}
+
+
+/** الجانب الفارغ بوضع اليد الواحدة، مع زر لتوسيع اللوحة */
+@Composable
+private fun RowScope.OneHandSide(
+    state: KeyboardUiState,
+    colors: SemoKeyboardColors,
+    height: Dp,
+    viewModel: KeyboardViewModel
+) {
+    val expandAngle = if (state.oneHand == OneHandMode.RIGHT) 180f else 0f
+    Box(
+        modifier = Modifier
+            .weight(0.16f)
+            .height(height),
+        contentAlignment = Alignment.Center
+    ) {
+        // السهم يشير نحو الجهة التي ستتمدد إليها اللوحة (يمين عندما تكون اللوحة على اليسار والعكس)
+        Box(
+            modifier = Modifier
+                .size(width = 44.dp, height = 64.dp)
+                .background(colors.key, RoundedCornerShape(14.dp))
+                .clickable { viewModel.setOneHand(OneHandMode.OFF) },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_tool_chevron),
+                contentDescription = tr(state.language.rtl, "توسيع", "Expand"),
+                tint = colors.text,
+                modifier = Modifier
+                    .size(22.dp)
+                    .rotate(expandAngle)
+            )
+        }
+    }
+}
+
+// ============================ الشريط العلوي ============================
+
+@Composable
+private fun TopStrip(
+    state: KeyboardUiState,
+    colors: SemoKeyboardColors,
+    metrics: KeyMetrics,
+    viewModel: KeyboardViewModel
+) {
+    val animScale = LocalAnimScale.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(metrics.stripHeight)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        StripIconButton(
+            iconRes = R.drawable.ic_tool_chevron,
+            colors = colors,
+            rotate = if (state.toolbarOpen) 180f else 0f,
+            filled = false,
+            onClick = { viewModel.toggleToolbar() }
+        )
+        AnimatedContent(
+            targetState = state.toolbarOpen,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            transitionSpec = {
+                fadeIn(scaledTween(animScale, 180, delayMillis = 40)) togetherWith fadeOut(scaledTween(animScale, 90)) using
+                    SizeTransform(clip = false) { _, _ -> snap() }
+            },
+            label = "stripContent"
+        ) { open ->
+            if (open) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // العناصر والترتيب من إعدادات «شريط الأدوات»
+                    state.toolbarItems.forEachIndexed { index, item ->
+                        when (item) {
+                        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.EMOJI), active = state.page == KeyboardPage.EMOJI) { viewModel.openPage(KeyboardPage.EMOJI) }
+                        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.CLIPBOARD), active = state.page == KeyboardPage.CLIPBOARD) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
+                        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.NUMPAD), active = state.page == KeyboardPage.NUMPAD) { viewModel.openPage(KeyboardPage.NUMPAD) }
+                        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.CALC), active = state.page == KeyboardPage.CALC) { viewModel.openPage(KeyboardPage.CALC) }
+                        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.CURSOR), active = state.page == KeyboardPage.EDIT) { viewModel.openPage(KeyboardPage.EDIT) }
+                        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.ONEHAND)) { viewModel.cycleOneHand() }
+                        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.SETTINGS)) { viewModel.openSettings() }
+                        ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.TRANSLATE)) { viewModel.openTranslate() }
+                        ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.VOICE)) { viewModel.openVoice() }
+                        }
+                    }
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    SuggestionsRow(state, colors, viewModel)
+                }
+            }
+        }
+    }
+}
+
+private fun toolTint(item: ToolbarItem): Color = when (item) {
+    ToolbarItem.EMOJI -> Color(0xFFFFB020)
+    ToolbarItem.CLIPBOARD -> Color(0xFF0A84FF)
+    ToolbarItem.NUMPAD -> Color(0xFF5E6CE8)
+    ToolbarItem.CALC -> Color(0xFFFF7A1A)
+    ToolbarItem.CURSOR -> Color(0xFF1FB5A3)
+    ToolbarItem.ONEHAND -> Color(0xFFA066F0)
+    ToolbarItem.SETTINGS -> Color(0xFF8E8E93)
+    ToolbarItem.TRANSLATE -> Color(0xFF30B0F0)
+    ToolbarItem.VOICE -> Color(0xFFFF453A)
+}
+
+@Composable
+private fun StripIconButton(
+    iconRes: Int,
+    colors: SemoKeyboardColors,
+    rotate: Float = 0f,
+    filled: Boolean = true,
+    popDelay: Int = -1,
+    tint: Color = Color.Unspecified,
+    active: Boolean = false,
+    onClick: () -> Unit
+) {
+    val animScale = LocalAnimScale.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press by animateFloatAsState(if (pressed) 0.86f else 1f, scaledSpring(animScale, dampingRatio = 0.52f, stiffness = 620f), label = "stripPress")
+    val lift by animateFloatAsState(if (pressed) 1f else 0f, scaledTween(animScale, 120), label = "stripLift")
+    val on by animateFloatAsState(if (active) 1f else 0f, scaledTween(animScale, 240), label = "stripActive")
+    val rot by animateFloatAsState(rotate, scaledTween(animScale, 320, easing = IosPush), label = "stripRotate")
+    val pop = remember { Animatable(if (popDelay >= 0) 0.4f else 1f) }
+    LaunchedEffect(popDelay, animScale) {
+        if (popDelay >= 0) {
+            if (animScale > 0.001f) delay((popDelay * animScale).toLong())
+            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.7f, stiffness = 380f))
+        }
+    }
+    val tinted = filled && tint != Color.Unspecified
+    val shape = RoundedCornerShape(11.dp)
+    val topAmount = 0.24f + 0.16f * on + 0.10f * lift
+    val bottomAmount = 0.10f + 0.12f * on + 0.06f * lift
+    val fillModifier = when {
+        tinted -> Modifier
+            .background(
+                Brush.verticalGradient(listOf(lerp(colors.chip, tint, topAmount), lerp(colors.chip, tint, bottomAmount))),
+                shape
+            )
+            .border(1.dp, tint.copy(alpha = 0.22f + 0.5f * on), shape)
+        filled -> Modifier.background(colors.chip, shape)
+        else -> Modifier
+    }
+    val iconTint = when {
+        !filled -> colors.textMuted
+        tinted -> lerp(colors.text, tint, 0.82f)
+        else -> colors.text
+    }
+    Box(
+        modifier = Modifier
+            .size(width = 46.dp, height = 40.dp)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 40.dp, height = 32.dp)
+                .graphicsLayer {
+                    val sc = press * pop.value
+                    scaleX = sc
+                    scaleY = sc
+                    alpha = if (popDelay >= 0) ((pop.value - 0.4f) / 0.6f).coerceIn(0f, 1f) else 1f
+                }
+                .then(fillModifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier
+                    .size(if (filled) 20.dp else 22.dp)
+                    .graphicsLayer { translationY = -1.5.dp.toPx() * lift }
+                    .rotate(rot)
+            )
+        }
+    }
+}
+
+private data class SuggestionSlot(
+    val text: String,
+    val bold: Boolean,
+    val onClick: () -> Unit,
+    val onLongPress: (() -> Unit)? = null
+)
+
+/** اختصار التعبير الحسابي الطويل كي يتسع بالشريط */
+private fun shortExpression(expr: String): String =
+    if (expr.length > 22) "…" + expr.takeLast(21) else expr
+
+@Composable
+private fun keyboardString(rtl: Boolean, id: Int, vararg args: Any): String {
+    val base = LocalContext.current
+    return remember(rtl, id, args.toList()) {
+        val config = android.content.res.Configuration(base.resources.configuration)
+        config.setLocale(java.util.Locale(if (rtl) "ar" else "en"))
+        base.createConfigurationContext(config).getString(id, *args)
+    }
+}
+
+@Composable
+private fun RowScope.SuggestionsRow(
+    state: KeyboardUiState,
+    colors: SemoKeyboardColors,
+    viewModel: KeyboardViewModel
+) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+    ) {
+        Crossfade(targetState = state.removedWord, animationSpec = tween(160), label = "removedSwap") { removed ->
+            if (removed != null) {
+                RemovedNotice(removed, colors, state.language.rtl, viewModel)
+            } else {
+                SuggestionSlots(state, colors, viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemovedNotice(
+    word: String,
+    colors: SemoKeyboardColors,
+    rtl: Boolean,
+    viewModel: KeyboardViewModel
+) {
+    val message = keyboardString(rtl, R.string.suggest_removed, word)
+    val undo = keyboardString(rtl, R.string.suggest_undo)
+    val progress = remember(word) { Animatable(1f) }
+    LaunchedEffect(word) {
+        progress.snapTo(1f)
+        progress.animateTo(0f, tween(4000, easing = LinearEasing))
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_clip_trash),
+                contentDescription = null,
+                tint = colors.keyAccent,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = message,
+                color = colors.suggestion,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(textDirection = TextDirection.Content),
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.keyAccent.copy(alpha = 0.16f))
+                    .clickable { viewModel.undoRemoveSuggestion() }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = undo,
+                    color = colors.keyAccent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth(progress.value)
+                .height(2.dp)
+                .background(colors.keyAccent.copy(alpha = 0.55f))
+        )
+    }
+}
+
+@Composable
+private fun SuggestionCell(
+    slot: SuggestionSlot,
+    colors: SemoKeyboardColors,
+    longPressLabel: String,
+    modifier: Modifier
+) {
+    val current by rememberUpdatedState(slot)
+    var pressed by remember { mutableStateOf(false) }
+    val fill by animateColorAsState(
+        if (pressed) colors.divider.copy(alpha = 0.55f) else Color.Transparent,
+        tween(if (pressed) 60 else 180),
+        label = "slotFill"
+    )
+    val size = when {
+        slot.text.length > 26 -> 13.sp
+        slot.text.length > 20 -> 15.sp
+        else -> 17.sp
+    }
+    Box(
+        modifier = modifier
+            .padding(horizontal = 3.dp, vertical = 5.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(fill)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        try {
+                            tryAwaitRelease()
+                        } finally {
+                            pressed = false
+                        }
+                    },
+                    onTap = { current.onClick() },
+                    onLongPress = { current.onLongPress?.invoke() }
+                )
+            }
+            .semantics(mergeDescendants = true) {
+                onClick { current.onClick(); true }
+                if (current.onLongPress != null) {
+                    onLongClick(longPressLabel) { current.onLongPress?.invoke(); true }
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = slot.text,
+            color = colors.suggestion,
+            fontSize = size,
+            fontWeight = if (slot.bold) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(textDirection = TextDirection.Content),
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun SuggestionSlots(
+    state: KeyboardUiState,
+    colors: SemoKeyboardColors,
+    viewModel: KeyboardViewModel
+) {
+    val math = state.mathResult
+    if (math != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { viewModel.onMathChosen() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "${shortExpression(math.expression)} = ${math.value}",
+                color = colors.suggestion,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
+        return
+    }
+
+    val latestClip = if (state.literal.isEmpty() && state.clipboardEnabled) state.freshClip else null
+    val longPressLabel = keyboardString(state.language.rtl, R.string.suggest_remove_action)
+
+    fun wordSlot(text: String, bold: Boolean): SuggestionSlot = SuggestionSlot(
+        text = text,
+        bold = bold,
+        onClick = { viewModel.onSuggestionChosen(text) },
+        onLongPress = if (text.any { it.isLetter() }) ({ viewModel.removeSuggestion(text) }) else null
+    )
+
+    val slots = buildList {
+        if (latestClip != null) {
+            state.suggestions.take(2).forEach { word -> add(wordSlot(word, false)) }
+        } else if (state.literal.isNotEmpty()) {
+            val literal = state.literal
+            add(
+                SuggestionSlot(
+                    text = "\u201C$literal\u201D",
+                    bold = false,
+                    onClick = { viewModel.onSuggestionChosen(literal) },
+                    onLongPress = { viewModel.removeSuggestion(literal) }
+                )
+            )
+            state.suggestions.take(2).forEachIndexed { index, word -> add(wordSlot(word, index == 0)) }
+        } else {
+            state.suggestions.take(3).forEach { word -> add(wordSlot(word, false)) }
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        slots.forEachIndexed { index, slot ->
+            if (index > 0) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(22.dp)
+                        .background(colors.divider)
+                )
+            }
+            SuggestionCell(
+                slot = slot,
+                colors = colors,
+                longPressLabel = longPressLabel,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            )
+        }
+        if (latestClip != null) {
+            if (slots.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(22.dp)
+                        .background(colors.divider)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { viewModel.onFreshClipPaste() }
+                    .padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_tool_clipboard),
+                    contentDescription = null,
+                    tint = colors.keyAccent,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = if (latestClip.isClipImage()) keyboardString(state.language.rtl, R.string.suggest_clip_image)
+                    else latestClip.clipDisplayText().replace('\n', ' ').trim().let { t ->
+                        if (latestClip.isClipLong()) {
+                            val n = latestClip.clipLongLength()
+                            t + "  \u00B7  " + (if (n >= 1000) "${n / 1000}K" else "$n")
+                        } else t
+                    },
+                    color = colors.suggestion,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(textDirection = TextDirection.Content)
+                )
+            }
+        }
+        if (slots.isEmpty() && latestClip == null) Spacer(Modifier.weight(1f))
+    }
+}
+
+// ============================ صفوف المفاتيح ============================
+
+@Composable
+private fun KeyRow(
+    row: List<KeyDefinition>,
+    colors: SemoKeyboardColors,
+    metrics: KeyMetrics,
+    rowHeight: Dp,
+    showPreview: Boolean,
+    hideLabels: Boolean,
+    isTopRow: Boolean,
+    plainCenterFromBottom: Dp,
+    viewModel: KeyboardViewModel,
+    onTrackpad: (Boolean) -> Unit
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        row.forEach { key ->
+            KeyButton(
+                def = key,
+                colors = colors,
+                metrics = metrics,
+                rowHeight = rowHeight,
+                showPreview = showPreview,
+                hideLabels = hideLabels,
+                isTopRow = isTopRow,
+                plainCenterFromBottom = plainCenterFromBottom,
+                onKey = viewModel::onKeyPressed,
+                onKeyDown = viewModel::onKeyDown,
+                onKeyTap = viewModel::onKeyTapped,
+                onLongPress = viewModel::onKeyLongPressed,
+                onAlternateChosen = viewModel::onAlternateChosen,
+                onAlternatesDismissed = viewModel::dismissAlternates,
+                onCursor = viewModel::onCursorMove,
+                onTrackpad = onTrackpad
+            )
+        }
+    }
+}
+
+@Composable
+private fun RowScope.KeyButton(
+    def: KeyDefinition,
+    colors: SemoKeyboardColors,
+    metrics: KeyMetrics,
+    rowHeight: Dp,
+    showPreview: Boolean,
+    hideLabels: Boolean,
+    isTopRow: Boolean,
+    plainCenterFromBottom: Dp,
+    onKey: (KeyAction) -> Unit,
+    onKeyDown: (KeyAction) -> Unit,
+    onKeyTap: (KeyAction) -> Unit,
+    onLongPress: (KeyDefinition) -> Unit,
+    onAlternateChosen: (String) -> Unit,
+    onAlternatesDismissed: () -> Unit,
+    onCursor: (Int, Int) -> Unit,
+    onTrackpad: (Boolean) -> Unit
+) {
+    if (def.isSpacer) {
+        Spacer(Modifier.weight(def.weight))
+        return
+    }
+
+    var pressed by remember { mutableStateOf(false) }
+    val currentOnKey by rememberUpdatedState(onKey)
+    val currentOnDown by rememberUpdatedState(onKeyDown)
+    val currentOnTap by rememberUpdatedState(onKeyTap)
+    val currentOnLong by rememberUpdatedState(onLongPress)
+    val currentOnAlternate by rememberUpdatedState(onAlternateChosen)
+    val currentOnAlternatesDismissed by rememberUpdatedState(onAlternatesDismissed)
+    val currentOnCursor by rememberUpdatedState(onCursor)
+    val currentOnTrackpad by rememberUpdatedState(onTrackpad)
+    val hasAlternates = def.longPressChars.isNotEmpty()
+    var keyBoxWidthPx by remember { mutableStateOf(0) }
+    var keyLeftInWindowPx by remember { mutableStateOf(0f) }
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    var popupOpen by remember { mutableStateOf(false) }
+    var popupIndex by remember { mutableStateOf(0) }
+    val popupDensity = LocalDensity.current
+    val chipWidthDp = 40.dp
+    val popupPadDp = 4.dp
+    val chipWidthPx = with(popupDensity) { chipWidthDp.toPx() }
+    val popupPadPx = with(popupDensity) { popupPadDp.toPx() }
+    // موضع يسار الفقاعة نسبةً ليسار المفتاح، مع إبقائها داخل عرض اللوحة
+    fun popupLeftPx(): Float {
+        val n = def.longPressChars.size.coerceAtLeast(1)
+        val popupW = chipWidthPx * n + popupPadPx * 2
+        val centered = (keyBoxWidthPx - popupW) / 2f
+        val margin = with(popupDensity) { 4.dp.toPx() }
+        val maxAbs = (hostView.width - popupW - margin).coerceAtLeast(margin)
+        val abs = (keyLeftInWindowPx + centered).coerceIn(margin, maxAbs)
+        return abs - keyLeftInWindowPx
+    }
+    val isBackspace = def.action == KeyAction.Backspace
+    val isSpace = def.action == KeyAction.Space
+    val isLetterKey = def.action is KeyAction.Character
+    val special = isSpecial(def)
+
+    val shiftOn = def.action == KeyAction.Shift && def.isAccent
+    val bg = when {
+        // مفاتيح الصف السفلي (الكرة وزر الإخفاء) تُرسم كدوائر مستقلة داخل CircleKeyVisual
+        def.plain -> Color.Transparent
+        shiftOn -> colors.shiftActive
+        def.isAccent -> colors.keyAccent
+        pressed && special -> colors.key
+        // مع معاينة الحرف تبقى مفاتيح الحروف بلونها لأن الفقاعة هي التي تُظهر الضغط (مثل iOS)
+        pressed && !(showPreview && isLetterKey) -> colors.keyPressed
+        special -> colors.keySpecial
+        else -> colors.key
+    }
+    // آيفون: الضغط لحظي واللون يتلاشى بسلاسة عند الرفع
+    val animBg = animateColorAsState(bg, scaledTween(LocalAnimScale.current, if (pressed) 0 else 140), label = "keyBg")
+    val bgShape = if (def.plain) RoundedCornerShape(50) else metrics.keyShape
+    val textColor = when {
+        shiftOn -> colors.onShiftActive
+        def.isAccent -> colors.textOnAccent
+        else -> colors.text
+    }
+    val shadowColor = colors.keyShadow
+
+    // شريط المسافة: ضغطة = مسافة، وضغطة مطوّلة ثم سحب = لوحة لمس لتحريك المؤشر (مثل آيفون).
+    // باقي المفاتيح: ضغط/ضغط مطوّل.
+    val tuning = LocalTouchTuning.current
+    val gestureModifier = if (isSpace && tuning.spaceAction == SpaceBarAction.CURSOR) {
+        Modifier.pointerInput(def, tuning) {
+            spaceGestures(
+                holdMs = tuning.holdMs,
+                onPressedChange = {
+                    pressed = it
+                    if (it) currentOnDown(KeyAction.Space)
+                },
+                onTap = { currentOnTap(KeyAction.Space) },
+                onTrackpad = { currentOnTrackpad(it) },
+                onMove = { dx, dy -> currentOnCursor(dx, dy) }
+            )
+        }
+    } else if (isBackspace) {
+        // الحذف: فوري ثم تكرار تلقائي عند الاستمرار بالضغط
+        Modifier.pointerInput(def, tuning) {
+            detectTapGestures(
+                onPress = {
+                    pressed = true
+                    currentOnKey(KeyAction.Backspace)
+                    coroutineScope {
+                        val repeat = launch {
+                            delay(tuning.backspace.firstDelay)
+                            var repeats = 0
+                            while (true) {
+                                currentOnKey(KeyAction.Backspace)
+                                repeats++
+                                // يتسارع الحذف مع طول الضغط (مثل iOS)
+                                delay(if (repeats < 10) tuning.backspace.slowRepeat else tuning.backspace.fastRepeat)
+                            }
+                        }
+                        tryAwaitRelease()
+                        repeat.cancel()
+                    }
+                    pressed = false
+                }
+            )
+        }
+    } else if (hasAlternates) {
+        // مفاتيح فيها أحرف بديلة (كالحروف المُشكَّلة): ضغطة مطوّلة تفتح فقاعة فوق المفتاح
+        // مباشرة (مثل iOS)، وسحب الإصبع فوقها يُغيّر الحرف المُحدَّد قبل الرفع.
+        Modifier
+            .onSizeChanged { keyBoxWidthPx = it.width }
+            .onGloballyPositioned { keyLeftInWindowPx = it.positionInWindow().x }
+            .pointerInput(def, tuning) {
+                alternatesKeyGestures(
+                    holdMs = tuning.holdMs,
+                    computeIndex = { x ->
+                        val n = def.longPressChars.size
+                        if (n <= 1) 0 else {
+                            val left = popupLeftPx() + popupPadPx
+                            (((x - left) / chipWidthPx).toInt()).coerceIn(0, n - 1)
+                        }
+                    },
+                    onPressedChange = {
+                        pressed = it
+                        if (it) currentOnDown(def.action)
+                    },
+                    onTap = { currentOnTap(def.action) },
+                    onLongPressStart = {
+                        currentOnLong(def)
+                        popupOpen = true
+                    },
+                    onIndexChange = { popupIndex = it },
+                    onCommit = { i ->
+                        popupOpen = false
+                        currentOnAlternate(def.longPressChars[i])
+                    },
+                    onCancel = {
+                        popupOpen = false
+                        currentOnAlternatesDismissed()
+                    }
+                )
+            }
+    } else {
+        // باقي المفاتيح: ضغطة تُسجَّل عند رفع الإصبع حتى لو تحرّك قليلًا (بدون حدّ الانزلاق)،
+        // لأن detectTapGestures كان يُلغي الضغطة بالكتابة السريعة فتبدو اللوحة "ما بتلحق".
+        val longPress: (() -> Unit)? = when {
+            def.longPressAction != null -> ({ currentOnKey(def.longPressAction) })
+            isSpace && tuning.spaceAction == SpaceBarAction.SWITCH_LANGUAGE -> ({ currentOnKey(KeyAction.SwitchLanguage) })
+            else -> null
+        }
+        Modifier.pointerInput(def, tuning) {
+            keyGestures(
+                holdMs = tuning.holdMs,
+                // الصوت والاهتزاز لحظة اللمس (مثل آيفون)، والإدخال الفعلي عند الرفع
+                onPressedChange = {
+                    pressed = it
+                    if (it) currentOnDown(def.action)
+                },
+                onTap = { currentOnTap(def.action) },
+                onLongPress = longPress
+            )
+        }
+    }
+
+    // منطقة اللمس تشمل الفراغات بين المفاتيح (تقلّل الضغطات الضائعة)، والشكل المرئي أصغر منها
+    val verticalPadding = if (def.plain) 0.dp else metrics.rowSpacing / 2
+    // دائرة الإخفاء تلتصق بالحافة اليمنى بنفس بعد دائرة الكرة عن الحافة اليسرى (تناظر تام)
+    val endSide = def.action == KeyAction.HideKeyboard
+    Box(
+        modifier = Modifier
+            .weight(def.weight)
+            .height(rowHeight)
+            .zIndex(if (pressed) 1f else 0f)
+            .then(gestureModifier)
+            .padding(
+                // منطقة الكرة (96dp) تبدأ عند الحافة بنفس موضع زر النظام المقابل، فيقع مركز الأيقونة
+                // على بعد ~51dp من الحافة اليسرى تمامًا كما يقع مركز سهم الإخفاء من الحافة اليمنى
+                start = if (def.plain && !endSide) 0.dp else metrics.keySpacing / 2,
+                end = if (def.plain && endSide) 0.dp else metrics.keySpacing / 2,
+                top = if (def.plain) 0.dp else verticalPadding,
+                // منطقة الكرة (ارتفاعها 42dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
+                // على بعد plainCenterFromBottom من أسفل الشاشة = نفس مستوى أزرار شريط التنقل
+                bottom = if (def.plain) (plainCenterFromBottom - 21.dp).coerceAtLeast(0.dp) else verticalPadding
+            ),
+        contentAlignment = if (def.plain) (if (endSide) Alignment.BottomEnd else Alignment.BottomStart) else Alignment.TopStart
+    ) {
+        Box(
+            modifier = (if (def.plain) Modifier.widthIn(max = 96.dp).fillMaxWidth().height(42.dp).offset(y = (21.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
+                .drawBehind {
+                    if (!def.plain) {
+                        drawRoundRect(
+                            color = shadowColor,
+                            topLeft = Offset(0f, 1.dp.toPx()),
+                            size = size,
+                            cornerRadius = CornerRadius(metrics.keyRadius.toPx())
+                        )
+                    }
+                }
+                .drawBehind {
+                    drawOutline(bgShape.createOutline(size, layoutDirection, this), animBg.value)
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            if (!hideLabels) {
+                if (def.plain) {
+                    CircleKeyVisual(def, colors, pressed)
+                } else {
+                    KeyContent(def, textColor, iconSize = 23.dp)
+                }
+            }
+        }
+
+        // شكل البالون يُنشأ مرة لكل مفتاح (لا عند كل ضغطة) ويحتفظ بمخططه: كان بناؤه بعمليات Path.combine
+        // عند كل لمسة يسبب تقطيعًا بلحظة الضغط.
+        val balloonDensity = LocalDensity.current
+        val balloonShape = remember(balloonDensity, metrics) {
+            BalloonShape(
+                insetPx = with(balloonDensity) { 10.dp.toPx() },
+                keyHeightPx = with(balloonDensity) { metrics.keyHeight.toPx() },
+                headRadiusPx = with(balloonDensity) { 11.dp.toPx() },
+                keyRadiusPx = with(balloonDensity) { metrics.keyRadius.toPx() }
+            )
+        }
+
+        // فقاعة معاينة الحرف بشكل بالون iOS: رأس أعرض من المفتاح يتصل به برقبة، ويغطي المفتاح كله.
+        // بالصف الأول نقصّر الرأس كي لا تقصّه نافذة اللوحة.
+        if (showPreview && pressed && isLetterKey && !hideLabels && !popupOpen) {
+            val pop = remember { Animatable(0.8f) }
+            val previewScale = LocalAnimScale.current
+            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.86f, stiffness = 900f)) }
+            val headHeight = if (isTopRow) 40.dp else 56.dp
+            val inset = 10.dp
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .layout { measurable, constraints ->
+                        val insetPx = inset.roundToPx()
+                        val headPx = headHeight.roundToPx()
+                        val keyW = constraints.maxWidth
+                        val w = keyW + insetPx * 2
+                        val h = headPx + metrics.keyHeight.roundToPx()
+                        val placeable = measurable.measure(Constraints.fixed(w, h))
+                        layout(keyW, metrics.keyHeight.roundToPx()) {
+                            placeable.place(-insetPx, -headPx)
+                        }
+                    }
+                    .graphicsLayer {
+                        scaleX = pop.value
+                        scaleY = pop.value
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    }
+                    .shadow(3.dp, balloonShape)
+                    .background(colors.bubble, balloonShape)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(headHeight),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = def.label, color = colors.text, fontSize = 34.sp, maxLines = 1)
+                }
+            }
+        }
+
+        // فقاعة الأحرف البديلة: تظهر فوق المفتاح مباشرة (مثل iOS)، وسحب الإصبع فوقها
+        // بدون رفعه يُنقّل التحديد (الحرف المُظلَّل) قبل تحرير الإصبع.
+        if (popupOpen && hasAlternates) {
+            val altPop = remember { Animatable(0.85f) }
+            val altScale = LocalAnimScale.current
+            LaunchedEffect(Unit) { altPop.animateTo(1f, scaledSpring(altScale, dampingRatio = 0.84f, stiffness = 700f)) }
+            val chars = def.longPressChars
+            val gapPx = with(popupDensity) { 6.dp.roundToPx() }
+            Row(
+                modifier = Modifier
+                    .layout { measurable, _ ->
+                        val placeable = measurable.measure(Constraints())
+                        layout(0, 0) {
+                            placeable.place(popupLeftPx().toInt(), -(placeable.height + gapPx))
+                        }
+                    }
+                    .graphicsLayer {
+                        scaleX = altPop.value
+                        scaleY = altPop.value
+                        alpha = ((altPop.value - 0.85f) / 0.15f).coerceIn(0f, 1f)
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    }
+                    .shadow(6.dp, RoundedCornerShape(14.dp))
+                    .background(colors.bubble, RoundedCornerShape(14.dp))
+                    .padding(popupPadDp)
+            ) {
+                chars.forEachIndexed { i, ch ->
+                    val selected = i == popupIndex
+                    Box(
+                        modifier = Modifier
+                            .width(chipWidthDp)
+                            .height(48.dp)
+                            .background(
+                                if (selected) colors.keyAccent else Color.Transparent,
+                                RoundedCornerShape(10.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = ch,
+                            fontSize = 24.sp,
+                            color = if (selected) colors.textOnAccent else colors.text
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** شكل بالون معاينة الحرف: رأس مدوّر أعرض من المفتاح + رقبة + قاعدة بشكل المفتاح */
+private class BalloonShape(
+    private val insetPx: Float,
+    private val keyHeightPx: Float,
+    private val headRadiusPx: Float,
+    private val keyRadiusPx: Float
+) : Shape {
+    private var cachedSize: Size = Size.Zero
+    private var cachedOutline: Outline? = null
+
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val cached = cachedOutline
+        if (cached != null && cachedSize == size) return cached
+        val outline = build(size)
+        cachedSize = size
+        cachedOutline = outline
+        return outline
+    }
+
+    private fun build(size: Size): Outline {
+        val w = size.width
+        val h = size.height
+        val keyTop = h - keyHeightPx
+        val head = Path().apply {
+            addRoundRect(RoundRect(0f, 0f, w, keyTop, CornerRadius(headRadiusPx)))
+        }
+        val neck = Path().apply {
+            addRect(androidx.compose.ui.geometry.Rect(insetPx, keyTop - headRadiusPx, w - insetPx, keyTop + keyRadiusPx))
+        }
+        val base = Path().apply {
+            addRoundRect(RoundRect(insetPx, keyTop, w - insetPx, h, CornerRadius(keyRadiusPx)))
+        }
+        val joined = Path.combine(PathOperation.Union, Path.combine(PathOperation.Union, head, neck), base)
+        return Outline.Generic(joined)
+    }
+}
+
+/**
+ * إيماءة مفاتيح الأحرف البديلة: ضغطة قصيرة = الحرف الأساسي، وضغطة مطوّلة تفتح فقاعة
+ * فوق المفتاح (مثل iOS) ثم السحب فوقها (بدون رفع الإصبع) يُغيّر التحديد، والرفع يُثبّت
+ * الحرف المُحدَّد لحظتها.
+ */
+internal suspend fun PointerInputScope.alternatesKeyGestures(
+    holdMs: Long,
+    computeIndex: (Float) -> Int,
+    onPressedChange: (Boolean) -> Unit,
+    onTap: () -> Unit,
+    onLongPressStart: () -> Unit,
+    onIndexChange: (Int) -> Unit,
+    onCommit: (Int) -> Unit,
+    onCancel: () -> Unit
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        onPressedChange(true)
+        var lastX = down.position.x
+        try {
+            val timeout = if (holdMs > 0L) holdMs else viewConfiguration.longPressTimeoutMillis
+            val outcome: Int? = withTimeoutOrNull(timeout) {
+                var result = 0
+                while (result == 0) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    result = when {
+                        change == null -> 2
+                        change.isConsumed -> 2
+                        change.changedToUpIgnoreConsumed() -> 1
+                        else -> {
+                            lastX = change.position.x
+                            0
+                        }
+                    }
+                }
+                result
+            }
+            when (outcome) {
+                1 -> onTap()
+                null -> {
+                    onLongPressStart()
+                    onIndexChange(computeIndex(lastX))
+                    var committed = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) {
+                            onCommit(computeIndex(change.position.x))
+                            committed = true
+                            break
+                        }
+                        onIndexChange(computeIndex(change.position.x))
+                    }
+                    if (!committed) onCancel()
+                }
+                else -> onCancel()
+            }
+        } finally {
+            onPressedChange(false)
+        }
+    }
+}
+
+/**
+ * إيماءة المفتاح العادي: الضغطة تُسجَّل عند رفع الإصبع بدون إلغاء بسبب حركة صغيرة،
+ * وتُلغى فقط لو استهلكها حدث آخر (كالكتابة بالسحب). الضغطة المطوّلة (إن وُجدت) تُنفَّذ بعد المهلة.
+ */
+internal suspend fun PointerInputScope.keyGestures(
+    holdMs: Long = -1L,
+    onPressedChange: (Boolean) -> Unit,
+    onTap: () -> Unit,
+    onLongPress: (() -> Unit)?
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        onPressedChange(true)
+        try {
+            // 1 = رُفع الإصبع (ضغطة)، 2 = أُلغيت، null = انتهت مهلة الضغط المطوّل
+            val timeout = if (onLongPress != null) (if (holdMs > 0L) holdMs else viewConfiguration.longPressTimeoutMillis) else Long.MAX_VALUE
+            val outcome: Int? = withTimeoutOrNull(timeout) {
+                var result = 0
+                while (result == 0) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    result = when {
+                        change == null -> 2
+                        change.isConsumed -> 2
+                        change.changedToUpIgnoreConsumed() -> 1
+                        else -> 0
+                    }
+                }
+                result
+            }
+            when (outcome) {
+                1 -> onTap()
+                null -> {
+                    onLongPress?.invoke()
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) break
+                    }
+                }
+                else -> Unit
+            }
+        } finally {
+            onPressedChange(false)
+        }
+    }
+}
+
+/**
+ * إيماءة شريط المسافة: لمسة قصيرة = مسافة. ضغطة مطوّلة = وضع لوحة اللمس: سحب بأي اتجاه يحرّك
+ * المؤشر (كل ~10dp أفقيًا = حرف، وكل ~26dp عموديًا = سطر). الحركة قبل انتهاء مهلة الضغط المطوّل تُلغي الإيماءة.
+ */
+private suspend fun PointerInputScope.spaceGestures(
+    holdMs: Long,
+    onPressedChange: (Boolean) -> Unit,
+    onTap: () -> Unit,
+    onTrackpad: (Boolean) -> Unit,
+    onMove: (Int, Int) -> Unit
+) {
+    val stepX = 10.dp.toPx()
+    val stepY = 26.dp.toPx()
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        onPressedChange(true)
+        try {
+            // 1 = رُفع الإصبع (لمسة قصيرة)، 2 = تحرك الإصبع (إلغاء)، null = انتهت المهلة (ضغطة مطوّلة)
+            val outcome: Int? = withTimeoutOrNull(holdMs) {
+                var result = 0
+                while (result == 0) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    result = when {
+                        change == null -> 2
+                        change.changedToUpIgnoreConsumed() -> 1
+                        (change.position - down.position).getDistance() > viewConfiguration.touchSlop -> 2
+                        else -> 0
+                    }
+                }
+                result
+            }
+            when (outcome) {
+                1 -> onTap()
+                null -> {
+                    onTrackpad(true)
+                    var accX = 0f
+                    var accY = 0f
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) {
+                            change.consume()
+                            break
+                        }
+                        val delta = change.positionChange()
+                        accX += delta.x
+                        accY += delta.y
+                        val stepsX = (accX / stepX).toInt()
+                        val stepsY = (accY / stepY).toInt()
+                        if (stepsX != 0 || stepsY != 0) {
+                            onMove(stepsX, stepsY)
+                            accX -= stepsX * stepX
+                            accY -= stepsY * stepY
+                        }
+                        change.consume()
+                    }
+                }
+                else -> Unit
+            }
+        } finally {
+            onPressedChange(false)
+            onTrackpad(false)
+        }
+    }
+}
+
+/**
+ * دائرة الصف السفلي (الكرة الأرضية / إخفاء اللوحة). تدرّج خفيف من لون المفاتيح الخاصة مع إطار رفيع
+ * وظل سفلي مثل باقي المفاتيح، فتنسجم مع اللوحة وشريط التنقل تحتها، وتنكمش قليلًا عند الضغط.
+ * على دائرة الكرة شارة صغيرة بلغة الكتابة الحالية (EN / ع).
+ * دائرة الإخفاء بوضع [KeyDefinition.ringOnly] بلا أيقونة لأن سهم النظام يظهر فوقها.
+ */
+@Composable
+private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pressed: Boolean) {
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.88f else 1f,
+        animationSpec = scaledTween(LocalAnimScale.current, durationMillis = 90),
+        label = "circleKeyScale"
+    )
+    val top = if (pressed) colors.key else lerp(colors.keySpecial, colors.key, 0.38f)
+    val bottom = if (pressed) lerp(colors.keySpecial, colors.key, 0.7f) else colors.keySpecial
+    val shadow = colors.keyShadow.copy(alpha = 0.6f)
+    val ring = colors.divider.copy(alpha = 0.85f)
+    Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .drawBehind {
+                    drawCircle(
+                        color = shadow,
+                        radius = size.minDimension / 2f,
+                        center = Offset(size.width / 2f, size.height / 2f + 1.dp.toPx())
+                    )
+                }
+                .background(Brush.verticalGradient(listOf(top, bottom)), CircleShape)
+                .border(0.75.dp, ring, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!def.ringOnly) {
+                KeyContent(def, colors.text, iconSize = 20.dp)
+            }
+        }
+        if (def.badge.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 7.dp, y = (-3).dp)
+                    .height(14.dp)
+                    .widthIn(min = 14.dp)
+                    .background(colors.keyAccent, RoundedCornerShape(50))
+                    .border(1.dp, colors.panel, RoundedCornerShape(50))
+                    .padding(horizontal = 3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = def.badge,
+                    color = colors.textOnAccent,
+                    fontSize = 8.5.sp,
+                    lineHeight = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
+    val iconRes = if (def.textOnly) null else when (def.action) {
+        KeyAction.Shift -> when {
+            def.label == "⇪" -> R.drawable.ic_ios_shift_locked
+            def.isAccent -> R.drawable.ic_ios_shift_fill
+            else -> R.drawable.ic_ios_shift
+        }
+        KeyAction.Backspace -> R.drawable.ic_ios_backspace
+        KeyAction.Globe, KeyAction.SwitchLanguage -> R.drawable.ic_ios_globe
+        KeyAction.Emoji -> R.drawable.ic_ios_emoji
+        KeyAction.Mic -> R.drawable.ic_ios_mic
+        KeyAction.HideKeyboard -> R.drawable.ic_ios_hide_keyboard
+        KeyAction.Enter -> R.drawable.ic_ios_return
+        else -> null
+    }
+    val kScale = 0.6f + 0.4f * LocalKeyboardScale.current
+    if (iconRes != null) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = def.label,
+            tint = textColor,
+            modifier = Modifier.size(iconSize * kScale)
+        )
+    } else {
+        val isLetter = def.action is KeyAction.Character
+        // أحجام خطوط المفاتيح ثابتة كآيفون ولا تكبر مع «حجم الخط» بإعدادات الجهاز (كانت الحروف تكبر وتتزاحم)
+        val fontScale = LocalDensity.current.fontScale
+        val labelSize = when {
+            isLetter && def.label.length > 1 -> 16f
+            isLetter -> 25f
+            def.action == KeyAction.Space -> 16f
+            def.action == KeyAction.Enter -> 16f
+            def.label.length > 2 -> 16f
+            else -> 18f
+        }
+        Text(
+            text = def.label,
+            color = textColor,
+            fontSize = (labelSize * kScale / fontScale).sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
+}
+
+private fun isSpecial(def: KeyDefinition): Boolean = def.special || when (def.action) {
+    KeyAction.Shift, KeyAction.Backspace, KeyAction.Globe, KeyAction.Emoji,
+    KeyAction.SwitchToSymbols, KeyAction.SwitchToSymbols2, KeyAction.SwitchToLetters,
+    KeyAction.SwitchToNumbers, KeyAction.SwitchToNumpad,
+    KeyAction.SwitchLanguage -> true
+    KeyAction.Enter -> !def.isAccent
+    else -> false
+}
