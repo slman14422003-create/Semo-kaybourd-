@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -47,6 +46,7 @@ import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.sin
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.getValue
 
 internal val BarDanger = Color(0xFFFF453A)
 

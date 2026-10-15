@@ -29,7 +29,6 @@ import com.semo.keyboard.domain.model.NumKeyTarget
 import com.semo.keyboard.domain.model.ToolbarItem
 import com.semo.keyboard.domain.model.KeyboardTheme
 import com.semo.keyboard.domain.model.AppLanguage
-import com.semo.keyboard.domain.model.VoiceDialect
 import com.semo.keyboard.domain.logic.TranslateLanguages
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
@@ -122,18 +121,29 @@ private class LegacySettingsMigration(private val app: Context) : DataMigration<
 }
 
 /** عناصر شريط الأدوات المحفوظة (CSV بالترتيب)؛ لو لا شيء محفوظ أو القائمة فارغة نرجع للكل */
-private fun decodeToolbar(raw: String?, translateSeen: Boolean, voiceSeen: Boolean, smartSeen: Boolean = true): List<ToolbarItem> {
+private fun decodeToolbar(raw: String?, translateSeen: Boolean, voiceSeen: Boolean): List<ToolbarItem> {
     if (raw == null) return ToolbarItem.values().toList()
     var list = raw.split(',').mapNotNull { n -> runCatching { enumValueOf<ToolbarItem>(n) }.getOrNull() }.distinct()
     if (list.isEmpty()) return ToolbarItem.values().toList()
     if (!translateSeen && ToolbarItem.TRANSLATE !in list) list = list + ToolbarItem.TRANSLATE
     if (!voiceSeen && ToolbarItem.VOICE !in list) list = list + ToolbarItem.VOICE
-    if (!smartSeen && ToolbarItem.SMARTFIX !in list) list = list + ToolbarItem.SMARTFIX
     // عنصر الحاسبة الجديد: يظهر تلقائيًا لمن لم يحذف أي عنصر من شريطه
-    val others = ToolbarItem.values().filter { it != ToolbarItem.CALC && it != ToolbarItem.TRANSLATE && it != ToolbarItem.VOICE && it != ToolbarItem.SMARTFIX }
+    val others = ToolbarItem.values().filter { it != ToolbarItem.CALC && it != ToolbarItem.TRANSLATE && it != ToolbarItem.VOICE }
     if (ToolbarItem.CALC !in list && others.all { it in list }) return list + ToolbarItem.CALC
     return list
 }
+
+private fun decodeTones(raw: String?): Map<String, String> =
+    raw.orEmpty().split(' ').mapNotNull { pair ->
+        val i = pair.indexOf('=')
+        if (i > 0 && i < pair.length - 1) pair.substring(0, i) to pair.substring(i + 1) else null
+    }.toMap()
+
+private fun decodeVariants(raw: String?): Map<String, String> =
+    raw.orEmpty().split(';').mapNotNull { pair ->
+        val i = pair.indexOf('=')
+        if (i > 0 && i < pair.length - 1) pair.substring(0, i) to pair.substring(i + 1) else null
+    }.toMap()
 
 /** اللغات المفعّلة المحفوظة (CSV بالترتيب)؛ لو لا شيء محفوظ نرجع للإنكليزي والعربي */
 private fun decodeLanguages(raw: String?): List<KeyboardLanguage> {
@@ -179,6 +189,10 @@ class SettingsRepository(context: Context) {
         val ARABIC_DIGITS = booleanPreferencesKey("arabic_digits")
         val SWIPE_TYPING = booleanPreferencesKey("swipe_typing")
         val AUTO_CORRECT = booleanPreferencesKey("auto_correct")
+        val AUTO_SENTENCE_FIX = booleanPreferencesKey("auto_sentence_fix")
+        val LAYOUT_VARIANTS = stringPreferencesKey("layout_variants")
+        val EMOJI_FAVORITES = stringPreferencesKey("emoji_favorites")
+        val EMOJI_TONES = stringPreferencesKey("emoji_tones")
         val MATH_RESULTS = booleanPreferencesKey("math_results")
         val GLOBE_OFFSET = floatPreferencesKey("globe_offset_dp")
         val HIDE_BUTTON = stringPreferencesKey("hide_button_mode")
@@ -199,12 +213,9 @@ class SettingsRepository(context: Context) {
         val KEYBOARD_SCALE = floatPreferencesKey("keyboard_scale")
         val ANIMATION_SPEED = stringPreferencesKey("animation_speed")
         val TRANSLATE_TARGET = stringPreferencesKey("translate_target")
-        val VOICE_DIALECT = stringPreferencesKey("voice_dialect")
-        val VOICE_OFFLINE_FIRST = booleanPreferencesKey("voice_offline_first")
         val TRANSLATE_RECENTS = stringPreferencesKey("translate_recents")
         val TOOLBAR_TRANSLATE_SEEN = booleanPreferencesKey("toolbar_translate_seen")
         val TOOLBAR_VOICE_SEEN = booleanPreferencesKey("toolbar_voice_seen")
-        val TOOLBAR_SMARTFIX_SEEN = booleanPreferencesKey("toolbar_smartfix_seen")
         val HIDE_APP_ICON = booleanPreferencesKey("hide_app_icon")
     }
 
@@ -228,7 +239,7 @@ class SettingsRepository(context: Context) {
                 size = p[Keys.SIZE].toEnumOr(KeyboardSize.MEDIUM),
                 keySpacing = p[Keys.KEY_SPACING].toEnumOr(KeySpacing.NORMAL),
                 numKeyTarget = p[Keys.NUM_KEY_TARGET].toEnumOr(NumKeyTarget.SYMBOLS),
-                toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS], p[Keys.TOOLBAR_TRANSLATE_SEEN] ?: false, p[Keys.TOOLBAR_VOICE_SEEN] ?: false, p[Keys.TOOLBAR_SMARTFIX_SEEN] ?: false),
+                toolbarItems = decodeToolbar(p[Keys.TOOLBAR_ITEMS], p[Keys.TOOLBAR_TRANSLATE_SEEN] ?: false, p[Keys.TOOLBAR_VOICE_SEEN] ?: false),
                 oneHand = p[Keys.ONE_HAND].toEnumOr(OneHandMode.OFF),
                 suggestionsEnabled = p[Keys.SUGGESTIONS] ?: true,
                 keyPreview = p[Keys.KEY_PREVIEW] ?: true,
@@ -238,6 +249,10 @@ class SettingsRepository(context: Context) {
                 arabicDigits = p[Keys.ARABIC_DIGITS] ?: false,
                 swipeTyping = p[Keys.SWIPE_TYPING] ?: true,
                 autoCorrect = p[Keys.AUTO_CORRECT] ?: true,
+                autoSentenceFix = p[Keys.AUTO_SENTENCE_FIX] ?: true,
+                layoutVariants = decodeVariants(p[Keys.LAYOUT_VARIANTS]),
+                emojiFavorites = p[Keys.EMOJI_FAVORITES].orEmpty().split(' ').filter { it.isNotEmpty() },
+                emojiTones = decodeTones(p[Keys.EMOJI_TONES]),
                 mathResults = p[Keys.MATH_RESULTS] ?: true,
                 globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f),
                 hideButtonMode = p[Keys.HIDE_BUTTON].toEnumOr(HideButtonMode.ARROW),
@@ -255,8 +270,6 @@ class SettingsRepository(context: Context) {
                 keyboardScale = (p[Keys.KEYBOARD_SCALE] ?: 1f).coerceIn(0.8f, 1.3f),
                 animationSpeed = p[Keys.ANIMATION_SPEED].toEnumOr(AnimationSpeed.NORMAL),
                 translateTarget = p[Keys.TRANSLATE_TARGET] ?: TranslateLanguages.defaultTarget(),
-                voiceDialect = p[Keys.VOICE_DIALECT].toEnumOr(VoiceDialect.AUTO),
-                voiceOfflineFirst = p[Keys.VOICE_OFFLINE_FIRST] ?: false,
                 translateRecents = p[Keys.TRANSLATE_RECENTS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList(),
                 hideAppIcon = p[Keys.HIDE_APP_ICON] ?: false
             )
@@ -264,8 +277,6 @@ class SettingsRepository(context: Context) {
         .distinctUntilChanged()
 
     suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[Keys.THEME_MODE] = mode.name } }
-    suspend fun setVoiceDialect(v: VoiceDialect) { store.edit { it[Keys.VOICE_DIALECT] = v.name } }
-    suspend fun setVoiceOfflineFirst(v: Boolean) { store.edit { it[Keys.VOICE_OFFLINE_FIRST] = v } }
     suspend fun setHideAppIcon(v: Boolean) {
         store.edit { it[Keys.HIDE_APP_ICON] = v }
         com.semo.keyboard.util.AppIconVisibility.setIconVisible(appCtx, !v)
@@ -294,7 +305,6 @@ class SettingsRepository(context: Context) {
             it[Keys.TOOLBAR_ITEMS] = v.joinToString(",") { item -> item.name }
             it[Keys.TOOLBAR_TRANSLATE_SEEN] = true
             it[Keys.TOOLBAR_VOICE_SEEN] = true
-            it[Keys.TOOLBAR_SMARTFIX_SEEN] = true
         }
     }
     suspend fun setTranslateTarget(code: String) {
@@ -313,6 +323,20 @@ class SettingsRepository(context: Context) {
     suspend fun setArabicDigits(v: Boolean) { store.edit { it[Keys.ARABIC_DIGITS] = v } }
     suspend fun setSwipeTyping(v: Boolean) { store.edit { it[Keys.SWIPE_TYPING] = v } }
     suspend fun setAutoCorrect(v: Boolean) { store.edit { it[Keys.AUTO_CORRECT] = v } }
+    suspend fun setAutoSentenceFix(v: Boolean) { store.edit { it[Keys.AUTO_SENTENCE_FIX] = v } }
+    suspend fun setEmojiFavorites(list: List<String>) { store.edit { it[Keys.EMOJI_FAVORITES] = list.joinToString(" ") } }
+    suspend fun setEmojiTone(base: String, variant: String) {
+        store.edit {
+            val map = decodeTones(it[Keys.EMOJI_TONES]) + (base to variant)
+            it[Keys.EMOJI_TONES] = map.entries.joinToString(" ") { e -> e.key + "=" + e.value }
+        }
+    }
+    suspend fun setLayoutVariant(code: String, id: String) {
+        store.edit {
+            val map = decodeVariants(it[Keys.LAYOUT_VARIANTS]) + (code to id)
+            it[Keys.LAYOUT_VARIANTS] = map.entries.joinToString(";") { e -> e.key + "=" + e.value }
+        }
+    }
     suspend fun setMathResults(v: Boolean) { store.edit { it[Keys.MATH_RESULTS] = v } }
     suspend fun setGlobeOffset(v: Float) { store.edit { it[Keys.GLOBE_OFFSET] = v.coerceIn(-16f, 16f) } }
     suspend fun setHideButtonMode(v: HideButtonMode) { store.edit { it[Keys.HIDE_BUTTON] = v.name } }

@@ -21,7 +21,8 @@ import kotlinx.coroutines.ensureActive
 internal object EmojiBitmapCache {
 
     private const val GLYPH_DP = 28f
-    private const val CACHE_BYTES = 44 * 1024 * 1024
+    private const val CACHE_BYTES = 64 * 1024 * 1024
+    private const val PREFETCH_MAX = 900
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
@@ -60,8 +61,10 @@ internal object EmojiBitmapCache {
     /** يحضّر الصور بالترتيب المعطى (الأقرب لما يراه المستخدم أولًا) ويتوقف فور إلغاء المهمة */
     suspend fun prefetch(order: List<String>) {
         var added = 0
+        var seen = 0
         for (emoji in order) {
             currentCoroutineContext().ensureActive()
+            if (seen++ >= PREFETCH_MAX) break
             if (cache.get(emoji) != null) continue
             val bitmap = render(emoji) ?: continue
             cache.put(emoji, bitmap)

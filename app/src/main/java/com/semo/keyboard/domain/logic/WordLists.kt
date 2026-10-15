@@ -28,6 +28,14 @@ object WordLists {
         KeyboardLanguage.DUTCH -> listOf("Ik", "Hallo", "De")
         KeyboardLanguage.POLISH -> listOf("Ja", "Cześć", "To")
         KeyboardLanguage.UKRAINIAN -> listOf("Я", "Привіт", "Як")
+        KeyboardLanguage.CZECH -> listOf("Já", "Ahoj", "To")
+        KeyboardLanguage.ROMANIAN -> listOf("Eu", "Salut", "Este")
+        KeyboardLanguage.SWEDISH -> listOf("Jag", "Hej", "Det")
+        KeyboardLanguage.DANISH -> listOf("Jeg", "Hej", "Det")
+        KeyboardLanguage.NORWEGIAN -> listOf("Jeg", "Hei", "Det")
+        KeyboardLanguage.FINNISH -> listOf("Minä", "Hei", "Se")
+        KeyboardLanguage.HUNGARIAN -> listOf("Én", "Szia", "Ez")
+        KeyboardLanguage.CATALAN -> listOf("Jo", "Hola", "El")
     }
 
     val englishStarters = listOf("I", "The", "I'm")

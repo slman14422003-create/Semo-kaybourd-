@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +45,7 @@ import com.semo.keyboard.ui.theme.SemoKeyboardColors
 import com.semo.keyboard.ui.theme.SemoPalette
 import com.semo.keyboard.ui.theme.semoColors
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
 
 @StringRes
 internal fun themeNameRes(theme: KeyboardTheme): Int = when (theme) {

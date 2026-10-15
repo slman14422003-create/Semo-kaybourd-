@@ -74,6 +74,7 @@ class ClipboardRepository(context: Context) {
         store.edit { p ->
             val list = decode(p[key]).toMutableList()
             val index = list.indexOfFirst { it.text == stored }
+            if (index == 0) return@edit
             val pinned = index >= 0 && list[index].pinned
             if (index >= 0) list.removeAt(index)
             list.add(0, ClipItem(stored, pinned))
@@ -134,7 +135,9 @@ class ClipboardRepository(context: Context) {
     suspend fun togglePin(text: String) {
         if (!appContext.isUserStorageUnlocked()) return
         store.edit { p ->
-            val list = decode(p[key]).map { if (it.text == text) it.copy(pinned = !it.pinned) else it }
+            val current = decode(p[key])
+            if (current.none { it.text == text }) return@edit
+            val list = current.map { if (it.text == text) it.copy(pinned = !it.pinned) else it }
             p[key] = encode(list)
         }
     }
@@ -218,7 +221,7 @@ class ClipboardRepository(context: Context) {
         /** أقصى طول نص يُحفظ (مليون حرف)؛ الأطول يُتجاهل بدل أن يُلصق مقطوعًا */
         const val MAX_TEXT_LENGTH = 1_000_000
         private const val PREVIEW_LENGTH = 400
-        private const val MAX_UNPINNED = 40
+        private const val MAX_UNPINNED = 60
         private const val MAX_UNPINNED_LONG = 15
         private const val MAX_UNPINNED_IMAGES = 10
         private const val ORPHAN_MIN_AGE_MS = 10L * 60L * 1000L

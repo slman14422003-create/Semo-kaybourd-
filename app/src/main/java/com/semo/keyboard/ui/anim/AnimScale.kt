@@ -46,4 +46,3 @@ val IosEaseInOut: Easing = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
 val IosEaseOut: Easing = CubicBezierEasing(0.25f, 0.46f, 0.45f, 0.94f)
 val IosPush: Easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
-const val IosSmoothDamping = 1f

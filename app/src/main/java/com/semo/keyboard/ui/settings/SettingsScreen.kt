@@ -8,7 +8,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
-import android.graphics.Color as AndroidColor
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -51,12 +50,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -94,6 +91,8 @@ import com.semo.keyboard.data.ShortcutsRepository
 import com.semo.keyboard.domain.model.BackspaceSpeed
 import com.semo.keyboard.domain.model.HoldDelay
 import com.semo.keyboard.domain.model.SpaceBarAction
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 
 /** صفحات الإعدادات: رئيسية بأقسام مرتبة، وكل قسم صفحة فرعية */
@@ -204,7 +203,6 @@ private fun toolbarItemInfo(item: ToolbarItem): Triple<String, Int, androidx.com
     ToolbarItem.SETTINGS -> Triple(L("الإعدادات"), R.drawable.ic_tool_settings, IconGray)
     ToolbarItem.TRANSLATE -> Triple("Translate", R.drawable.ic_tool_translate, IconBlue)
     ToolbarItem.VOICE -> Triple("Voice", R.drawable.ic_ios_mic, IconOrange)
-    ToolbarItem.SMARTFIX -> Triple("Smart fix", R.drawable.ic_tool_smartfix, IconPurple)
 }
 
 private fun holdLabel(d: HoldDelay) = when (d) {
@@ -250,6 +248,7 @@ private fun HomePage(
             add(L("تنبؤ"))
             if (settings.nextWord) add(L("الكلمة التالية"))
             if (settings.autoCorrect) add(L("استبدال تلقائي"))
+            if (settings.autoSentenceFix) add(com.semo.keyboard.ui.appString(R.string.auto_sentence_short))
             if (settings.spellCheck) add(L("تدقيق"))
             if (settings.textShortcuts && shortcutCount > 0) add("$shortcutCount${L(" اختصار")}")
         }.joinToString(" · ")
@@ -356,7 +355,9 @@ private fun LanguagesPage(repo: SettingsRepository, settings: SemoSettings, onBa
                     options = listOf(
                         EnglishLayout.QWERTY to "QWERTY",
                         EnglishLayout.AZERTY to "AZERTY",
-                        EnglishLayout.QWERTZ to "QWERTZ"
+                        EnglishLayout.QWERTZ to "QWERTZ",
+                        EnglishLayout.DVORAK to "Dvorak",
+                        EnglishLayout.COLEMAK to "Colemak"
                     ),
                     selected = settings.englishLayout,
                     onSelect = { scope.launch { repo.setEnglishLayout(it) } }
@@ -376,6 +377,21 @@ private fun LanguagesPage(repo: SettingsRepository, settings: SemoSettings, onBa
                     onSelect = { scope.launch { repo.setArabicLayout(it) } }
                 )
                 LayoutPreview(KeyboardLayoutProvider.previewRows(KeyboardLanguage.ARABIC, settings.englishLayout, settings.arabicLayout))
+            }
+            settings.enabledLanguages.forEach { lang ->
+                val variants = KeyboardLayoutProvider.variantsFor(lang)
+                if (variants.isNotEmpty()) {
+                    Divider()
+                    val current = variants.firstOrNull { it.id == settings.layoutVariants[lang.code] } ?: variants.first()
+                    Block(lang.nativeName, R.drawable.ic_ios_globe, IconBlue) {
+                        Segmented(
+                            options = variants.map { it to it.label },
+                            selected = current,
+                            onSelect = { scope.launch { repo.setLayoutVariant(lang.code, it.id) } }
+                        )
+                        LayoutPreview(current.rows)
+                    }
+                }
             }
         }
         Section(L("الأرقام")) {
@@ -418,6 +434,11 @@ private fun TypingPage(
                 L("استبدال تلقائي"), R.drawable.ic_set_spell, IconTeal, settings.autoCorrect,
                 subtitle = L("يصحّح الأخطاء الشائعة (dont ← don't، الى ← إلى) والأخطاء الإملائية الواضحة بالإنكليزي")
             ) { scope.launch { repo.setAutoCorrect(it) } }
+            Divider()
+            SwitchRow(
+                com.semo.keyboard.ui.appString(R.string.auto_sentence_title), R.drawable.ic_set_text, IconPurple, settings.autoSentenceFix,
+                subtitle = com.semo.keyboard.ui.appString(R.string.auto_sentence_hint)
+            ) { scope.launch { repo.setAutoSentenceFix(it) } }
             Divider()
             SwitchRow(
                 L("تدقيق إملائي"), R.drawable.ic_set_spell, IconOrange, settings.spellCheck,
@@ -637,7 +658,6 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     when (item) {
                         ToolbarItem.TRANSLATE -> it.copy(first = com.semo.keyboard.ui.appString(R.string.translate_title))
                         ToolbarItem.VOICE -> it.copy(first = com.semo.keyboard.ui.appString(R.string.voice_title))
-                        ToolbarItem.SMARTFIX -> it.copy(first = com.semo.keyboard.ui.appString(R.string.smartfix_title))
                         else -> it
                     }
                 }

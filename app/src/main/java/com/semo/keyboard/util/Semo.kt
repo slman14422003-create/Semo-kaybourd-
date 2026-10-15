@@ -15,9 +15,6 @@ object Semo {
     const val ACTION_ECO = "app.semo.ECOSYSTEM"
     const val META_ROLE = "app.semo.ROLE"
     const val ROLE_NOTES = "notes"
-    const val ROLE_FILES = "files"
-
-    const val ACTION_SHOW_IN_FILES = "app.semo.SHOW_IN_FILES"
 
     data class Sibling(
         val pkg: String,

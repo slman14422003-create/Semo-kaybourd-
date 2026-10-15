@@ -65,12 +65,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,6 +145,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 internal fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
 
@@ -196,7 +196,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     }
     val rows = remember(
         state.page, state.shiftState, state.language, state.numberRow, state.enterKind,
-        state.englishLayout, state.arabicLayout, state.style, state.arabicDigits, state.fieldKind,
+        state.englishLayout, state.arabicLayout, state.layoutVariants, state.style, state.arabicDigits, state.fieldKind,
         state.hideButtonMode, state.numKeyTarget, state.navButtons
     ) { KeyboardLayoutProvider.rows(state) }
     // من أندرويد 15 اللوحة تُرسم خلف شريط التنقل. فبدل ما نترك مساحة فارغة تحت الصف الأخير،
@@ -316,7 +316,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
             ) {
                 if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
                     Crossfade(
-                        targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else 0,
+                        targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else if (state.emojiSearch != null) 4 else 0,
                         animationSpec = scaledTween(animScale, 170),
                         label = "strip"
                     ) { mode ->
@@ -324,6 +324,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                             1 -> ClipEditBar(state, colors, metrics.stripHeight, viewModel)
                             2 -> TranslateBar(state, colors, metrics.stripHeight, viewModel)
                             3 -> VoiceBar(state, colors, metrics.stripHeight, viewModel)
+                            4 -> EmojiSearchBar(state, colors, metrics.stripHeight, viewModel)
                             else -> TopStrip(state, colors, metrics, viewModel)
                         }
                     }
@@ -610,7 +611,6 @@ private fun TopStrip(
                         ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.SETTINGS)) { viewModel.openSettings() }
                         ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.TRANSLATE)) { viewModel.openTranslate() }
                         ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.VOICE)) { viewModel.openVoice() }
-                        ToolbarItem.SMARTFIX -> StripIconButton(R.drawable.ic_tool_smartfix, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.SMARTFIX)) { viewModel.smartFixText() }
                         }
                     }
                 }
@@ -634,7 +634,6 @@ private fun toolTint(item: ToolbarItem): Color = when (item) {
     ToolbarItem.SETTINGS -> Color(0xFF8E8E93)
     ToolbarItem.TRANSLATE -> Color(0xFF30B0F0)
     ToolbarItem.VOICE -> Color(0xFFFF453A)
-    ToolbarItem.SMARTFIX -> Color(0xFFAF52DE)
 }
 
 @Composable

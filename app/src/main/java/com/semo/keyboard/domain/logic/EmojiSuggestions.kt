@@ -107,6 +107,8 @@ object EmojiSuggestions {
         add("🕌", "مسجد", "جامع", "رمضان", "صلاة", "جمعة")
     }
 
+    fun entries(): Map<String, String> = map
+
     /** إيموجي مقترحة للكلمة (مطابقة كاملة بلا اعتبار لحالة الأحرف) أو null */
     fun forWord(word: String): String? {
         val w = word.trim()

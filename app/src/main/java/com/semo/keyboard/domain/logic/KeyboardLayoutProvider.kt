@@ -41,6 +41,17 @@ object KeyboardLayoutProvider {
         listOf("y", "x", "c", "v", "b", "n", "m")
     )
 
+    private val dvorak = listOf(
+        listOf("'", ",", ".", "p", "y", "f", "g", "c", "r", "l"),
+        listOf("a", "o", "e", "u", "i", "d", "h", "t", "n", "s"),
+        listOf(";", "q", "j", "k", "x", "b", "m", "w", "v", "z")
+    )
+    private val colemak = listOf(
+        listOf("q", "w", "f", "p", "g", "j", "l", "u", "y", ";"),
+        listOf("a", "r", "s", "t", "d", "h", "n", "e", "i", "o"),
+        listOf("z", "x", "c", "v", "b", "k", "m")
+    )
+
     private val enAlternates: Map<String, List<String>> = mapOf(
         "a" to listOf("à", "á", "â", "ä", "æ", "ã", "å"),
         "e" to listOf("è", "é", "ê", "ë"),
@@ -78,14 +89,10 @@ object KeyboardLayoutProvider {
         listOf("ز", "خ", "ث", "ط", "ب", "ن", "م", "ذ")
     )
 
-    /**
-     * عربي Gboard: نفس ترتيب لوحة جوجل العربية. الصف الثالث فيه 10 حروف (ذ ء ؤ ر ى ة و ز ظ د)
-     * فيصير عرض الحذف بعرض حرف عادي ليتساوى عرض الصفوف الثلاثة بدون مفاتيح أضيق من غيرها.
-     */
     private val arGboard = listOf(
-        listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج"),
+        listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "د"),
         listOf("ش", "س", "ي", "ب", "ل", "ا", "ت", "ن", "م", "ك", "ط"),
-        listOf("ذ", "ء", "ؤ", "ر", "ى", "ة", "و", "ز", "ظ", "د")
+        listOf("ئ", "ء", "ؤ", "ر", "لا", "ى", "ة", "و", "ز", "ظ")
     )
 
     private val arAlternates: Map<String, List<String>> = mapOf(
@@ -96,7 +103,13 @@ object KeyboardLayoutProvider {
         "ه" to listOf("ة"),
         "ل" to listOf("لا", "لأ", "لإ", "لآ"),
         "ت" to listOf("ة"),
-        "ء" to listOf("َ", "ُ", "ِ", "ّ", "ْ", "ً", "ٌ", "ٍ")
+        "ء" to listOf("َ", "ُ", "ِ", "ّ", "ْ", "ً", "ٌ", "ٍ"),
+        "د" to listOf("ذ"),
+        "ك" to listOf("گ", "ک"),
+        "ب" to listOf("پ"),
+        "ج" to listOf("چ"),
+        "ز" to listOf("ژ"),
+        "ف" to listOf("ڤ")
     )
 
     // ---------- لغات المكتبة (التخطيط مدمج، والقاموس يُنزَّل من الإعدادات) ----------
@@ -166,6 +179,87 @@ object KeyboardLayoutProvider {
         )
     )
 
+    private val libraryExtra: Map<KeyboardLanguage, LangLayout> = mapOf(
+        KeyboardLanguage.CZECH to LangLayout(
+            listOf(r("q w e r t z u i o p ú"), r("a s d f g h j k l ů"), r("y x c v b n m")),
+            mapOf(
+                "a" to r("á ä"), "c" to r("č ć"), "d" to r("ď"), "e" to r("é ě ë"), "i" to r("í"), "n" to r("ň"),
+                "o" to r("ó ö"), "r" to r("ř"), "s" to r("š"), "t" to r("ť"), "u" to r("ů ü"), "y" to r("ý"), "z" to r("ž")
+            )
+        ),
+        KeyboardLanguage.ROMANIAN to LangLayout(
+            latinQwertyRows,
+            mapOf("a" to r("ă â"), "i" to r("î"), "s" to r("ș"), "t" to r("ț"))
+        ),
+        KeyboardLanguage.SWEDISH to LangLayout(
+            listOf(r("q w e r t y u i o p å"), r("a s d f g h j k l ö ä"), r("z x c v b n m")),
+            mapOf("e" to r("é"), "a" to r("á à"), "u" to r("ü"), "c" to r("ç"))
+        ),
+        KeyboardLanguage.DANISH to LangLayout(
+            listOf(r("q w e r t y u i o p å"), r("a s d f g h j k l æ ø"), r("z x c v b n m")),
+            mapOf("e" to r("é ë"), "a" to r("á ä"), "o" to r("ö"), "u" to r("ü"))
+        ),
+        KeyboardLanguage.NORWEGIAN to LangLayout(
+            listOf(r("q w e r t y u i o p å"), r("a s d f g h j k l ø æ"), r("z x c v b n m")),
+            mapOf("e" to r("é è ê"), "a" to r("á à ä"), "o" to r("ó ò ö"), "u" to r("ü"))
+        ),
+        KeyboardLanguage.FINNISH to LangLayout(
+            listOf(r("q w e r t y u i o p å"), r("a s d f g h j k l ö ä"), r("z x c v b n m")),
+            mapOf("s" to r("š"), "z" to r("ž"))
+        ),
+        KeyboardLanguage.HUNGARIAN to LangLayout(
+            listOf(r("q w e r t z u i o p ő ú"), r("a s d f g h j k l é á ű"), r("y x c v b n m ö ü")),
+            mapOf("a" to r("á"), "e" to r("é"), "i" to r("í"), "o" to r("ó ö ő"), "u" to r("ú ü ű"))
+        ),
+        KeyboardLanguage.CATALAN to LangLayout(
+            latinQwertyRows,
+            mapOf(
+                "a" to r("à á"), "e" to r("è é"), "i" to r("í ï"), "o" to r("ò ó"), "u" to r("ú ü"),
+                "c" to r("ç"), "l" to r("l·"), "n" to r("ñ")
+            )
+        )
+    )
+
+    /** An alternative letter arrangement for a language: [id] is stored in settings, [label] is shown as is. */
+    data class LayoutVariant(val id: String, val label: String, val rows: List<List<String>>)
+
+    private val qwertyRows = listOf(r("q w e r t y u i o p"), r("a s d f g h j k l"), r("z x c v b n m"))
+    private val qwertzRows = listOf(r("q w e r t z u i o p"), r("a s d f g h j k l"), r("y x c v b n m"))
+
+    private fun allLibrary(): Map<KeyboardLanguage, LangLayout> = libraryLayouts + libraryExtra
+
+    private val variantTable: Map<KeyboardLanguage, List<LayoutVariant>> by lazy {
+        mapOf(
+            KeyboardLanguage.FRENCH to listOf(
+                LayoutVariant("default", "AZERTY", allLibrary().getValue(KeyboardLanguage.FRENCH).rows),
+                LayoutVariant("qwerty", "QWERTY", qwertyRows)
+            ),
+            KeyboardLanguage.GERMAN to listOf(
+                LayoutVariant("default", "QWERTZ", allLibrary().getValue(KeyboardLanguage.GERMAN).rows),
+                LayoutVariant("qwerty", "QWERTY", listOf(r("q w e r t y u i o p ü"), r("a s d f g h j k l ö ä"), r("z x c v b n m")))
+            ),
+            KeyboardLanguage.CZECH to listOf(
+                LayoutVariant("default", "QWERTZ", allLibrary().getValue(KeyboardLanguage.CZECH).rows),
+                LayoutVariant("qwerty", "QWERTY", listOf(r("q w e r t y u i o p ú"), r("a s d f g h j k l ů"), r("z x c v b n m")))
+            ),
+            KeyboardLanguage.HUNGARIAN to listOf(
+                LayoutVariant("default", "QWERTZ", allLibrary().getValue(KeyboardLanguage.HUNGARIAN).rows),
+                LayoutVariant("qwerty", "QWERTY", listOf(r("q w e r t y u i o p ő ú"), r("a s d f g h j k l é á ű"), r("z x c v b n m ö ü")))
+            ),
+            KeyboardLanguage.TURKISH to listOf(
+                LayoutVariant("default", "Q", allLibrary().getValue(KeyboardLanguage.TURKISH).rows),
+                LayoutVariant("f", "F", listOf(r("f g ğ ı o d r n h p q w"), r("u i e a ü t k m l y ş"), r("j ö v c ç z s b x")))
+            )
+        )
+    }
+
+    fun variantsFor(language: KeyboardLanguage): List<LayoutVariant> = variantTable[language].orEmpty()
+
+    private fun variantFor(language: KeyboardLanguage, variants: Map<String, String>): LayoutVariant? {
+        val list = variantTable[language] ?: return null
+        return list.firstOrNull { it.id == variants[language.code] } ?: list.first()
+    }
+
     private val persianDigitsList = listOf("۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹", "۰")
 
     // ---------- رموز ----------
@@ -177,7 +271,12 @@ object KeyboardLayoutProvider {
     private val sym2Row1 = listOf("[", "]", "{", "}", "#", "%", "^", "*", "+", "=")
     private val sym2Row2 = listOf("_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•")
 
-    val emojiCategories: List<EmojiCategory> get() = EmojiData.categories
+    /** Curated categories plus every other emoji of the Unicode set ([EmojiExtra]); built once. */
+    val emojiCategories: List<EmojiCategory> by lazy {
+        EmojiData.categories.map { cat ->
+            cat.copy(emojis = (cat.emojis + EmojiExtra.forCategory(cat.titleEn)).distinct())
+        }
+    }
 
     /** الأرقام المعروضة حسب لغة اللوحة وخيار الأرقام الهندية */
     private fun digitsFor(state: KeyboardUiState): List<String> = when {
@@ -191,18 +290,21 @@ object KeyboardLayoutProvider {
     fun previewRows(
         language: KeyboardLanguage,
         english: EnglishLayout,
-        arabic: ArabicLayout
+        arabic: ArabicLayout,
+        variants: Map<String, String> = emptyMap()
     ): List<List<String>> =
         when (language) {
             KeyboardLanguage.ENGLISH -> englishLetterRows(english)
             KeyboardLanguage.ARABIC -> arabicLetterRows(arabic)
-            else -> libraryLayouts[language]?.rows ?: englishLetterRows(english)
+            else -> variantFor(language, variants)?.rows ?: allLibrary()[language]?.rows ?: englishLetterRows(english)
         }
 
     private fun englishLetterRows(layout: EnglishLayout): List<List<String>> = when (layout) {
         EnglishLayout.QWERTY -> qwerty
         EnglishLayout.AZERTY -> azerty
         EnglishLayout.QWERTZ -> qwertz
+        EnglishLayout.DVORAK -> dvorak
+        EnglishLayout.COLEMAK -> colemak
     }
 
     private fun arabicLetterRows(layout: ArabicLayout): List<List<String>> = when (layout) {
@@ -217,11 +319,12 @@ object KeyboardLayoutProvider {
             KeyboardLanguage.ENGLISH -> casedRows(state, englishLetterRows(state.englishLayout), enAlternates)
             KeyboardLanguage.ARABIC -> uncasedRows(state, arabicLetterRows(state.arabicLayout), arAlternates)
             else -> {
-                val layout = libraryLayouts[state.language]
+                val layout = allLibrary()[state.language]
+                val letters = variantFor(state.language, state.layoutVariants)?.rows ?: layout?.rows
                 when {
-                    layout == null -> casedRows(state, englishLetterRows(state.englishLayout), enAlternates)
-                    state.language.cased -> casedRows(state, layout.rows, layout.alternates)
-                    else -> uncasedRows(state, layout.rows, layout.alternates)
+                    layout == null || letters == null -> casedRows(state, englishLetterRows(state.englishLayout), enAlternates)
+                    state.language.cased -> casedRows(state, letters, layout.alternates)
+                    else -> uncasedRows(state, letters, layout.alternates)
                 }
             }
         }

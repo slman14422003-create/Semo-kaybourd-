@@ -12,6 +12,7 @@ import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.logic.NextWordModel
 import com.semo.keyboard.domain.logic.NgramModel
 import com.semo.keyboard.data.DictionaryManager
+import com.semo.keyboard.domain.logic.EmojiSearch
 import com.semo.keyboard.domain.logic.EmojiSuggestions
 import com.semo.keyboard.domain.logic.MathEvaluator
 import com.semo.keyboard.domain.logic.SuggestionEngine
@@ -40,6 +41,7 @@ import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ShiftState
 import com.semo.keyboard.domain.model.TextShortcut
 import com.semo.keyboard.domain.model.TranslateUi
+import com.semo.keyboard.domain.model.EmojiSearchUi
 import com.semo.keyboard.domain.model.VoiceOptions
 import com.semo.keyboard.domain.model.VoiceStatus
 import com.semo.keyboard.domain.model.VoiceUi
@@ -129,6 +131,11 @@ class KeyboardViewModel(
 
     private val safeHandler = CoroutineExceptionHandler { _, _ -> }
 
+    /** Builds the (large) emoji lists off the main thread so the first opening of the panel is instant. */
+    init {
+        launchSafe { withContext(Dispatchers.Default) { supportedEmojiCache.size } }
+    }
+
     private fun launchSafe(block: suspend CoroutineScope.() -> Unit): Job =
         viewModelScope.launch(safeHandler, block = block)
 
@@ -166,6 +173,7 @@ class KeyboardViewModel(
         val clipEdit: ClipEdit? = null,
         val translate: TranslateUi? = null,
         val voice: VoiceUi? = null,
+        val emojiSearch: EmojiSearchUi? = null,
         val navSetting: Boolean = false,
         val navInset: Boolean = false
     )
@@ -308,6 +316,11 @@ class KeyboardViewModel(
                 arabicDigits = s.arabicDigits,
                 swipeTyping = s.swipeTyping,
                 autoCorrect = s.autoCorrect,
+                autoSentenceFix = s.autoSentenceFix,
+                layoutVariants = s.layoutVariants,
+                emojiFavorites = s.emojiFavorites,
+                emojiTones = s.emojiTones,
+                emojiSearch = t.emojiSearch,
                 mathResults = s.mathResults,
                 globeOffsetDp = s.globeOffsetDp,
                 hideButtonMode = s.hideButtonMode,
@@ -334,8 +347,6 @@ class KeyboardViewModel(
                 clipEdit = t.clipEdit,
                 translate = t.translate,
                 voice = t.voice,
-                voiceDialect = s.voiceDialect,
-                voiceOfflineFirst = s.voiceOfflineFirst,
                 navButtons = t.navSetting || t.navInset,
                 translateTarget = s.translateTarget,
                 translateRecents = s.translateRecents
@@ -428,10 +439,13 @@ class KeyboardViewModel(
         }
         if (transient.value.alternates.isNotEmpty()) dismissAlternates()
         if (transient.value.voice != null) closeVoice()
+        if (transient.value.emojiSearch != null && handleEmojiSearchKey(action)) return
 
         // أي مفتاح غير الحذف يلغي إمكانية التراجع عن التصحيح التلقائي
         val pendingUndo = undo
         undo = null
+        val pendingSentence = sentenceUndo
+        sentenceUndo = null
         val hadAutoSpace = autoSpace
         autoSpace = false
         val swipeWord = transient.value.swipeWord
@@ -476,6 +490,12 @@ class KeyboardViewModel(
                     val tail = if (corrected == null) before else before.dropLast(corrected.original.length) + corrected.fixed
                     handleSpace(state.language, state.doubleSpacePeriod, tail.takeLast(2))
                     undo = corrected
+                    if (state.autoSentenceFix && tail.lastOrNull()?.let { it in SENTENCE_END } == true) {
+                        autoFixSentence(byEnter = false)?.let {
+                            sentenceUndo = it
+                            undo = null
+                        }
+                    }
                 }
                 refreshSuggestions()
             }
@@ -487,12 +507,13 @@ class KeyboardViewModel(
                     learnWord(finalWord)
                     learnPair(before, corrected?.original ?: finalWord, finalWord)
                 }
+                if (state.autoSentenceFix) autoFixSentence(byEnter = true)
                 bridge.performEnter()
                 autoCapitalize(state.language)
                 refreshSuggestions()
             }
             KeyAction.Backspace -> {
-                handleBackspace(pendingUndo, swipeWord)
+                if (!revertSentenceFix(pendingSentence)) handleBackspace(pendingUndo, swipeWord)
                 refreshSuggestions()
             }
             KeyAction.Shift -> toggleShift()
@@ -611,43 +632,78 @@ class KeyboardViewModel(
         launchSafe { learnedWordsRepository.learnFix(typed, chosen) }
     }
 
-    private var smartFixUndo: Pair<String, String>? = null
+    private var sentenceUndo: Correction? = null
+    private var sentenceSkip: String? = null
 
-    fun smartFixText() {
+    /**
+     * Automatic sentence correction. Runs after a sentence mark followed by space, or on Enter.
+     * Returns the replacement made, or null when nothing changed.
+     */
+    private fun autoFixSentence(byEnter: Boolean): Correction? {
         val state = uiState.value
-        if (!transient.value.suggestionsAllowed || transient.value.fieldKind == FieldKind.URL) return
-        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
-        val before = bridge.textBeforeCursor(SMART_FIX_WINDOW)
-        if (before.isBlank()) return
-        smartFixUndo?.let { (original, fixedText) ->
-            if (before.endsWith(fixedText)) {
-                bridge.replaceBeforeCursor(fixedText.length, original)
-                smartFixUndo = null
-                refreshSuggestions()
-                return
-            }
+        val t = transient.value
+        if (!state.autoSentenceFix || !t.suggestionsAllowed || t.fieldKind != FieldKind.TEXT) return null
+        val text = bridge.textBeforeCursorWithin(SMART_FIX_WINDOW, HOT_READ_MS, true) ?: return null
+        val body = text.trimEnd(' ', '\t')
+        if (body.length < 3 || body.last() == '\n') return null
+        val scanEnd = if (body.last() in SENTENCE_END) body.length - 1 else body.length
+        val boundary = body.substring(0, scanEnd).lastIndexOfAny(SENTENCE_BOUNDARY)
+        val start: Int
+        val atStart: Boolean
+        if (boundary >= 0) {
+            var s = boundary + 1
+            while (s < text.length && text[s].isWhitespace() && text[s] != '\n') s++
+            start = s
+            atStart = true
+        } else if (text.length < SMART_FIX_WINDOW) {
+            start = 0
+            atStart = true
+        } else {
+            val cut = text.indexOfFirst { it.isWhitespace() }
+            if (cut < 0) return null
+            start = cut + 1
+            atStart = false
         }
-        var segment = before
-        val atStart = before.length < SMART_FIX_WINDOW
-        if (!atStart) {
-            val cut = segment.indexOfFirst { it.isWhitespace() }
-            segment = if (cut >= 0) segment.substring(cut) else segment
+        if (start >= text.length) return null
+        val segment = text.substring(start)
+        if (segment.isBlank() || segment == sentenceSkip) return null
+        if (!byEnter && body.last() == '.') {
+            val stem = body.substring(start.coerceAtMost(body.length)).substringAfterLast(' ').trimEnd('.')
+            if (stem.contains('.') || stem.count { it.isLetter() } <= 2) return null
         }
-        val fixed = smartFixSegment(segment, atStart)
-        if (fixed == segment) return
+        val fixed = smartFixSegment(segment, atStart, state.autoCorrect)
+        if (fixed == segment) return null
         bridge.replaceBeforeCursor(segment.length, fixed)
-        smartFixUndo = segment to fixed
-        undo = null
-        refreshSuggestions()
+        return Correction(segment, fixed)
     }
 
-    private fun smartFixSegment(segment: String, atStart: Boolean): String {
-        var out = SMART_WORD_REGEX.replace(segment) { m -> correctWord(m.value) ?: m.value }
-        out = out.replace(Regex("(?<=[\\u0600-\\u06FF])\\?"), "\u061F")
-        out = out.replace(Regex("(?<=[\\u0600-\\u06FF]),"), "\u060C")
-        out = out.replace(Regex("[ \\t]{2,}"), " ")
-        out = out.replace(Regex("[ \\t]+(?=[.,!?\u061F\u060C])"), "")
-        out = Regex("(^|[.!?]\\s+)(\\p{Ll})").replace(out) { m ->
+    private fun revertSentenceFix(pending: Correction?): Boolean {
+        if (pending == null || readBefore(pending.fixed.length) != pending.fixed) return false
+        bridge.replaceBeforeCursor(pending.fixed.length, pending.original.trimEnd())
+        sentenceSkip = pending.original
+        return true
+    }
+
+    private fun isGlued(segment: String, range: IntRange): Boolean {
+        val prev = segment.getOrNull(range.first - 1)
+        val next = segment.getOrNull(range.last + 1)
+        if (prev != null && (prev.isDigit() || prev in GLUE_BEFORE)) return true
+        if (next != null && (next.isDigit() || next in GLUE_AFTER)) return true
+        return next == '.' && segment.getOrNull(range.last + 2)?.isLetter() == true
+    }
+
+    private fun smartFixSegment(segment: String, atStart: Boolean, fixWords: Boolean): String {
+        var out = segment
+        if (fixWords) {
+            out = SMART_WORD_REGEX.replace(out) { m ->
+                if (isGlued(segment, m.range)) m.value else correctWord(m.value) ?: m.value
+            }
+        }
+        out = ARABIC_QUESTION_REGEX.replace(out, "\u061F")
+        out = ARABIC_COMMA_REGEX.replace(out, "\u060C")
+        out = MULTI_SPACE_REGEX.replace(out, " ")
+        out = SPACE_BEFORE_PUNCT_REGEX.replace(out, "")
+        out = CAPITAL_REGEX.replace(out) { m ->
             if (m.groupValues[1].isEmpty() && !atStart) m.value
             else m.groupValues[1] + m.groupValues[2].uppercase()
         }
@@ -760,6 +816,65 @@ class KeyboardViewModel(
         refreshSuggestions()
     }
 
+    fun openEmojiSearch() {
+        closeVoice()
+        translateJob?.cancel()
+        val recents = uiState.value.recentEmojis.take(EMOJI_RESULT_MAX)
+        transient.update {
+            it.copy(
+                emojiSearch = EmojiSearchUi("", recents),
+                translate = null,
+                clipEdit = null,
+                toolbarOpen = false,
+                page = KeyboardPage.LETTERS,
+                alternates = emptyList()
+            )
+        }
+    }
+
+    fun closeEmojiSearch() {
+        transient.update { if (it.emojiSearch == null) it else it.copy(emojiSearch = null, page = KeyboardPage.EMOJI) }
+    }
+
+    private fun handleEmojiSearchKey(action: KeyAction): Boolean {
+        val current = transient.value.emojiSearch ?: return false
+        val query = when (action) {
+            is KeyAction.Character -> current.query + action.char
+            KeyAction.Space -> current.query + " "
+            KeyAction.Backspace -> {
+                if (current.query.isEmpty()) {
+                    closeEmojiSearch()
+                    return true
+                }
+                current.query.dropLast(1)
+            }
+            KeyAction.Enter -> {
+                closeEmojiSearch()
+                return true
+            }
+            else -> return false
+        }
+        if (action is KeyAction.Character) consumeOneShotShift()
+        val trimmed = query.take(EMOJI_QUERY_MAX)
+        val results = if (trimmed.isBlank()) uiState.value.recentEmojis.take(EMOJI_RESULT_MAX)
+        else EmojiSearch.search(trimmed, EMOJI_RESULT_MAX)
+        transient.update { it.copy(emojiSearch = EmojiSearchUi(trimmed, results)) }
+        return true
+    }
+
+    fun toggleEmojiFavorite(emoji: String) {
+        val base = toneBase(emoji)
+        val current = uiState.value.emojiFavorites
+        val updated = if (current.any { toneBase(it) == base }) current.filterNot { toneBase(it) == base }
+        else (listOf(emoji) + current).take(MAX_FAVORITE_EMOJIS)
+        launchSafe { settingsRepository.setEmojiFavorites(updated) }
+    }
+
+    fun chooseEmojiTone(base: String, variant: String) {
+        launchSafe { settingsRepository.setEmojiTone(base, variant) }
+        onEmojiPressed(variant)
+    }
+
     fun onEmojiPressed(emoji: String) {
         val state = uiState.value
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
@@ -811,7 +926,7 @@ class KeyboardViewModel(
 
     private fun voiceTag(): String {
         val state = uiState.value
-        return VoiceLanguages.tagFor(state.language, dialect = state.voiceDialect)
+        return VoiceLanguages.tagFor(state.language)
     }
 
     private fun voiceOptions(): VoiceOptions {
@@ -831,7 +946,6 @@ class KeyboardViewModel(
             }.toDouble() / words.size
         }
         return VoiceOptions(
-            state.voiceOfflineFirst,
             bias,
             rank,
             if (state.soundEnabled) state.soundVolume.coerceAtLeast(0.4f) else 0f
@@ -982,7 +1096,7 @@ class KeyboardViewModel(
 
     fun openPage(page: KeyboardPage) {
         if (page != KeyboardPage.LETTERS) closeVoice()
-        transient.update { it.copy(page = page, alternates = emptyList()) }
+        transient.update { it.copy(page = page, alternates = emptyList(), emojiSearch = null) }
     }
 
     fun cycleOneHand() {
@@ -1347,6 +1461,14 @@ class KeyboardViewModel(
     private companion object {
         const val SMART_FIX_WINDOW = 400
         val SMART_WORD_REGEX = Regex("[\\p{L}\\p{M}'\u2019]+")
+        val SENTENCE_BOUNDARY = charArrayOf('.', '!', '?', '\u061F', '\n')
+        const val GLUE_BEFORE = "@#/_:.-"
+        const val GLUE_AFTER = "@/_:"
+        val ARABIC_QUESTION_REGEX = Regex("(?<=[\\u0600-\\u06FF])\\?")
+        val ARABIC_COMMA_REGEX = Regex("(?<=[\\u0600-\\u06FF]),")
+        val MULTI_SPACE_REGEX = Regex("[ \\t]{2,}")
+        val SPACE_BEFORE_PUNCT_REGEX = Regex("[ \\t]+(?=[.,!?\u061F\u060C])")
+        val CAPITAL_REGEX = Regex("(^|[.!?]\\s+)(\\p{Ll})(?=[\\p{Ll}'\u2019]*(?:[^\\p{L}\\p{N}'\u2019.@/:_]|$))")
         val SENTENCE_END = setOf('.', '!', '?', '؟')
         /** علامات الترقيم التي تُنهي الكلمة وتشغّل التصحيح التلقائي */
         const val AUTO_SPACE_PUNCT = ".,!?;:،؛؟"
@@ -1355,6 +1477,9 @@ class KeyboardViewModel(
         /** رموز العمليات الحسابية: كتابتها لا تشغّل التصحيح ولا تعلّم الكلمة السابقة */
         const val NON_WORD_END_SYMBOLS = "+×÷=*%^<>~|#"
         const val MAX_RECENT_EMOJIS = 32
+        const val MAX_FAVORITE_EMOJIS = 60
+        const val EMOJI_RESULT_MAX = 48
+        const val EMOJI_QUERY_MAX = 24
         const val HOT_READ_MS = 80L
         const val EDIT_READ_MS = 120L
         const val SUGGEST_READ_MS = 400L

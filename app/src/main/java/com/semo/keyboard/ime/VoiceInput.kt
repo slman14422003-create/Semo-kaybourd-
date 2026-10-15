@@ -7,7 +7,6 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.semo.keyboard.domain.model.KeyboardLanguage
-import com.semo.keyboard.domain.model.VoiceDialect
 import com.semo.keyboard.domain.model.VoiceOptions
 import com.semo.keyboard.domain.model.VoiceStatus
 import java.util.Locale
@@ -25,12 +24,10 @@ object VoiceLanguages {
 
     fun tagFor(
         language: KeyboardLanguage,
-        device: Locale = Locale.getDefault(),
-        dialect: VoiceDialect = VoiceDialect.AUTO
+        device: Locale = Locale.getDefault()
     ): String {
         val code = language.code
         if (code == "ar") {
-            dialect.tag?.let { return it }
             val country = device.country.uppercase(Locale.ROOT)
             return if (country in arabCountries) "ar-$country" else "ar-SA"
         }

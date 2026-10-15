@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui.theme
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -55,6 +56,7 @@ fun SemoAppTheme(content: @Composable () -> Unit) {
 }
 
 /** ألوان لوحة المفاتيح بنمط iOS 18، فاتح وداكن */
+@Immutable
 data class SemoKeyboardColors(
     val panel: Color,
     val key: Color,
@@ -196,13 +198,13 @@ fun semoColors(style: KeyboardStyle, dark: Boolean, theme: KeyboardTheme = Keybo
 }
 
 /** قياسات اللوحة حسب النمط وارتفاع المفاتيح */
+@Immutable
 data class KeyMetrics(
     val keyHeight: Dp,
     val keySpacing: Dp,
     val rowSpacing: Dp,
     val sidePadding: Dp,
     val keyRadius: Dp,
-    val panelRadius: Dp,
     val utilHeight: Dp,
     val stripHeight: Dp
 ) {
@@ -235,7 +237,7 @@ fun keyMetrics(
     val rowSpacing = ((keyWidth * 0.41f).coerceIn(10f, 16f) * spacing.vertical * (0.6f + 0.4f * sc)).coerceIn(6f, 21f)
     val keySpacing = ((pitch * 0.18f).coerceIn(5f, 9f) * spacing.horizontal).coerceIn(3.5f, 12f)
     val radius = (keyWidth * 0.2f).coerceIn(5.5f, 9f)
-    return KeyMetrics(height.dp, keySpacing.dp, rowSpacing.dp, 3.dp, radius.dp, 0.dp, 54.dp, (46f * (0.85f + 0.15f * sc)).dp)
+    return KeyMetrics(height.dp, keySpacing.dp, rowSpacing.dp, 3.dp, radius.dp, 54.dp, (46f * (0.85f + 0.15f * sc)).dp)
 }
 
 /** مقياس حجم اللوحة الحالي (0.8–1.3): يكبّر الخطوط والأيقونات مع ارتفاع المفاتيح */

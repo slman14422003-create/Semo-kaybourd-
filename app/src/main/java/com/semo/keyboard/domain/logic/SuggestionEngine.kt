@@ -179,6 +179,12 @@ object SuggestionEngine {
         Script.LATIN -> EN_ALPHABET + when (language) {
             KeyboardLanguage.TURKISH -> "ışğ"
             KeyboardLanguage.POLISH -> "ąćęłńóśźż"
+            KeyboardLanguage.CZECH -> "áčďéěíňóřšťúůýž"
+            KeyboardLanguage.ROMANIAN -> "ăâîșț"
+            KeyboardLanguage.SWEDISH, KeyboardLanguage.FINNISH -> "åäö"
+            KeyboardLanguage.DANISH, KeyboardLanguage.NORWEGIAN -> "æøå"
+            KeyboardLanguage.HUNGARIAN -> "áéíóöőúüű"
+            KeyboardLanguage.CATALAN -> "àçèéíïòóúü"
             else -> ""
         }
     }

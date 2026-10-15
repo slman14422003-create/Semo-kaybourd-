@@ -88,7 +88,15 @@ enum class KeyboardLanguage(
     INDONESIAN("id", "ind", "Indonesia", "ID", Script.LATIN, "spasi", "return"),
     DUTCH("nl", "nld", "Nederlands", "NL", Script.LATIN, "spatie", "return"),
     POLISH("pl", "pol", "Polski", "PL", Script.LATIN, "spacja", "enter"),
-    UKRAINIAN("uk", "ukr", "Українська", "UK", Script.CYRILLIC, "пробіл", "ввід");
+    UKRAINIAN("uk", "ukr", "Українська", "UK", Script.CYRILLIC, "пробіл", "ввід"),
+    CZECH("cs", "ces", "Čeština", "CS", Script.LATIN, "mezera", "enter"),
+    ROMANIAN("ro", "ron", "Română", "RO", Script.LATIN, "spațiu", "enter"),
+    SWEDISH("sv", "swe", "Svenska", "SV", Script.LATIN, "mellanslag", "retur"),
+    DANISH("da", "dan", "Dansk", "DA", Script.LATIN, "mellemrum", "retur"),
+    NORWEGIAN("no", "nob", "Norsk", "NO", Script.LATIN, "mellomrom", "retur"),
+    FINNISH("fi", "fin", "Suomi", "FI", Script.LATIN, "välilyönti", "enter"),
+    HUNGARIAN("hu", "hun", "Magyar", "HU", Script.LATIN, "szóköz", "enter"),
+    CATALAN("ca", "cat", "Català", "CA", Script.LATIN, "espai", "retorn");
 
     /** اللغة مدمجة بالتطبيق (العربي والإنكليزي) فلا تحتاج تنزيلًا لتعمل */
     val builtIn: Boolean get() = this == ENGLISH || this == ARABIC
@@ -102,7 +110,7 @@ enum class KeyboardLanguage(
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /** ترتيبات المفاتيح الإنكليزية */
-enum class EnglishLayout { QWERTY, AZERTY, QWERTZ }
+enum class EnglishLayout { QWERTY, AZERTY, QWERTZ, DVORAK, COLEMAK }
 
 /** ترتيبات المفاتيح العربية */
 enum class ArabicLayout { STANDARD, ALPHABETIC, QWERTY, GBOARD }
@@ -128,7 +136,7 @@ enum class KeySpacing(val horizontal: Float, val vertical: Float) {
 }
 
 /** عناصر شريط الأدوات: يختار المستخدم أيها يظهر وبأي ترتيب */
-enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS, TRANSLATE, VOICE, SMARTFIX }
+enum class ToolbarItem { EMOJI, CLIPBOARD, NUMPAD, CALC, CURSOR, ONEHAND, SETTINGS, TRANSLATE, VOICE }
 
 /** ماذا يفتح مفتاح «123» بصفحة الحروف: لوحة أرقام 3×4 أو صفحة الرموز القديمة */
 enum class NumKeyTarget { NUMPAD, SYMBOLS }
@@ -248,6 +256,10 @@ data class SemoSettings(
     val swipeTyping: Boolean = true,
     /** تصحيح الاختصارات والأخطاء الشائعة (dont → don't) */
     val autoCorrect: Boolean = true,
+    val autoSentenceFix: Boolean = true,
+    val layoutVariants: Map<String, String> = emptyMap(),
+    val emojiFavorites: List<String> = emptyList(),
+    val emojiTones: Map<String, String> = emptyMap(),
     /** إظهار ناتج العمليات الحسابية بشريط الاقتراحات */
     val mathResults: Boolean = true,
     /** تعديل يدوي لارتفاع أيقونة الكرة الأرضية (dp، موجب = لفوق) لمحاذاتها تمامًا مع أزرار شريط التنقل */
@@ -279,8 +291,6 @@ data class SemoSettings(
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translateTarget: String = "en",
     val translateRecents: List<String> = emptyList(),
-    val voiceDialect: VoiceDialect = VoiceDialect.AUTO,
-    val voiceOfflineFirst: Boolean = false,
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCacheClear: Boolean = true,
@@ -319,6 +329,10 @@ data class KeyboardUiState(
     val arabicDigits: Boolean = false,
     val swipeTyping: Boolean = true,
     val autoCorrect: Boolean = true,
+    val autoSentenceFix: Boolean = true,
+    val layoutVariants: Map<String, String> = emptyMap(),
+    val emojiFavorites: List<String> = emptyList(),
+    val emojiTones: Map<String, String> = emptyMap(),
     val mathResults: Boolean = true,
     val globeOffsetDp: Float = 0f,
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
@@ -353,17 +367,17 @@ data class KeyboardUiState(
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translate: TranslateUi? = null,
     val voice: VoiceUi? = null,
+    val emojiSearch: EmojiSearchUi? = null,
     val navButtons: Boolean = false,
     val translateTarget: String = "en",
     val translateRecents: List<String> = emptyList(),
-    val voiceDialect: VoiceDialect = VoiceDialect.AUTO,
-    val voiceOfflineFirst: Boolean = false,
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCacheClear: Boolean = true
 )
 
 
+@Immutable
 data class TranslateUi(
     val source: String = "",
     val result: String = "",
@@ -375,33 +389,19 @@ data class TranslateUi(
 
 enum class VoiceStatus { STARTING, LISTENING, PAUSED, NO_PERMISSION, UNAVAILABLE, NETWORK, FAILED }
 
+@Immutable
+data class EmojiSearchUi(
+    val query: String = "",
+    val results: List<String> = emptyList()
+)
+
+@Immutable
 data class VoiceUi(
     val status: VoiceStatus = VoiceStatus.STARTING,
     val text: String = ""
 )
 
-enum class VoiceDialect(val tag: String?) {
-    AUTO(null),
-    SYRIA("ar-SY"),
-    LEBANON("ar-LB"),
-    JORDAN("ar-JO"),
-    PALESTINE("ar-PS"),
-    IRAQ("ar-IQ"),
-    EGYPT("ar-EG"),
-    SAUDI("ar-SA"),
-    UAE("ar-AE"),
-    KUWAIT("ar-KW"),
-    QATAR("ar-QA"),
-    YEMEN("ar-YE"),
-    SUDAN("ar-SD"),
-    LIBYA("ar-LY"),
-    TUNISIA("ar-TN"),
-    ALGERIA("ar-DZ"),
-    MOROCCO("ar-MA")
-}
-
 class VoiceOptions(
-    val offlineFirst: Boolean = false,
     val bias: List<String> = emptyList(),
     val rank: ((String) -> Double)? = null,
     val cueVolume: Float = 0f

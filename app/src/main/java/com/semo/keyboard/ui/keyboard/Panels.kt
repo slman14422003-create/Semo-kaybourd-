@@ -1,5 +1,8 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.animation.animateContentSize
 import com.semo.keyboard.util.Semo
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.animateColorAsState
@@ -11,7 +14,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Animatable
-import android.graphics.Typeface
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
@@ -48,7 +50,6 @@ import com.semo.keyboard.ui.anim.scaledSpring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +57,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,7 +70,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -91,8 +90,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.semo.keyboard.R
+import com.semo.keyboard.ui.appString
 import com.semo.keyboard.data.ClipImageStore
 import com.semo.keyboard.domain.logic.EmojiCategory
+import com.semo.keyboard.domain.logic.EmojiTones
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.clipImageName
@@ -112,7 +113,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.floor
-import kotlin.math.max
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 // ============================ أدوات مشتركة ============================
 
@@ -239,17 +241,18 @@ private fun DrawScope.drawEmojiGlyphAt(emoji: String, cx: Float, cy: Float, text
     }
 }
 
-private val SKIN_TONES = listOf("\uD83C\uDFFB", "\uD83C\uDFFC", "\uD83C\uDFFD", "\uD83C\uDFFE", "\uD83C\uDFFF")
 
-/** درجات البشرة المتاحة للإيموجي البسيط (👍 ✋ 🙏 ...) وإلا قائمة فارغة. الأولى = الأصلية. */
+internal fun toneBase(emoji: String): String = EmojiTones.key(emoji)
+
+/** Skin tones available for an emoji, or an empty list. The first entry is the plain emoji. */
 private fun skinToneVariants(emoji: String): List<String> {
-    val base = emoji.replace("\uFE0F", "")
-    if (base.isEmpty() || base.codePointCount(0, base.length) != 1) return emptyList()
-    if (base.codePointAt(0) < 0x261D) return emptyList()
-    val variants = SKIN_TONES.map { base + it }
+    val variants = EmojiTones.variants(emoji)
+    if (variants.isEmpty()) return emptyList()
     val supported = variants.all { runCatching { emojiPaint.hasGlyph(it) }.getOrDefault(false) }
-    return if (supported) listOf(emoji) + variants else emptyList()
+    return if (supported) listOf(EmojiTones.plain(emoji)) + variants else emptyList()
 }
+
+private class EmojiPick(val emoji: String, val variants: List<String>)
 
 private class EmojiSection(val title: String, val iconRes: Int, val emojis: List<String>)
 
@@ -267,14 +270,26 @@ private fun emojiCategoryIcon(titleEn: String): Int = when (titleEn) {
     else -> R.drawable.ic_emoji_smileys
 }
 
-private fun buildEmojiSections(categories: List<EmojiCategory>, recents: List<String>, arabic: Boolean): List<EmojiSection> {
+private fun buildEmojiSections(
+    categories: List<EmojiCategory>,
+    recents: List<String>,
+    favorites: List<String>,
+    tones: Map<String, String>,
+    arabic: Boolean,
+    recentTitle: String,
+    favoriteTitle: String
+): List<EmojiSection> {
+    fun toned(e: String): String = if (tones.isEmpty()) e else tones[toneBase(e)] ?: e
     val sections = ArrayList<EmojiSection>()
     if (recents.isNotEmpty()) {
-        sections.add(EmojiSection(tr(arabic, "المستخدمة مؤخرًا", "Frequently Used"), R.drawable.ic_emoji_recent, recents.distinct()))
+        sections.add(EmojiSection(recentTitle, R.drawable.ic_emoji_recent, recents.map(::toned).distinct()))
+    }
+    if (favorites.isNotEmpty()) {
+        sections.add(EmojiSection(favoriteTitle, R.drawable.ic_emoji_favorite, favorites.map(::toned).distinct()))
     }
     for (cat in categories) {
         val title = if (arabic) cat.titleAr else cat.titleEn.uppercase()
-        sections.add(EmojiSection(title, emojiCategoryIcon(cat.titleEn), cat.emojis.distinct()))
+        sections.add(EmojiSection(title, emojiCategoryIcon(cat.titleEn), cat.emojis.map(::toned).distinct()))
     }
     return sections
 }
@@ -324,7 +339,7 @@ private class PagerLayout(
 }
 
 private fun buildPagerLayout(sections: List<EmojiSection>, widthPx: Float, heightPx: Float, density: Float): PagerLayout {
-    val headerH = 24f * density
+    val headerH = 6f * density
     val rows = (((heightPx - headerH) / density) / 38f).toInt().coerceIn(3, 5)
     val cellH = (heightPx - headerH) / rows
     val cellW = 46f * density
@@ -346,10 +361,8 @@ private fun DrawScope.drawEmojiPager(
     offset: Float,
     pressedCode: Int,
     highlight: Color,
-    titlePaint: Paint,
     scaleCode: Int,
-    pressScale: Float,
-    linePaint: Paint
+    pressScale: Float
 ) {
     // قراءة رقم النسخة تجعل الرسمة تتجدد تلقائيًا كلما وصلت صور جديدة من الخيط الخلفي
     if (EmojiBitmapCache.version.intValue < 0) return
@@ -405,25 +418,73 @@ private fun DrawScope.drawEmojiPager(
                 if (popped) nc.restore()
             }
         }
-        // عناوين الأقسام: العنوان يلتصق بالحافة اليسرى ما دام قسمه ظاهرًا
-        val pad = 10f * (cw / 46f)
-        var t = firstSection
-        while (t < sections.size && layout.startCol[t] <= lastCol) {
-            val title = sections[t].title
-            val sectionStart = layout.startCol[t] * cw - offset
-            val sectionEnd = (layout.startCol[t] + (layout.counts[t] + rows - 1) / rows) * cw - offset
-            val textWidth = titlePaint.measureText(title)
-            var x = max(sectionStart, 0f) + pad
-            if (x + textWidth > sectionEnd - pad) x = max(sectionStart + pad, sectionEnd - pad - textWidth)
-            nc.drawText(title, x, layout.headerH * 0.72f, titlePaint)
-            // خط رفيع بعد العنوان حتى نهاية القسم (يفصل الأقسام بصريًا)
-            val lineStart = x + textWidth + pad * 0.8f
-            val lineEnd = sectionEnd - pad
-            if (lineEnd - lineStart > pad * 2f) {
-                val ly = layout.headerH * 0.72f - titlePaint.textSize * 0.32f
-                nc.drawLine(lineStart, ly, lineEnd, ly, linePaint)
+    }
+}
+
+@Composable
+private fun EmojiTabs(
+    sections: List<EmojiSection>,
+    current: Int,
+    colors: SemoKeyboardColors,
+    onSelect: (Int) -> Unit
+) {
+    val scroll = rememberScrollState()
+    val density = LocalDensity.current
+    var width by remember { mutableIntStateOf(0) }
+    LaunchedEffect(current, width) {
+        val step = with(density) { 42.dp.toPx() }
+        scroll.animateScrollTo((current * step - width / 2f + step).toInt().coerceAtLeast(0))
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .onSizeChanged { width = it.width }
+            .horizontalScroll(scroll)
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        sections.forEachIndexed { index, section ->
+            val selected = index == current
+            val pill by animateColorAsState(
+                if (selected) colors.keyAccent.copy(alpha = 0.20f) else Color.Transparent,
+                tween(240, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "tabPill"
+            )
+            val tint by animateColorAsState(
+                if (selected) colors.keyAccent else colors.textMuted,
+                tween(240, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "tabTint"
+            )
+            PressBox(
+                modifier = Modifier
+                    .padding(horizontal = 2.dp)
+                    .height(34.dp),
+                onClick = { onSelect(index) }
+            ) { pressed ->
+                Row(
+                    modifier = Modifier
+                        .background(pill, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .animateContentSize(spring(dampingRatio = 0.85f, stiffness = 500f)),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(section.iconRes),
+                        contentDescription = section.title,
+                        tint = if (pressed && !selected) colors.text else tint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    if (selected) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = section.title,
+                            color = tint,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
-            t++
         }
     }
 }
@@ -445,7 +506,12 @@ internal fun EmojiPanel(
     val density = LocalDensity.current
     // "المستخدمة مؤخرًا" تُلتقط مرة عند فتح اللوحة كي لا تتحرك الخلايا تحت الإصبع أثناء الاستعمال
     val recents = remember { state.recentEmojis }
-    val sections = remember(arabic) { buildEmojiSections(supportedEmojiCache, recents, arabic) }
+    val favorites = remember { state.emojiFavorites }
+    val recentTitle = appString(R.string.emoji_recent)
+    val favoriteTitle = appString(R.string.emoji_favorites)
+    val sections = remember(arabic, state.emojiTones, recentTitle, favoriteTitle) {
+        buildEmojiSections(supportedEmojiCache, recents, favorites, state.emojiTones, arabic, recentTitle, favoriteTitle)
+    }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(density.density) { EmojiBitmapCache.configure(density.density) }
@@ -460,7 +526,7 @@ internal fun EmojiPanel(
 
     var offset by remember { mutableFloatStateOf(0f) }
     var pressedCode by remember { mutableIntStateOf(-1) }
-    var picker by remember { mutableStateOf<List<String>?>(null) }
+    var picker by remember { mutableStateOf<EmojiPick?>(null) }
 
     val scrollState = rememberScrollableState { delta ->
         val old = offset
@@ -508,21 +574,6 @@ internal fun EmojiPanel(
         withContext(Dispatchers.Default) { EmojiBitmapCache.prefetch(order) }
     }
 
-    val titlePaint = remember(colors.textMuted, density.density) {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = colors.textMuted.toArgb()
-            textSize = 11.5f * density.fontScale * density.density
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = 0.05f
-        }
-    }
-    val linePaint = remember(colors.divider, density.density) {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = colors.divider.toArgb()
-            strokeWidth = 1f * density.density
-            strokeCap = Paint.Cap.ROUND
-        }
-    }
     val highlight = colors.chip
 
     Column(
@@ -530,6 +581,11 @@ internal fun EmojiPanel(
             .fillMaxWidth()
             .height(panelHeight)
     ) {
+        EmojiTabs(sections, currentSection, colors) { index ->
+            viewModel.onSelectionTick()
+            val target = ((layout?.startCol?.get(index) ?: 0) * (layout?.cellW ?: 0f)).coerceIn(0f, maxOffset)
+            scope.launch { scrollState.animateScrollBy(target - offset, tween(450, easing = com.semo.keyboard.ui.anim.IosPush)) }
+        }
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -572,36 +628,49 @@ internal fun EmojiPanel(
                                     val code = layout.hitCode(pos.x, pos.y, offset)
                                     if (code >= 0) {
                                         val emoji = sections[code / CODE_BASE].emojis[code % CODE_BASE]
-                                        val variants = skinToneVariants(emoji)
-                                        if (variants.isEmpty()) viewModel.onEmojiPressed(emoji) else picker = variants
+                                        picker = EmojiPick(emoji, skinToneVariants(emoji))
                                     }
                                 }
                             )
                         }
-                        .drawBehind { drawEmojiPager(layout, sections, offset, pressedCode, highlight, titlePaint, scaleCode, pressScale, linePaint) }
+                        .drawBehind { drawEmojiPager(layout, sections, offset, pressedCode, highlight, scaleCode, pressScale) }
                 )
             }
 
-            picker?.let { variants ->
-                // خلفية شفافة: لمسها يغلق قائمة درجات البشرة
+            picker?.let { pick ->
+                // transparent backdrop: touching it closes the popup
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(Unit) { detectTapGestures(onTap = { picker = null }) }
                 )
+                val favorite = state.emojiFavorites.any { toneBase(it) == toneBase(pick.emoji) }
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 8.dp)
                         .shadow(10.dp, RoundedCornerShape(18.dp))
                         .background(colors.bubble, RoundedCornerShape(18.dp))
-                        .padding(horizontal = 6.dp, vertical = 5.dp)
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    variants.forEach { variant ->
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .drawBehind { drawEmojiGlyph(pick.emoji, 34.dp.toPx()) }
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .width(1.dp)
+                            .height(28.dp)
+                            .background(colors.divider)
+                    )
+                    pick.variants.forEach { variant ->
                         PressBox(
                             modifier = Modifier.size(44.dp),
                             onClick = {
-                                viewModel.onEmojiPressed(variant)
+                                viewModel.chooseEmojiTone(toneBase(pick.emoji), variant)
                                 picker = null
                             }
                         ) { pressed ->
@@ -621,6 +690,20 @@ internal fun EmojiPanel(
                             )
                         }
                     }
+                    PressBox(
+                        modifier = Modifier.size(44.dp),
+                        onClick = {
+                            viewModel.onSelectionTick()
+                            viewModel.toggleEmojiFavorite(pick.emoji)
+                            picker = null
+                        }
+                    ) { pressed ->
+                        Text(
+                            text = if (favorite) "\u2605" else "\u2606",
+                            color = if (pressed) colors.textMuted else colors.keyAccent,
+                            fontSize = 26.sp
+                        )
+                    }
                 }
             }
         }
@@ -633,55 +716,36 @@ internal fun EmojiPanel(
                 viewModel.openPage(KeyboardPage.LETTERS)
             }
         ) {
-            Row(
+            PressBox(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                sections.forEachIndexed { index, section ->
-                    val selected = index == currentSection
-                    val pill by animateColorAsState(
-                        if (selected) colors.keyAccent.copy(alpha = 0.20f) else Color.Transparent,
-                        tween(260, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "catPill"
+                    .height(40.dp)
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                onClick = {
+                    viewModel.onSelectionTick()
+                    viewModel.openEmojiSearch()
+                }
+            ) { pressed ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(if (pressed) colors.keyPressed else colors.chip, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_emoji_search),
+                        contentDescription = null,
+                        tint = colors.textMuted,
+                        modifier = Modifier.size(18.dp)
                     )
-                    val tint by animateColorAsState(
-                        if (selected) colors.keyAccent else colors.textMuted,
-                        tween(260, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "catTint"
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = appString(R.string.emoji_search_hint),
+                        color = colors.textMuted,
+                        fontSize = 15.sp,
+                        maxLines = 1
                     )
-                    val iconScale by animateFloatAsState(
-                        if (selected) 1.1f else 1f,
-                        spring(dampingRatio = 0.8f, stiffness = 500f), label = "catScale"
-                    )
-                    PressBox(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(34.dp),
-                        onClick = {
-                            viewModel.onSelectionTick()
-                            val target = ((layout?.startCol?.get(index) ?: 0) * (layout?.cellW ?: 0f)).coerceIn(0f, maxOffset)
-                            scope.launch { scrollState.animateScrollBy(target - offset, tween(450, easing = com.semo.keyboard.ui.anim.IosPush)) }
-                        }
-                    ) { pressed ->
-                        Box(
-                            modifier = Modifier
-                                .size(width = 32.dp, height = 30.dp)
-                                .background(pill, RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(section.iconRes),
-                                contentDescription = section.title,
-                                tint = if (pressed && !selected) colors.text else tint,
-                                modifier = Modifier
-                                    .size(19.dp)
-                                    .graphicsLayer {
-                                        scaleX = iconScale
-                                        scaleY = iconScale
-                                    }
-                            )
-                        }
-                    }
                 }
             }
             RepeatKey(
