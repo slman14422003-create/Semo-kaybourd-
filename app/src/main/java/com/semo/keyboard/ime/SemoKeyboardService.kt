@@ -872,6 +872,38 @@ class SemoKeyboardService :
             }
         }
 
+        override fun commitPair(open: String, close: String) {
+            lastTypeAt = SystemClock.uptimeMillis()
+            val ic = currentInputConnection ?: return
+            runCatching {
+                ic.beginBatchEdit()
+                ic.commitText(open, 1)
+                ic.commitText(close, 0)
+                ic.endBatchEdit()
+            }
+        }
+
+        override fun stepOverClosing(close: String): Boolean {
+            val ic = currentInputConnection ?: return false
+            return runCatching {
+                if (ic.getTextAfterCursor(close.length, 0)?.toString() != close) return@runCatching false
+                ic.beginBatchEdit()
+                ic.deleteSurroundingText(0, close.length)
+                ic.commitText(close, 1)
+                ic.endBatchEdit()
+                true
+            }.getOrDefault(false)
+        }
+
+        override fun deletePair(close: String): Boolean {
+            val ic = currentInputConnection ?: return false
+            return runCatching {
+                if (ic.getTextAfterCursor(close.length, 0)?.toString() != close) return@runCatching false
+                ic.deleteSurroundingText(1, close.length)
+                true
+            }.getOrDefault(false)
+        }
+
         override fun deleteBackward() {
             val ic = currentInputConnection ?: return
             runCatching {

@@ -317,6 +317,7 @@ class KeyboardViewModel(
                 swipeTyping = s.swipeTyping,
                 autoCorrect = s.autoCorrect,
                 autoSentenceFix = s.autoSentenceFix,
+                autoPairs = s.autoPairs,
                 layoutVariants = s.layoutVariants,
                 emojiFavorites = s.emojiFavorites,
                 emojiTones = s.emojiTones,
@@ -446,6 +447,8 @@ class KeyboardViewModel(
         undo = null
         val pendingSentence = sentenceUndo
         sentenceUndo = null
+        val pendingPair = pairJust
+        pairJust = null
         val hadAutoSpace = autoSpace
         autoSpace = false
         val swipeWord = transient.value.swipeWord
@@ -455,6 +458,11 @@ class KeyboardViewModel(
             is KeyAction.Character -> {
                 if (transient.value.freshClip != null) transient.update { it.copy(freshClip = null) }
                 val ch = action.char.first()
+                if (state.autoPairs && tryAutoPair(action.char)) {
+                    consumeOneShotShift()
+                    refreshSuggestions()
+                    return
+                }
                 if (hadAutoSpace && ch in AUTO_SPACE_PUNCT && readBefore(1) == " ") {
                     bridge.deleteSurrounding(1)
                     bridge.commitText(if (ch in SPACE_AFTER_PUNCT) "$ch " else action.char)
@@ -513,7 +521,11 @@ class KeyboardViewModel(
                 refreshSuggestions()
             }
             KeyAction.Backspace -> {
-                if (!revertSentenceFix(pendingSentence)) handleBackspace(pendingUndo, swipeWord)
+                if (pendingPair != null && bridge.deletePair(pendingPair)) {
+                    if (pairStack.isNotEmpty()) pairStack.removeAt(pairStack.lastIndex)
+                } else if (!revertSentenceFix(pendingSentence)) {
+                    handleBackspace(pendingUndo, swipeWord)
+                }
                 refreshSuggestions()
             }
             KeyAction.Shift -> toggleShift()
@@ -577,7 +589,7 @@ class KeyboardViewModel(
         if (word.isEmpty()) return null
         var fixed: String? = null
         if (state.textShortcuts) {
-            fixed = shortcuts.value.firstOrNull { it.abbr.equals(word, ignoreCase = true) }?.expansion
+            fixed = shortcuts.value.firstOrNull { it.abbr.equals(word, ignoreCase = true) }?.expansion?.let { expandTokens(it) }
         }
         if (fixed == null && state.autoCorrect && word.lowercase() !in ignoredCorrections.value) {
             fixed = correctWord(word)
@@ -632,6 +644,8 @@ class KeyboardViewModel(
         launchSafe { learnedWordsRepository.learnFix(typed, chosen) }
     }
 
+    private val pairStack = ArrayList<String>()
+    private var pairJust: String? = null
     private var sentenceUndo: Correction? = null
     private var sentenceSkip: String? = null
 
@@ -675,6 +689,40 @@ class KeyboardViewModel(
         if (fixed == segment) return null
         bridge.replaceBeforeCursor(segment.length, fixed)
         return Correction(segment, fixed)
+    }
+
+    /** Auto-closing brackets and quotes. Returns true when the key was fully handled here. */
+    private fun tryAutoPair(ch: String): Boolean {
+        if (transient.value.fieldKind != FieldKind.TEXT) return false
+        val top = pairStack.lastOrNull()
+        if (top != null && ch == top) {
+            pairStack.removeAt(pairStack.lastIndex)
+            if (bridge.stepOverClosing(top)) return true
+        }
+        val close = PAIRS[ch] ?: return false
+        if (ch == "\"") {
+            val prev = readBefore(1)
+            if (prev.isNotEmpty() && prev.last().isLetterOrDigit()) return false
+        }
+        bridge.commitPair(ch, close)
+        if (pairStack.size >= MAX_OPEN_PAIRS) pairStack.removeAt(0)
+        pairStack.add(close)
+        pairJust = close
+        return true
+    }
+
+    private fun expandTokens(text: String): String {
+        if ('{' !in text) return text
+        val now = java.util.Date()
+        val locale = java.util.Locale.getDefault()
+        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, locale).format(now)
+        val time = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT, locale).format(now)
+        val day = java.text.SimpleDateFormat("EEEE", locale).format(now)
+        return text
+            .replace("{datetime}", "$date $time")
+            .replace("{date}", date)
+            .replace("{time}", time)
+            .replace("{day}", day)
     }
 
     private fun revertSentenceFix(pending: Correction?): Boolean {
@@ -1477,6 +1525,8 @@ class KeyboardViewModel(
         /** رموز العمليات الحسابية: كتابتها لا تشغّل التصحيح ولا تعلّم الكلمة السابقة */
         const val NON_WORD_END_SYMBOLS = "+×÷=*%^<>~|#"
         const val MAX_RECENT_EMOJIS = 32
+        const val MAX_OPEN_PAIRS = 8
+        val PAIRS = mapOf("(" to ")", "[" to "]", "{" to "}", "\"" to "\"")
         const val MAX_FAVORITE_EMOJIS = 60
         const val EMOJI_RESULT_MAX = 48
         const val EMOJI_QUERY_MAX = 24

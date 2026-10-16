@@ -71,4 +71,7 @@
     <string name="emoji_no_results">لا توجد نتائج</string>
     <string name="emoji_favorites">المفضلة</string>
     <string name="emoji_recent">المستخدمة مؤخرًا</string>
+    <string name="auto_pairs_title">إغلاق الأقواس والاقتباسات تلقائيًا</string>
+    <string name="auto_pairs_hint">عند كتابة ( [ { أو علامة اقتباس تُضاف علامة الإغلاق ويقف المؤشر بينهما. كتابة علامة الإغلاق تتخطاها، وزر الحذف مباشرة بعدها يحذف الاثنتين</string>
+    <string name="shortcut_tokens_hint">يمكن استخدام {date} و{time} و{datetime} و{day} داخل نص الاختصار، وتُستبدل وقت استخدامه</string>
 </resources>

@@ -71,4 +71,7 @@
     <string name="emoji_no_results">No results</string>
     <string name="emoji_favorites">Favorites</string>
     <string name="emoji_recent">Frequently used</string>
+    <string name="auto_pairs_title">Auto-close brackets and quotes</string>
+    <string name="auto_pairs_hint">Typing ( [ { or a quote adds its closing mark and puts the cursor between them. Typing the closing mark steps over it, and Backspace right after removes both</string>
+    <string name="shortcut_tokens_hint">Expansions can use {date}, {time}, {datetime} and {day}, filled in when the shortcut is used</string>
 </resources>

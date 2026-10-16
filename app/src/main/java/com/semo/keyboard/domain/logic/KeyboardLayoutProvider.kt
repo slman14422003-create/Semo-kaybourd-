@@ -226,8 +226,6 @@ object KeyboardLayoutProvider {
     /** An alternative letter arrangement for a language: [id] is stored in settings, [label] is shown as is. */
     data class LayoutVariant(val id: String, val label: String, val rows: List<List<String>>)
 
-    private val qwertyRows = listOf(r("q w e r t y u i o p"), r("a s d f g h j k l"), r("z x c v b n m"))
-    private val qwertzRows = listOf(r("q w e r t z u i o p"), r("a s d f g h j k l"), r("y x c v b n m"))
 
     private fun allLibrary(): Map<KeyboardLanguage, LangLayout> = libraryLayouts + libraryExtra
 
@@ -235,7 +233,7 @@ object KeyboardLayoutProvider {
         mapOf(
             KeyboardLanguage.FRENCH to listOf(
                 LayoutVariant("default", "AZERTY", allLibrary().getValue(KeyboardLanguage.FRENCH).rows),
-                LayoutVariant("qwerty", "QWERTY", qwertyRows)
+                LayoutVariant("qwerty", "QWERTY", latinQwertyRows)
             ),
             KeyboardLanguage.GERMAN to listOf(
                 LayoutVariant("default", "QWERTZ", allLibrary().getValue(KeyboardLanguage.GERMAN).rows),

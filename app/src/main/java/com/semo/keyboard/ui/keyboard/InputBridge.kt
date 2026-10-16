@@ -12,6 +12,12 @@ enum class KeyFeedback { STANDARD, DELETE, MODIFIER, SELECTION, LONG_PRESS }
 interface InputBridge {
     fun commitText(text: String)
     fun deleteBackward()
+    /** Types [open] and [close] together and leaves the cursor between them. */
+    fun commitPair(open: String, close: String)
+    /** If [close] is right after the cursor, moves past it and returns true. */
+    fun stepOverClosing(close: String): Boolean
+    /** Deletes the character before the cursor together with [close] right after it; false when it is not there. */
+    fun deletePair(close: String): Boolean
     /** يحذف [count] حرفًا قبل المؤشر (لاستبدال الكلمة الجارية بالاقتراح) */
     fun deleteSurrounding(count: Int)
     fun performEnter()

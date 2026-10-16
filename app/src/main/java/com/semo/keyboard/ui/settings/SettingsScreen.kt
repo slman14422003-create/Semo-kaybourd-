@@ -468,6 +468,11 @@ private fun TypingPage(
             }
             Divider()
             SwitchRow(
+                com.semo.keyboard.ui.appString(R.string.auto_pairs_title), R.drawable.ic_set_text, IconGreen, settings.autoPairs,
+                subtitle = com.semo.keyboard.ui.appString(R.string.auto_pairs_hint)
+            ) { scope.launch { repo.setAutoPairs(it) } }
+            Divider()
+            SwitchRow(
                 L("ناتج العمليات الحسابية"), R.drawable.ic_set_number, IconPink, settings.mathResults,
                 subtitle = L("اكتب 60*30+20 فيظهر الناتج بالشريط")
             ) { scope.launch { repo.setMathResults(it) } }
@@ -496,6 +501,7 @@ private fun ShortcutsPage(
                 subtitle = L("اكتب الاختصار ثم مسافة فيتحوّل للنص الكامل. تقدر تتراجع بزر الحذف مباشرة")
             ) { scope.launch { repo.setTextShortcuts(it) } }
         }
+        Hint(com.semo.keyboard.ui.appString(R.string.shortcut_tokens_hint))
         Section(L("إضافة اختصار")) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
