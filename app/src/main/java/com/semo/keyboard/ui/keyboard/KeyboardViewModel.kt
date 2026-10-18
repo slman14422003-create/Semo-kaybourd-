@@ -658,6 +658,10 @@ class KeyboardViewModel(
         if (!allowed(edited)) return
         val lang = SuggestionEngine.languageOf(original, uiState.value.language)
         if (SuggestionEngine.isKnown(original, lang, learnedKeys.value)) return
+        // لا نتعلّم الإصلاح إلا لو الصيغة المُعدَّلة كلمة معروفة فعلًا (بالقاموس المحمَّل لهذه اللغة
+        // -المدمج أو الذي نزّله المستخدم من الإعدادات- أو بكلمات تعلّمناها سابقًا)، كي لا نحفظ تصحيحًا
+        // لخطأ آخر بدل الصحيح (مثلًا لو عدّل المستخدم كلمة لصيغة فيها خطأ إملائي مختلف).
+        if (!SuggestionEngine.isKnown(edited, lang, learnedKeys.value)) return
         launchSafe {
             learnedWordsRepository.learnFix(original, edited, MANUAL_FIX_WEIGHT)
             learnedWordsRepository.unignoreCorrection(original)
@@ -735,6 +739,9 @@ class KeyboardViewModel(
         if (ArabicText.isArabicWord(typed) != ArabicText.isArabicWord(chosen)) return
         val lang = SuggestionEngine.languageOf(typed, uiState.value.language)
         if (SuggestionEngine.isKnown(typed, lang, learnedKeys.value)) return
+        // نفس الضمان: الكلمة المختارة من شريط الاقتراحات لازم تكون معروفة بقاموس اللغة المحمَّل
+        // (المدمج أو المنزَّل) حتى نثق فيها كتصحيح نتعلّمه.
+        if (!SuggestionEngine.isKnown(chosen, lang, learnedKeys.value)) return
         if (editDistance(typed.lowercase(), chosen.lowercase()) > 2) return
         launchSafe { learnedWordsRepository.learnFix(typed, chosen) }
     }
