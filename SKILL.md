@@ -107,3 +107,11 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Removed unused code: dismissFreshClip, DictionaryManager.isAvailable/hasDownloaded, the voiceBuiltinFirst chain, VoiceOptions.builtinFirst, PasteGreen, two damping constants, ARABIC_LABEL, voice_builtin_pref strings, seven drawables, unused imports.
 - Not yet verified by a Gradle build.
 
+## Arabic correction, learning and smart writing (v3.17.0, versionCode 52)
+- Spell stack: domain/logic/KeyProximity.kt (weighted edit cost), SpellIndex.kt (deletion index per language, built lazily and warmed in DictionaryManager.load), SpellFix.kt (rank and autoFix with previous-word context). SuggestionEngine.corrections and smartFix delegate to it.
+- SentenceRules.kt reads assets/dict/ar_rules.txt (tab separated wrong and right phrases, up to 4 tokens) and also provides dedupe, spacing and finishQuestion. Attached in SemoKeyboardService next to AutoCorrect.attach.
+- Manual-edit learning lives in KeyboardViewModel (EditWatch, trackEditStart, finishEditWatch, learnManualEdit). learnFix(weight = 2) makes it trusted at once. Throttled by TRACK_GAP_MS.
+- Arabizi.kt turns Latin letters and digits 2 3 5 7 8 9 into Arabic suggestions using BigDictionary.hasPrefix; gated by the smartWriting setting (string resources smart_writing_*).
+- DictionaryManager.BASE_URLS lists mirrors; assets/dict/ar_extra.txt is merged after ar_core.
+- Not yet verified by a Gradle build.
+

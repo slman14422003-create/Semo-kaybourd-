@@ -67,6 +67,9 @@
     <string name="auto_sentence_title">تصحيح الجملة تلقائيًا</string>
     <string name="auto_sentence_hint">يصحّح الجملة بنفسه بعد (. ! ؟) أو الإدخال: الإملاء والمسافات وعلامات الترقيم والأحرف الكبيرة. زر الحذف مباشرة بعدها يرجّع النص الأصلي</string>
     <string name="auto_sentence_short">الجمل</string>
+    <string name="smart_writing_title">الكتابة الذكية المحلية</string>
+    <string name="smart_writing_hint">مساعدات تعمل على الجهاز: تحويل الحروف اللاتينية (mar7aba) إلى اقتراح عربي، إضافة علامة الاستفهام آخر الأسئلة، حذف الكلمة المكررة بالغلط، وضبط المسافات بعد علامات الترقيم</string>
+    <string name="smart_writing_short">الكتابة الذكية</string>
     <string name="emoji_search_hint">ابحث عن إيموجي</string>
     <string name="emoji_no_results">لا توجد نتائج</string>
     <string name="emoji_favorites">المفضلة</string>

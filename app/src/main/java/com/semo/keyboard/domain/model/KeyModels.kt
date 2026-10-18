@@ -257,6 +257,7 @@ data class SemoSettings(
     /** تصحيح الاختصارات والأخطاء الشائعة (dont → don't) */
     val autoCorrect: Boolean = true,
     val autoSentenceFix: Boolean = true,
+    val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val layoutVariants: Map<String, String> = emptyMap(),
     val emojiFavorites: List<String> = emptyList(),
@@ -331,6 +332,7 @@ data class KeyboardUiState(
     val swipeTyping: Boolean = true,
     val autoCorrect: Boolean = true,
     val autoSentenceFix: Boolean = true,
+    val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val layoutVariants: Map<String, String> = emptyMap(),
     val emojiFavorites: List<String> = emptyList(),

@@ -4,6 +4,7 @@ import android.content.Context
 import com.semo.keyboard.domain.logic.AsciiWordList
 import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.logic.NgramModel
+import com.semo.keyboard.domain.logic.SpellIndex
 import com.semo.keyboard.domain.logic.ValidWords
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.Script
@@ -29,7 +30,12 @@ data class DownloadInfo(val words: Int, val sentences: Int)
  */
 object DictionaryManager {
 
-    private const val BASE_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018"
+    private val BASE_URLS = listOf(
+        "https://cdn.jsdelivr.net/gh/hermitdave/FrequencyWords@master/content/2018",
+        "https://fastly.jsdelivr.net/gh/hermitdave/FrequencyWords@master/content/2018",
+        "https://gcore.jsdelivr.net/gh/hermitdave/FrequencyWords@master/content/2018",
+        "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018"
+    )
     private const val TATOEBA_URL = "https://downloads.tatoeba.org/exports/per_language"
     private const val MAX_WORDS = 250_000
 
@@ -37,7 +43,7 @@ object DictionaryManager {
     private const val MIN_WORD_COUNT = 3L
 
     /** رقم إصدار بيانات القاموس: ما كان أقل منه (قاموس 100 ألف كلمة القديم) يُعرض له «تحديث» */
-    private const val DATA_VERSION = 2
+    private const val DATA_VERSION = 3
 
     /** أقصى عدد جمل نقرؤه من Tatoeba (القراءة متدفقة فنوقفها عند الحد دون تنزيل الملف كله) */
     private const val MAX_SENTENCES = 300_000
@@ -59,19 +65,25 @@ object DictionaryManager {
     /** نجرّب القائمة الكاملة (نقرأ أول 100 ألف كلمة صالحة فقط) ثم نرجع لقائمة الـ50 ألف لو تعذّرت */
     private fun urls(language: KeyboardLanguage): List<String> {
         val code = language.code
-        return listOf("$BASE_URL/$code/${code}_full.txt", "$BASE_URL/$code/${code}_50k.txt")
+        val full = BASE_URLS.map { "$it/$code/${code}_full.txt" }
+        val small = BASE_URLS.map { "$it/$code/${code}_50k.txt" }
+        return full + small
     }
 
     private fun coreAsset(language: KeyboardLanguage): String = "dict/${language.code}_core.txt"
+    private fun extraAsset(language: KeyboardLanguage): String = "dict/${language.code}_extra.txt"
     private fun seedAsset(language: KeyboardLanguage): String = "corpus/${language.code}.txt"
 
     /** الكلمات الشائعة المدمجة بترتيب الشيوع (من assets؛ متاحة حتى قبل فك قفل الجهاز) */
-    private fun readCore(context: Context, language: KeyboardLanguage): List<String> =
+    private fun readAsset(context: Context, name: String): List<String> =
         runCatching {
-            context.assets.open(coreAsset(language)).bufferedReader(Charsets.UTF_8).useLines { lines ->
+            context.assets.open(name).bufferedReader(Charsets.UTF_8).useLines { lines ->
                 lines.map { it.trim() }.filter { it.isNotEmpty() }.toList()
             }
         }.getOrNull().orEmpty()
+
+    private fun readCore(context: Context, language: KeyboardLanguage): List<String> =
+        readAsset(context, coreAsset(language)) + readAsset(context, extraAsset(language))
 
     /** جمل النموذج المدمج (عربي وإنكليزي) من assets */
     private fun readSeedSentences(context: Context, language: KeyboardLanguage): List<String> =
@@ -131,7 +143,10 @@ object DictionaryManager {
             runCatching { wf.readLines(Charsets.UTF_8).filter { it.isNotBlank() } }.getOrNull().orEmpty()
         } else emptyList()
         val words = merged(app, language, downloaded)
-        if (words.isNotEmpty()) BigDictionary.setWords(language, words)
+        if (words.isNotEmpty()) {
+            BigDictionary.setWords(language, words)
+            runCatching { SpellIndex.warm(language) }
+        }
 
         // نموذج الجمل: المنزَّل لو موجود (يتضمّن الجمل المدمجة)، وإلا يُبنى من الجمل المدمجة
         val mf = modelFile(app, language)
@@ -218,6 +233,7 @@ object DictionaryManager {
         runCatching { versionFile(app, language).writeText(DATA_VERSION.toString()) }
         onProgress("جاري بناء فهرس القاموس...")
         BigDictionary.setWords(language, merged(app, language, words))
+        runCatching { SpellIndex.warm(language) }
 
         var sentenceCount = 0
         onProgress("جاري تنزيل جمل ${language.nativeName} لنموذج التتمة...")
@@ -248,7 +264,7 @@ object DictionaryManager {
 
     private fun fetchWords(language: KeyboardLanguage): List<String> {
         for ((i, address) in urls(language).withIndex()) {
-            val words = runCatching { fetchWordsFrom(address, language, if (i == 0) MIN_WORD_COUNT else 0L) }.getOrNull()
+            val words = runCatching { fetchWordsFrom(address, language, if (i < BASE_URLS.size) MIN_WORD_COUNT else 0L) }.getOrNull()
             if (words != null && words.size >= 1000) return words
         }
         error("تعذّر تنزيل القاموس")
@@ -256,7 +272,7 @@ object DictionaryManager {
 
     private fun open(address: String): HttpURLConnection {
         val connection = URL(address).openConnection() as HttpURLConnection
-        connection.connectTimeout = 15_000
+        connection.connectTimeout = 10_000
         connection.readTimeout = 45_000
         connection.requestMethod = "GET"
         return connection

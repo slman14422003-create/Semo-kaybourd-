@@ -52,12 +52,27 @@ object BigDictionary {
 
     fun clear(language: KeyboardLanguage) {
         indices.remove(language)
+        SpellIndex.invalidate(language)
         ModelVersion.bump()
+    }
+
+    fun hasPrefix(prefix: String, language: KeyboardLanguage): Boolean {
+        val idx = indexOf(language) ?: return false
+        val p = key(prefix)
+        if (p.isEmpty()) return false
+        var lo = 0
+        var hi = idx.order.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (idx.keys[idx.order[mid]] < p) lo = mid + 1 else hi = mid
+        }
+        return lo < idx.order.size && idx.keys[idx.order[lo]].startsWith(p)
     }
 
     /** يبني الفهرس من قائمة مرتبة حسب الشيوع (ثقيل نسبيًا: يُستدعى بخيط خلفي) */
     fun setWords(language: KeyboardLanguage, words: List<String>) {
         indices[language] = build(words)
+        SpellIndex.invalidate(language)
         ModelVersion.bump()
     }
 

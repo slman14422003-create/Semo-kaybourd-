@@ -191,6 +191,7 @@ object SuggestionEngine {
 
     /** رتبة الكلمة الشائعة التي نسمح للاستبدال التلقائي بالتصحيح إليها (الأشيع فقط، حذرًا من تغيير كلمات سليمة) */
     private const val COMMON_RANK = 15_000
+    private const val LARGE_COMMON_RANK = 40_000
     private const val MIN_ARABIC_DICTIONARY = 3_000
 
     /** هل الكلمة معروفة: متعلَّمة، أو بالقاموس، أو بقائمة الكلمات الإنكليزية الصالحة */
@@ -207,17 +208,6 @@ object SuggestionEngine {
         return false
     }
 
-    /** كل الكلمات التي تبعد عن [w] تعديلًا واحدًا: حذف، تبديل حرفين متجاورين، استبدال، أو إدخال حرف */
-    private fun edits1(w: String, alphabet: String): Set<String> {
-        val out = HashSet<String>()
-        val n = w.length
-        for (i in 0 until n) out.add(w.removeRange(i, i + 1))
-        for (i in 0 until n - 1) out.add(w.substring(0, i) + w[i + 1] + w[i] + w.substring(i + 2))
-        for (i in 0 until n) for (c in alphabet) if (c != w[i]) out.add(w.substring(0, i) + c + w.substring(i + 1))
-        for (i in 0..n) for (c in alphabet) out.add(w.substring(0, i) + c + w.substring(i))
-        return out
-    }
-
     /**
      * اقتراحات "هل تقصد": كلمات صحيحة تبعد تعديلًا واحدًا عن الكلمة غير المعروفة، الأشيع أولًا.
      * الكلمات التي تعلّمتها اللوحة تتقدّم، وتصحيح الحرف الأول أقل ترجيحًا لأن الخطأ فيه نادر.
@@ -226,12 +216,13 @@ object SuggestionEngine {
         word: String,
         language: KeyboardLanguage,
         learnedKeys: Set<String>,
-        limit: Int = 2
+        limit: Int = 2,
+        context: String = ""
     ): List<String> {
         if (word.length < 3 || word.length > 20) return emptyList()
-        val key = "${language.name}|$word|$limit|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
+        val key = "${language.name}|$word|$limit|$context|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
         correctionCache.get(key)?.let { return it }
-        val result = correctionsUncached(word, language, learnedKeys, limit)
+        val result = correctionsUncached(word, language, learnedKeys, limit, context)
         correctionCache.put(key, result)
         return result
     }
@@ -240,28 +231,15 @@ object SuggestionEngine {
         word: String,
         language: KeyboardLanguage,
         learnedKeys: Set<String>,
-        limit: Int
+        limit: Int,
+        context: String
     ): List<String> {
         if (isKnown(word, language, learnedKeys)) return emptyList()
-        val lower = word.lowercase()
         val alphabet = alphabetOf(language)
-        val scored = ArrayList<Pair<Int, String>>()
-        for (c in edits1(lower, alphabet)) {
-            if (c.length < 2 || !c.any { it.isLetter() }) continue
-            val rank = BigDictionary.rankOf(c, language)
-            val valid = rank >= 0 || (language == KeyboardLanguage.ENGLISH && ValidWords.english?.contains(c) == true)
-            if (!valid && BigDictionary.key(c) !in learnedKeys) continue
-            var score = when {
-                BigDictionary.key(c) in learnedKeys -> -1
-                rank >= 0 -> rank
-                else -> 500_000 + c.length
-            }
-            if (c.first() != lower.first()) score += 100_000
-            // بالعربي نعرض الكلمة بصيغتها الأصلية (بالهمزة) من القاموس
-            val shown = if (rank >= 0) BigDictionary.wordAt(rank, language) ?: c else c
-            scored.add(score to shown)
-        }
-        return scored.sortedBy { it.first }.map { matchCase(word, it.second) }.distinct().take(limit)
+        return SpellFix.rank(word, language, learnedKeys, context, alphabet)
+            .map { matchCase(word, it.word) }
+            .distinct()
+            .take(limit)
     }
 
     /**
@@ -270,16 +248,16 @@ object SuggestionEngine {
      * رموز (أسماء، اختصارات) أو كلمات من أبجدية مختلفة، ولا يعمل لو الاختيار ملتبس (أكثر من مرشّح شائع بنفس القوة).
      * كان مقتصرًا على الإنكليزية فقط؛ صار يعمل بأي لغة حُمِّل قاموسها (عربي، فرنسي، إسباني...).
      */
-    fun smartFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
+    fun smartFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String = ""): String? {
         if (word.length < 3 || word.length > 14) return null
-        val key = "${language.name}|$word|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
+        val key = "${language.name}|$word|$context|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
         fixCache.get(key)?.let { return it.ifEmpty { null } }
-        val result = smartFixUncached(word, language, learnedKeys)
+        val result = smartFixUncached(word, language, learnedKeys, context)
         fixCache.put(key, result ?: "")
         return result
     }
 
-    private fun smartFixUncached(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
+    private fun smartFixUncached(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String): String? {
         if (language.script == Script.ARABIC) {
             if (BigDictionary.size(language) < MIN_ARABIC_DICTIONARY) return null
             ArabicText.canonicalHamza(word, language)?.let { return it }
@@ -287,28 +265,25 @@ object SuggestionEngine {
             val clitic = ArabicText.clitic(word)
             if (clitic.isNotEmpty() && !isKnown(word, language, learnedKeys)) {
                 val stem = word.substring(clitic.length)
-                val fixedStem = coreFix(stem, language, learnedKeys)
+                val fixedStem = coreFix(stem, language, learnedKeys, context)
                 if (fixedStem != null) return clitic + fixedStem
             }
         }
-        return coreFix(word, language, learnedKeys)
+        return coreFix(word, language, learnedKeys, context)
     }
 
-    private fun coreFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>): String? {
+    private fun commonRankFor(language: KeyboardLanguage): Int =
+        if (BigDictionary.size(language) >= 60_000) LARGE_COMMON_RANK else COMMON_RANK
+
+    private fun coreFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String): String? {
         if (word.length < 3 || word.length > 14) return null
         val alphabet = alphabetOf(language)
-        if (!word.all { it in alphabet }) return null
+        val lower = word.lowercase()
+        if (!lower.all { it in alphabet }) return null
+        if (word.drop(1).any { it.isUpperCase() }) return null
         if (!BigDictionary.isLoaded(language) || isKnown(word, language, learnedKeys)) return null
-        val ranked = edits1(word, alphabet)
-            .filter { it.length >= 3 }
-            .mapNotNull { c ->
-                val r = BigDictionary.rankOf(c, language)
-                if (r in 0 until COMMON_RANK) c to r else null
-            }
-            .sortedBy { it.second }
-        if (ranked.isEmpty()) return null
-        if (ranked.size >= 2 && ranked[1].second < ranked[0].second * 3) return null
-        return ranked[0].first
+        val fixed = SpellFix.autoFix(lower, language, learnedKeys, context, alphabet, commonRankFor(language)) ?: return null
+        return matchCase(word, fixed)
     }
 
     private fun matchCase(prefix: String, word: String): String = when {

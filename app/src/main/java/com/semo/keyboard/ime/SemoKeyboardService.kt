@@ -411,6 +411,7 @@ class SemoKeyboardService :
 
         // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.AutoCorrect.attach(applicationContext) } }
+        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.SentenceRules.attach(applicationContext) } }
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
         ioHandler.post { runCatching { VoskModelManager.cleanLeftovers(applicationContext) } }
         hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
@@ -1019,6 +1020,11 @@ class SemoKeyboardService :
 
         override fun textBeforeCursor(length: Int): String =
             textBeforeCursorWithin(length, EXPLICIT_READ_MS, false).orEmpty()
+
+        override fun textAfterCursor(length: Int): String {
+            val ic = currentInputConnection ?: return ""
+            return readWithin(EXPLICIT_READ_MS, false) { ic.getTextAfterCursor(length, 0)?.toString().orEmpty() }.orEmpty()
+        }
 
         override fun replaceBeforeCursor(deleteCount: Int, text: String) {
             lastTypeAt = SystemClock.uptimeMillis()

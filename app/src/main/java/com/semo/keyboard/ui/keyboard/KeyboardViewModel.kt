@@ -30,6 +30,9 @@ import com.semo.keyboard.domain.model.EditAction
 import com.semo.keyboard.domain.model.EnterKind
 import com.semo.keyboard.domain.model.FieldKind
 import com.semo.keyboard.domain.logic.ArabicText
+import com.semo.keyboard.domain.logic.Arabizi
+import com.semo.keyboard.domain.logic.SentenceRules
+import com.semo.keyboard.domain.model.Script
 import com.semo.keyboard.domain.model.KeyAction
 import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
@@ -110,6 +113,9 @@ class KeyboardViewModel(
 
         override fun textBeforeCursor(length: Int): String =
             if (editing()) editText().takeLast(length) else hostBridge.textBeforeCursor(length)
+
+        override fun textAfterCursor(length: Int): String =
+            if (editing()) "" else hostBridge.textAfterCursor(length)
 
         override fun textBeforeCursorWithin(length: Int, timeoutMs: Long, skipIfSlow: Boolean): String? =
             if (editing()) editText().takeLast(length) else hostBridge.textBeforeCursorWithin(length, timeoutMs, skipIfSlow)
@@ -317,6 +323,7 @@ class KeyboardViewModel(
                 swipeTyping = s.swipeTyping,
                 autoCorrect = s.autoCorrect,
                 autoSentenceFix = s.autoSentenceFix,
+                smartWriting = s.smartWriting,
                 autoPairs = s.autoPairs,
                 layoutVariants = s.layoutVariants,
                 emojiFavorites = s.emojiFavorites,
@@ -385,6 +392,8 @@ class KeyboardViewModel(
             )
         }
         undo = null
+        editWatch = null
+        lastFinal = null
         refreshSuggestions()
         // اتصال الحقل قد لا يكون جاهزًا لحظة فتح اللوحة (يرجع نصًا فارغًا) فيبقى الشريط فارغًا: نعيد التحديث بعد لحظة
         launchSafe {
@@ -475,7 +484,16 @@ class KeyboardViewModel(
                 if (!ch.isLetter() && !ch.isDigit() && ch != '\'' && ch != '’' && ch !in NON_WORD_END_SYMBOLS) {
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
                     val before = bridge.textBeforeCursorWithin(40, HOT_READ_MS, true)
-                    if (before != null && !(ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null)) learnWord(SuggestionEngine.currentWord(before))
+                    if (before != null) {
+                        if (ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null) {
+                            editWatch = null
+                        } else {
+                            val typedWord = SuggestionEngine.currentWord(before)
+                            finishEditWatch(before, typedWord)
+                            learnWord(typedWord)
+                            rememberFinal(before, typedWord)
+                        }
+                    }
                 }
                 bridge.commitText(action.char)
                 consumeOneShotShift()
@@ -495,6 +513,10 @@ class KeyboardViewModel(
                     val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
                     learnWord(finalWord)
                     learnPair(before, corrected?.original ?: finalWord, finalWord)
+                    if (corrected == null) {
+                        finishEditWatch(before, finalWord)
+                        rememberFinal(before, finalWord)
+                    } else editWatch = null
                     val tail = if (corrected == null) before else before.dropLast(corrected.original.length) + corrected.fixed
                     handleSpace(state.language, state.doubleSpacePeriod, tail.takeLast(2))
                     undo = corrected
@@ -514,7 +536,9 @@ class KeyboardViewModel(
                     val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
                     learnWord(finalWord)
                     learnPair(before, corrected?.original ?: finalWord, finalWord)
+                    if (corrected == null) finishEditWatch(before, finalWord) else editWatch = null
                 }
+                lastFinal = null
                 if (state.autoSentenceFix) autoFixSentence(byEnter = true)
                 bridge.performEnter()
                 autoCapitalize(state.language)
@@ -575,7 +599,70 @@ class KeyboardViewModel(
             bridge.deleteSurrounding(swipeWord.length + 1)
             return
         }
+        trackEditStart()
         bridge.deleteBackward()
+    }
+
+    private class EditWatch(val original: String, val prefix: String)
+
+    private var editWatch: EditWatch? = null
+    private var lastFinal: EditWatch? = null
+    private var lastTrackAt = 0L
+
+    private fun prefixOf(before: String, word: String): String = before.dropLast(word.length).takeLast(WATCH_PREFIX)
+
+    private fun rememberFinal(before: String, word: String) {
+        lastFinal = if (word.length >= 3) EditWatch(word, prefixOf(before, word)) else null
+    }
+
+    private fun trackEditStart() {
+        if (editWatch != null || !canLearn() || !uiState.value.autoCorrect) return
+        val now = System.currentTimeMillis()
+        if (now - lastTrackAt < TRACK_GAP_MS) return
+        lastTrackAt = now
+        val before = readBefore(60)
+        if (before.isEmpty()) return
+        val word = SuggestionEngine.currentWord(before)
+        if (word.isNotEmpty()) {
+            if (word.length < 3) return
+            val after = bridge.textAfterCursor(1)
+            if (after.isNotEmpty() && after[0].isLetter()) return
+            editWatch = EditWatch(word, prefixOf(before, word))
+            return
+        }
+        val last = lastFinal ?: return
+        if (before.endsWith(last.original + " ") &&
+            before.dropLast(last.original.length + 1).takeLast(WATCH_PREFIX) == last.prefix
+        ) {
+            editWatch = last
+            lastFinal = null
+        }
+    }
+
+    private fun finishEditWatch(before: String, finalWord: String) {
+        val watch = editWatch ?: return
+        editWatch = null
+        if (finalWord.length < 3 || finalWord == watch.original) return
+        if (prefixOf(before, finalWord) != watch.prefix) return
+        learnManualEdit(watch.original, finalWord)
+    }
+
+    private fun learnManualEdit(original: String, edited: String) {
+        if (original.length < 3 || edited.length < 3) return
+        if (ArabicText.isArabicWord(original) != ArabicText.isArabicWord(edited)) return
+        val o = original.lowercase()
+        val e = edited.lowercase()
+        if (o == e || e.startsWith(o)) return
+        val limit = minOf(3, maxOf(2, minOf(o.length, e.length) / 3))
+        if (editDistance(o, e) > limit) return
+        if (!allowed(edited)) return
+        val lang = SuggestionEngine.languageOf(original, uiState.value.language)
+        if (SuggestionEngine.isKnown(original, lang, learnedKeys.value)) return
+        launchSafe {
+            learnedWordsRepository.learnFix(original, edited, MANUAL_FIX_WEIGHT)
+            learnedWordsRepository.unignoreCorrection(original)
+        }
+        learnWord(edited)
     }
 
     /**
@@ -592,7 +679,7 @@ class KeyboardViewModel(
             fixed = shortcuts.value.firstOrNull { it.abbr.equals(word, ignoreCase = true) }?.expansion?.let { expandTokens(it) }
         }
         if (fixed == null && state.autoCorrect && word.lowercase() !in ignoredCorrections.value) {
-            fixed = correctWord(word)
+            fixed = correctWord(word, lastWords(before.dropLast(word.length), 1).lastOrNull().orEmpty())
         }
         val result = fixed ?: return null
         if (result == word) return null
@@ -600,17 +687,25 @@ class KeyboardViewModel(
         return Correction(word, result)
     }
 
-    private fun correctWord(word: String): String? {
+    private fun correctWord(word: String, prev: String = ""): String? {
         if (word.length < 2) return null
         val lower = word.lowercase()
         if (lower in ignoredCorrections.value) return null
         var fixed: String? = learnedFixes.value[lower]?.let { caseLike(word, it) }?.takeIf { allowed(it) }
+        if (fixed == null && ArabicText.isArabicWord(word)) fixed = learnedFixWithClitic(lower)
         if (fixed == null) fixed = AutoCorrect.fix(word)?.takeIf { allowed(it) }
         if (fixed == null) {
             val language = SuggestionEngine.languageOf(word, uiState.value.language)
-            fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value)?.takeIf { allowed(it) }
+            fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value, prev)?.takeIf { allowed(it) }
         }
         return fixed?.takeIf { it != word }
+    }
+
+    private fun learnedFixWithClitic(lower: String): String? {
+        val clitic = ArabicText.clitic(lower)
+        if (clitic.isEmpty()) return null
+        val hit = learnedFixes.value[lower.substring(clitic.length)] ?: return null
+        return (clitic + hit).takeIf { allowed(it) }
     }
 
     private fun caseLike(word: String, fixed: String): String = when {
@@ -685,7 +780,8 @@ class KeyboardViewModel(
             val stem = body.substring(start.coerceAtMost(body.length)).substringAfterLast(' ').trimEnd('.')
             if (stem.contains('.') || stem.count { it.isLetter() } <= 2) return null
         }
-        val fixed = smartFixSegment(segment, atStart, state.autoCorrect)
+        var fixed = smartFixSegment(segment, atStart, state.autoCorrect, state.smartWriting)
+        if (byEnter && state.smartWriting) fixed = SentenceRules.finishQuestion(fixed)
         if (fixed == segment) return null
         bridge.replaceBeforeCursor(segment.length, fixed)
         return Correction(segment, fixed)
@@ -740,12 +836,28 @@ class KeyboardViewModel(
         return next == '.' && segment.getOrNull(range.last + 2)?.isLetter() == true
     }
 
-    private fun smartFixSegment(segment: String, atStart: Boolean, fixWords: Boolean): String {
+    private fun smartFixSegment(segment: String, atStart: Boolean, fixWords: Boolean, smart: Boolean): String {
         var out = segment
         if (fixWords) {
-            out = SMART_WORD_REGEX.replace(out) { m ->
-                if (isGlued(segment, m.range)) m.value else correctWord(m.value) ?: m.value
+            val source = SentenceRules.apply(out)
+            val sb = StringBuilder(source.length + 8)
+            var last = 0
+            var prev = ""
+            for (m in SMART_WORD_REGEX.findAll(source)) {
+                val gap = source.substring(last, m.range.first)
+                sb.append(gap)
+                if (gap.isNotBlank()) prev = ""
+                val fixed = if (isGlued(source, m.range)) m.value else correctWord(m.value, prev) ?: m.value
+                sb.append(fixed)
+                prev = fixed
+                last = m.range.last + 1
             }
+            sb.append(source, last, source.length)
+            out = sb.toString()
+        }
+        if (smart) {
+            out = SentenceRules.dedupe(out)
+            out = SentenceRules.spacing(out)
         }
         out = ARABIC_QUESTION_REGEX.replace(out, "\u061F")
         out = ARABIC_COMMA_REGEX.replace(out, "\u060C")
@@ -834,7 +946,9 @@ class KeyboardViewModel(
             bridge.replaceBeforeCursor(swipeWord.length + 1, "$suggestion ")
         } else {
             val before = readBefore(40)
-            val word = SuggestionEngine.currentWord(before)
+            var word = SuggestionEngine.currentWord(before)
+            val token = Arabizi.trailingToken(before)
+            if (token.length > word.length && state.smartWriting && ArabicText.isArabicWord(suggestion) && Arabizi.hasDigitSignal(token)) word = token
             learnPair(before, word, suggestion.substringBefore(' '))
             recordFix(word, suggestion.substringBefore(' '))
             bridge.replaceBeforeCursor(word.length, "$suggestion ")
@@ -1423,6 +1537,14 @@ class KeyboardViewModel(
         }
 
         val word = SuggestionEngine.currentWord(before)
+        if (state.smartWriting && KeyboardLanguage.ARABIC in state.enabledLanguages) {
+            val token = Arabizi.trailingToken(before)
+            if (token.isNotEmpty() && token.length > word.length && Arabizi.hasDigitSignal(token)) {
+                if (!BigDictionary.isLoaded(KeyboardLanguage.ARABIC)) DictionaryManager.ensureLoaded(KeyboardLanguage.ARABIC)
+                val ar = Arabizi.candidates(token, 3).filter { allowed(it) }
+                if (ar.isNotEmpty()) return SuggestionResult(ar, token, null, clear)
+            }
+        }
         if (word.isEmpty()) {
             val trimmed = before.trimEnd()
             val atStart = trimmed.isEmpty() || trimmed.last() in SENTENCE_END
@@ -1464,16 +1586,30 @@ class KeyboardViewModel(
         ).filter { !it.equals(word, ignoreCase = true) && allowed(it) }.take(3)
         // الكلمة غير معروفة وما كفت الإكمالات: نكمّل بتصحيحات «هل تقصد»
         if (completions.size < 2 && state.spellCheck) {
-            completions = (completions + SuggestionEngine.corrections(word, language, learnedKeys.value, limit = 2 + SUGGEST_EXTRA)
+            completions = (completions + SuggestionEngine.corrections(word, language, learnedKeys.value, limit = 2 + SUGGEST_EXTRA, context = ctxPrev)
                 .filter { allowed(it) })
                 .distinctBy { it.lowercase() }
         }
+        val learnedFix = learnedFixes.value[word.lowercase()]?.let { caseLike(word, it) }?.takeIf { it != word && allowed(it) }
+        if (learnedFix != null) completions = (listOf(learnedFix) + completions).distinctBy { it.lowercase() }
         // تتمة الجملة: من أفضل إكمال نكمل بكلمات مرجّحة (الخانة الثانية) بدل إكمال ثانٍ
         var list = completions.take(2)
         if (completions.isNotEmpty() && state.nextWord) {
             val phrase = fitPhrase(NextWordModel.phrase(language, learnedBigrams.value, ctxWords, completions[0], 4))
                 ?.takeIf { allowed(it) }
             if (phrase != null) list = listOf(completions[0], phrase)
+        }
+        if (state.smartWriting && language.script == Script.LATIN &&
+            KeyboardLanguage.ARABIC in state.enabledLanguages && Arabizi.looksArabizi(word)
+        ) {
+            val signal = Arabizi.hasDigitSignal(word)
+            if (signal || !SuggestionEngine.isKnown(word, language, learnedKeys.value)) {
+                if (!BigDictionary.isLoaded(KeyboardLanguage.ARABIC)) DictionaryManager.ensureLoaded(KeyboardLanguage.ARABIC)
+                val ar = Arabizi.candidates(word, 2).filter { allowed(it) }
+                if (ar.isNotEmpty()) {
+                    list = if (signal) ar.take(1) + list.take(1) else if (list.size < 2) list + ar.take(1) else list
+                }
+            }
         }
         val emoji = if (state.suggestEmojis) EmojiSuggestions.forWord(word) else null
         return SuggestionResult(if (emoji != null) list.take(1) + emoji else list, word, null, clear)
@@ -1508,6 +1644,9 @@ class KeyboardViewModel(
 
     private companion object {
         const val SMART_FIX_WINDOW = 400
+        const val WATCH_PREFIX = 12
+        const val TRACK_GAP_MS = 250L
+        const val MANUAL_FIX_WEIGHT = 2
         val SMART_WORD_REGEX = Regex("[\\p{L}\\p{M}'\u2019]+")
         val SENTENCE_BOUNDARY = charArrayOf('.', '!', '?', '\u061F', '\n')
         const val GLUE_BEFORE = "@#/_:.-"

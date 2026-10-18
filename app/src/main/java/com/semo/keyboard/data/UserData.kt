@@ -342,7 +342,7 @@ class LearnedWordsRepository(context: Context) {
         .distinctUntilChanged()
         .map { raw -> decodeFixes(raw).filter { it.third >= FIX_TRUST_COUNT }.associate { it.first to it.second } }
 
-    suspend fun learnFix(typed: String, fixed: String) {
+    suspend fun learnFix(typed: String, fixed: String, weight: Int = 1) {
         if (!appContext.isUserStorageUnlocked()) return
         val a = clean(typed).lowercase()
         val b = clean(fixed)
@@ -352,8 +352,8 @@ class LearnedWordsRepository(context: Context) {
             val old = list.indexOfFirst { it.first == a }
             val count = if (old >= 0) {
                 val prev = list.removeAt(old)
-                if (prev.second == b) prev.third + 1 else 1
-            } else 1
+                if (prev.second == b) prev.third + weight else weight
+            } else weight
             list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
             while (list.size > MAX_FIXES) list.removeAt(list.size - 1)
             p[fixesKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
@@ -389,6 +389,16 @@ class LearnedWordsRepository(context: Context) {
         .map { p: Preferences -> p[ignoredKey] }
         .distinctUntilChanged()
         .map { raw -> raw.orEmpty().split(SEP).filter { it.isNotEmpty() }.toSet() }
+
+    suspend fun unignoreCorrection(original: String) {
+        if (!appContext.isUserStorageUnlocked()) return
+        val w = clean(original).lowercase()
+        if (w.isEmpty()) return
+        store.edit { p ->
+            val list = (p[ignoredKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList()).toMutableSet()
+            if (list.remove(w)) p[ignoredKey] = list.joinToString(SEP)
+        }
+    }
 
     /** يسجّل كلمة رفض المستخدم تصحيحها التلقائي (بعد ضغط Backspace فورًا لإرجاعها لأصلها) */
     suspend fun ignoreCorrection(original: String) {
@@ -500,7 +510,7 @@ class LearnedWordsRepository(context: Context) {
         const val MAX_COUNT = 1000
         const val MAX_IGNORED = 500
         const val MAX_BLOCKED = 2000
-        const val MAX_FIXES = 800
+        const val MAX_FIXES = 2000
         const val TRUST_COUNT = 3
         const val FIX_TRUST_COUNT = 2
     }

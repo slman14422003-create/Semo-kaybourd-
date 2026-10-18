@@ -67,6 +67,9 @@
     <string name="auto_sentence_title">Auto sentence correction</string>
     <string name="auto_sentence_hint">Fixes the finished sentence by itself after . ! ? or Enter: spelling, spacing, punctuation and capital letters. Backspace right after undoes it</string>
     <string name="auto_sentence_short">Sentences</string>
+    <string name="smart_writing_title">Local smart writing</string>
+    <string name="smart_writing_hint">On-device helpers: turns Arabizi (mar7aba) into Arabic suggestions, adds the question mark at the end of questions, removes accidental repeated words and fixes spacing after punctuation</string>
+    <string name="smart_writing_short">Smart writing</string>
     <string name="emoji_search_hint">Search emoji</string>
     <string name="emoji_no_results">No results</string>
     <string name="emoji_favorites">Favorites</string>

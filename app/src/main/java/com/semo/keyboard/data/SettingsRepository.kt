@@ -190,6 +190,7 @@ class SettingsRepository(context: Context) {
         val SWIPE_TYPING = booleanPreferencesKey("swipe_typing")
         val AUTO_CORRECT = booleanPreferencesKey("auto_correct")
         val AUTO_SENTENCE_FIX = booleanPreferencesKey("auto_sentence_fix")
+        val SMART_WRITING = booleanPreferencesKey("smart_writing")
         val AUTO_PAIRS = booleanPreferencesKey("auto_pairs")
         val LAYOUT_VARIANTS = stringPreferencesKey("layout_variants")
         val EMOJI_FAVORITES = stringPreferencesKey("emoji_favorites")
@@ -251,6 +252,7 @@ class SettingsRepository(context: Context) {
                 swipeTyping = p[Keys.SWIPE_TYPING] ?: true,
                 autoCorrect = p[Keys.AUTO_CORRECT] ?: true,
                 autoSentenceFix = p[Keys.AUTO_SENTENCE_FIX] ?: true,
+                smartWriting = p[Keys.SMART_WRITING] ?: true,
                 autoPairs = p[Keys.AUTO_PAIRS] ?: false,
                 layoutVariants = decodeVariants(p[Keys.LAYOUT_VARIANTS]),
                 emojiFavorites = p[Keys.EMOJI_FAVORITES].orEmpty().split(' ').filter { it.isNotEmpty() },
@@ -326,6 +328,7 @@ class SettingsRepository(context: Context) {
     suspend fun setSwipeTyping(v: Boolean) { store.edit { it[Keys.SWIPE_TYPING] = v } }
     suspend fun setAutoCorrect(v: Boolean) { store.edit { it[Keys.AUTO_CORRECT] = v } }
     suspend fun setAutoSentenceFix(v: Boolean) { store.edit { it[Keys.AUTO_SENTENCE_FIX] = v } }
+    suspend fun setSmartWriting(v: Boolean) { store.edit { it[Keys.SMART_WRITING] = v } }
     suspend fun setAutoPairs(v: Boolean) { store.edit { it[Keys.AUTO_PAIRS] = v } }
     suspend fun setEmojiFavorites(list: List<String>) { store.edit { it[Keys.EMOJI_FAVORITES] = list.joinToString(" ") } }
     suspend fun setEmojiTone(base: String, variant: String) {

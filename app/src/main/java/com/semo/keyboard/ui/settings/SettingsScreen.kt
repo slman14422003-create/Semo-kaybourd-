@@ -249,6 +249,7 @@ private fun HomePage(
             if (settings.nextWord) add(L("الكلمة التالية"))
             if (settings.autoCorrect) add(L("استبدال تلقائي"))
             if (settings.autoSentenceFix) add(com.semo.keyboard.ui.appString(R.string.auto_sentence_short))
+            if (settings.smartWriting) add(com.semo.keyboard.ui.appString(R.string.smart_writing_short))
             if (settings.spellCheck) add(L("تدقيق"))
             if (settings.textShortcuts && shortcutCount > 0) add("$shortcutCount${L(" اختصار")}")
         }.joinToString(" · ")
@@ -439,6 +440,11 @@ private fun TypingPage(
                 com.semo.keyboard.ui.appString(R.string.auto_sentence_title), R.drawable.ic_set_text, IconPurple, settings.autoSentenceFix,
                 subtitle = com.semo.keyboard.ui.appString(R.string.auto_sentence_hint)
             ) { scope.launch { repo.setAutoSentenceFix(it) } }
+            Divider()
+            SwitchRow(
+                com.semo.keyboard.ui.appString(R.string.smart_writing_title), R.drawable.ic_set_spell, IconBlue, settings.smartWriting,
+                subtitle = com.semo.keyboard.ui.appString(R.string.smart_writing_hint)
+            ) { scope.launch { repo.setSmartWriting(it) } }
             Divider()
             SwitchRow(
                 L("تدقيق إملائي"), R.drawable.ic_set_spell, IconOrange, settings.spellCheck,
