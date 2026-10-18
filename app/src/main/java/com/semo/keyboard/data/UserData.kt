@@ -14,6 +14,8 @@ import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.isImage
 import com.semo.keyboard.domain.model.isLongText
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -23,6 +25,88 @@ import kotlinx.coroutines.withContext
 
 private const val SEP = "\u001E"
 private const val FIELD = "\u001F"
+
+internal class LearnedEntry(val first: String, val second: String, val permille: Int, val last: Long)
+
+private object ForgettingCurve {
+    const val HALF_LIFE_HOURS = 48.0
+    const val GAIN = 0.4
+    const val WORD_TRUST = 0.7
+    const val FIX_TRUST = 0.6
+    const val FLOOR = 0.02
+
+    fun nowMinutes(): Long = System.currentTimeMillis() / 60_000L
+
+    fun effective(e: LearnedEntry, now: Long): Double {
+        val hours = (now - e.last).coerceAtLeast(0L) / 60.0
+        return e.permille / 1000.0 * 0.5.pow(hours / HALF_LIFE_HOURS)
+    }
+
+    fun reinforce(current: Double, times: Int): Int {
+        var c = current.coerceIn(0.0, 1.0)
+        repeat(times.coerceAtLeast(1)) { c += (1.0 - c) * GAIN }
+        return (c * 1000).roundToInt().coerceIn(0, 1000)
+    }
+
+    fun fromLegacyCount(count: Int): Int = reinforce(0.0, count.coerceIn(1, 20))
+
+    fun prune(list: MutableList<LearnedEntry>, now: Long, max: Int) {
+        list.removeAll { effective(it, now) < FLOOR }
+        while (list.size > max) {
+            var worst = list.size - 1
+            var worstValue = effective(list[worst], now)
+            for (i in list.size - 2 downTo 0) {
+                val v = effective(list[i], now)
+                if (v < worstValue) {
+                    worst = i
+                    worstValue = v
+                }
+            }
+            list.removeAt(worst)
+        }
+    }
+}
+
+private class DecayingKeySet(private val entries: Map<String, LearnedEntry>) : AbstractSet<String>() {
+    private var sizeMinute = -1L
+    private var sizeValue = 0
+
+    override fun contains(element: String): Boolean {
+        val e = entries[element] ?: return false
+        return ForgettingCurve.effective(e, ForgettingCurve.nowMinutes()) >= ForgettingCurve.WORD_TRUST
+    }
+
+    override val size: Int
+        get() {
+            val now = ForgettingCurve.nowMinutes()
+            if (now != sizeMinute) {
+                sizeValue = entries.values.count { ForgettingCurve.effective(it, now) >= ForgettingCurve.WORD_TRUST }
+                sizeMinute = now
+            }
+            return sizeValue
+        }
+
+    override fun iterator(): Iterator<String> {
+        val now = ForgettingCurve.nowMinutes()
+        return entries.filterValues { ForgettingCurve.effective(it, now) >= ForgettingCurve.WORD_TRUST }.keys.iterator()
+    }
+}
+
+private class DecayingFixMap(private val source: Map<String, LearnedEntry>) : AbstractMap<String, String>() {
+    private fun trusted(e: LearnedEntry) =
+        ForgettingCurve.effective(e, ForgettingCurve.nowMinutes()) >= ForgettingCurve.FIX_TRUST
+
+    override fun get(key: String): String? = source[key]?.takeIf { trusted(it) }?.second
+
+    override fun containsKey(key: String): Boolean = get(key) != null
+
+    override val entries: Set<Map.Entry<String, String>>
+        get() {
+            val now = ForgettingCurve.nowMinutes()
+            return source.filterValues { ForgettingCurve.effective(it, now) >= ForgettingCurve.FIX_TRUST }
+                .mapValues { it.value.second }.entries
+        }
+}
 
 /**
  * سجل الحافظة: يُحفظ محليًا فقط، والعناصر المثبّتة لا تُحذف تلقائيًا.
@@ -219,11 +303,11 @@ class ClipboardRepository(context: Context) {
         /** أطول من هذا يُحفظ بملف مستقل (الأكواد الطويلة والمقالات) */
         private const val INLINE_MAX = 1500
         /** أقصى طول نص يُحفظ (مليون حرف)؛ الأطول يُتجاهل بدل أن يُلصق مقطوعًا */
-        const val MAX_TEXT_LENGTH = 1_000_000
+        const val MAX_TEXT_LENGTH = 10_000_000
         private const val PREVIEW_LENGTH = 400
-        private const val MAX_UNPINNED = 60
-        private const val MAX_UNPINNED_LONG = 15
-        private const val MAX_UNPINNED_IMAGES = 10
+        private const val MAX_UNPINNED = 100
+        private const val MAX_UNPINNED_LONG = 30
+        private const val MAX_UNPINNED_IMAGES = 25
         private const val ORPHAN_MIN_AGE_MS = 10L * 60L * 1000L
     }
 }
@@ -243,7 +327,7 @@ class LearnedWordsRepository(context: Context) {
     private val blockedKey = stringPreferencesKey("blocked_words")
     private val fixesKey = stringPreferencesKey("learned_fixes")
 
-    class BlockSnapshot(val word: String, val count: Int, val pairs: List<Triple<String, String, Int>>)
+    class BlockSnapshot internal constructor(val word: String, internal val entry: LearnedEntry?, internal val pairs: List<LearnedEntry>)
 
     val blocked: Flow<List<String>> = appContext.credentialPrefsFlow()
         .map { p: Preferences -> p[blockedKey] }
@@ -266,10 +350,10 @@ class LearnedWordsRepository(context: Context) {
             val tokens = k.split(' ').filter { it.isNotEmpty() }
             val words = decodeWords(p[key]).toMutableList()
             val pairs = decodeRawPairs(p[pairKey]).toMutableList()
-            var removedCount = 0
-            val removedPairs = ArrayList<Triple<String, String, Int>>()
+            var removedEntry: LearnedEntry? = null
+            val removedPairs = ArrayList<LearnedEntry>()
             if (tokens.size == 1) {
-                words.firstOrNull { BigDictionary.key(it.first) == k }?.let { removedCount = it.second }
+                removedEntry = words.firstOrNull { BigDictionary.key(it.first) == k }
                 words.removeAll { BigDictionary.key(it.first) == k }
                 val gone = pairs.filter { pr -> pr.first.split(' ').any { BigDictionary.key(it) == k } || BigDictionary.key(pr.second) == k }
                 removedPairs.addAll(gone)
@@ -281,9 +365,9 @@ class LearnedWordsRepository(context: Context) {
                     pairs.removeAll(gone)
                 }
             }
-            p[key] = words.joinToString(SEP) { it.first + FIELD + it.second }
-            p[pairKey] = pairs.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
-            snapshot = BlockSnapshot(w, removedCount, removedPairs)
+            p[key] = encodeWords(words)
+            p[pairKey] = encodePairs(pairs)
+            snapshot = BlockSnapshot(w, removedEntry, removedPairs)
         }
         return snapshot
     }
@@ -295,18 +379,18 @@ class LearnedWordsRepository(context: Context) {
             val blockedList = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList()).toMutableList()
             blockedList.removeAll { BigDictionary.key(it) == k }
             p[blockedKey] = blockedList.joinToString(SEP)
-            if (snapshot.count > 0) {
+            snapshot.entry?.let { saved ->
                 val words = decodeWords(p[key]).toMutableList()
                 words.removeAll { BigDictionary.key(it.first) == k }
-                words.add(0, clean(snapshot.word) to snapshot.count)
-                p[key] = words.joinToString(SEP) { it.first + FIELD + it.second }
+                words.add(0, LearnedEntry(clean(snapshot.word), "", saved.permille, saved.last))
+                p[key] = encodeWords(words)
             }
             if (snapshot.pairs.isNotEmpty()) {
                 val pairs = decodeRawPairs(p[pairKey]).toMutableList()
                 for (t in snapshot.pairs) {
                     if (pairs.none { it.first == t.first && it.second == t.second }) pairs.add(t)
                 }
-                p[pairKey] = pairs.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+                p[pairKey] = encodePairs(pairs)
             }
         }
     }
@@ -326,21 +410,47 @@ class LearnedWordsRepository(context: Context) {
         store.edit { p -> p.remove(blockedKey) }
     }
 
-    /** الأكثر استعمالًا أولًا، ومع التساوي الأحدث أولًا (الترتيب المستقر يحفظ الحداثة) */
     val words: Flow<List<String>> = appContext.credentialPrefsFlow()
         .map { p: Preferences -> p[key] }
         .distinctUntilChanged()
-        .map { raw -> decodeWords(raw).sortedByDescending { it.second }.map { it.first } }
+        .map { raw ->
+            val now = ForgettingCurve.nowMinutes()
+            decodeWords(raw)
+                .map { it to ForgettingCurve.effective(it, now) }
+                .filter { it.second >= ForgettingCurve.FLOOR }
+                .sortedByDescending { it.second }
+                .map { it.first.first }
+        }
 
     val trustedWords: Flow<List<String>> = appContext.credentialPrefsFlow()
         .map { p: Preferences -> p[key] }
         .distinctUntilChanged()
-        .map { raw -> decodeWords(raw).filter { it.second >= TRUST_COUNT }.map { it.first } }
+        .map { raw ->
+            val now = ForgettingCurve.nowMinutes()
+            decodeWords(raw).filter { ForgettingCurve.effective(it, now) >= ForgettingCurve.WORD_TRUST }.map { it.first }
+        }
+
+    val trustedKeys: Flow<Set<String>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> p[key] }
+        .distinctUntilChanged()
+        .map { raw -> DecayingKeySet(decodeWords(raw).associateBy { BigDictionary.key(it.first) }) }
 
     val learnedFixes: Flow<Map<String, String>> = appContext.credentialPrefsFlow()
         .map { p: Preferences -> p[fixesKey] }
         .distinctUntilChanged()
-        .map { raw -> decodeFixes(raw).filter { it.third >= FIX_TRUST_COUNT }.associate { it.first to it.second } }
+        .map { raw -> DecayingFixMap(decodeFixes(raw).associateBy { it.first }) }
+
+    suspend fun isTrusted(word: String): Boolean = effectiveTrust(word) >= ForgettingCurve.WORD_TRUST
+
+    suspend fun isKnown(word: String): Boolean = effectiveTrust(word) >= ForgettingCurve.FLOOR
+
+    private suspend fun effectiveTrust(word: String): Double {
+        val k = BigDictionary.key(clean(word).lowercase())
+        if (k.isEmpty()) return 0.0
+        val raw = appContext.credentialPrefsFlow().first()[key]
+        val now = ForgettingCurve.nowMinutes()
+        return decodeWords(raw).filter { BigDictionary.key(it.first) == k }.maxOfOrNull { ForgettingCurve.effective(it, now) } ?: 0.0
+    }
 
     suspend fun learnFix(typed: String, fixed: String, weight: Int = 1) {
         if (!appContext.isUserStorageUnlocked()) return
@@ -348,15 +458,16 @@ class LearnedWordsRepository(context: Context) {
         val b = clean(fixed)
         if (a.length < 3 || a.length > 30 || b.length < 2 || b.length > 30 || a == b.lowercase()) return
         store.edit { p ->
-            val list = decodeFixes(p[fixesKey]).toMutableList()
+            val now = ForgettingCurve.nowMinutes()
+            val list = decodeFixes(p[fixesKey], now).toMutableList()
             val old = list.indexOfFirst { it.first == a }
-            val count = if (old >= 0) {
+            val base = if (old >= 0) {
                 val prev = list.removeAt(old)
-                if (prev.second == b) prev.third + weight else weight
-            } else weight
-            list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
-            while (list.size > MAX_FIXES) list.removeAt(list.size - 1)
-            p[fixesKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+                if (prev.second == b) ForgettingCurve.effective(prev, now) else 0.0
+            } else 0.0
+            list.add(0, LearnedEntry(a, b, ForgettingCurve.reinforce(base, weight), now))
+            ForgettingCurve.prune(list, now, MAX_FIXES)
+            p[fixesKey] = encodePairs(list)
         }
     }
 
@@ -365,15 +476,12 @@ class LearnedWordsRepository(context: Context) {
         val a = clean(typed).lowercase()
         store.edit { p ->
             val list = decodeFixes(p[fixesKey]).filterNot { it.first == a }
-            p[fixesKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+            p[fixesKey] = encodePairs(list)
         }
     }
 
-    private fun decodeFixes(raw: String?): List<Triple<String, String, Int>> =
-        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).mapNotNull { e ->
-            val parts = e.split(FIELD)
-            if (parts.size < 3 || parts[0].isEmpty() || parts[1].isEmpty()) null else Triple(parts[0], parts[1], parts[2].toIntOrNull() ?: 1)
-        }
+    private fun decodeFixes(raw: String?, now: Long = ForgettingCurve.nowMinutes()): List<LearnedEntry> =
+        decodePairEntries(raw, now).filter { it.first.isNotEmpty() && it.second.isNotEmpty() }
 
     /** كلمة (بصيغة مفتاح البحث) ← الكلمات التي تلتها مرتبة بالأكثر تكرارًا */
     val bigrams: Flow<Map<String, List<String>>> = appContext.credentialPrefsFlow()
@@ -424,37 +532,33 @@ class LearnedWordsRepository(context: Context) {
             val blockedKeys = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList())
                 .mapTo(HashSet<String>()) { BigDictionary.key(it) }
             if (newWords.isNotEmpty()) {
-                val list = decodeWords(p[key]).toMutableList()
+                val now = ForgettingCurve.nowMinutes()
+                val list = decodeWords(p[key], now).toMutableList()
                 for (raw in newWords) {
                     val w = clean(raw)
                     if (w.length < 3 || w.length > 30) continue
                     if (blockedKeys.isNotEmpty() && BigDictionary.key(w.lowercase()) in blockedKeys) continue
                     val old = list.indexOfFirst { it.first == w }
-                    val count = if (old >= 0) list.removeAt(old).second + 1 else 1
-                    list.add(0, w to count.coerceAtMost(MAX_COUNT))
+                    val base = if (old >= 0) ForgettingCurve.effective(list.removeAt(old), now) else 0.0
+                    list.add(0, LearnedEntry(w, "", ForgettingCurve.reinforce(base, 1), now))
                 }
-                while (list.size > MAX_WORDS) {
-                    val min = list.minOf { it.second }
-                    list.removeAt(list.indexOfLast { it.second == min })
-                }
-                p[key] = list.joinToString(SEP) { it.first + FIELD + it.second }
+                ForgettingCurve.prune(list, now, MAX_WORDS)
+                p[key] = encodeWords(list)
             }
             if (newPairs.isNotEmpty()) {
-                val list = decodeRawPairs(p[pairKey]).toMutableList()
+                val now = ForgettingCurve.nowMinutes()
+                val list = decodeRawPairs(p[pairKey], now).toMutableList()
                 for ((prev, next) in newPairs) {
                     val a = clean(if (prev.contains(' ')) prev else BigDictionary.key(prev))
                     val b = clean(next)
                     if (a.isEmpty() || a.length > 61 || b.length < 2 || b.length > 30) continue
                     if (blockedKeys.isNotEmpty() && (BigDictionary.key(b.lowercase()) in blockedKeys || a.split(' ').any { BigDictionary.key(it) in blockedKeys })) continue
                     val old = list.indexOfFirst { it.first == a && it.second == b }
-                    val count = if (old >= 0) list.removeAt(old).third + 1 else 1
-                    list.add(0, Triple(a, b, count.coerceAtMost(MAX_COUNT)))
+                    val base = if (old >= 0) ForgettingCurve.effective(list.removeAt(old), now) else 0.0
+                    list.add(0, LearnedEntry(a, b, ForgettingCurve.reinforce(base, 1), now))
                 }
-                while (list.size > MAX_PAIRS) {
-                    val min = list.minOf { it.third }
-                    list.removeAt(list.indexOfLast { it.third == min })
-                }
-                p[pairKey] = list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+                ForgettingCurve.prune(list, now, MAX_PAIRS)
+                p[pairKey] = encodePairs(list)
             }
         }
     }
@@ -477,42 +581,60 @@ class LearnedWordsRepository(context: Context) {
         store.edit { p ->
             val list = decodeWords(p[key]).toMutableList()
             list.removeAll { it.first == w }
-            p[key] = list.joinToString(SEP) { it.first + FIELD + it.second }
+            p[key] = encodeWords(list)
 
             val pairs = decodeRawPairs(p[pairKey]).toMutableList()
             pairs.removeAll { it.first == w || it.second == w }
-            p[pairKey] = pairs.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.third }
+            p[pairKey] = encodePairs(pairs)
         }
     }
 
     private fun clean(s: String): String = s.trim().replace(SEP, "").replace(FIELD, "")
 
-    /** الصيغة القديمة (كلمة بلا عدّاد) تُقرأ بعدّاد 1 فلا تضيع الكلمات المتعلَّمة سابقًا */
-    private fun decodeWords(raw: String?): List<Pair<String, Int>> =
-        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).filter { it.isNotEmpty() }.map {
-            it.substringBefore(FIELD) to (it.substringAfter(FIELD, "").toIntOrNull() ?: 1)
+    private fun decodeWords(raw: String?, now: Long = ForgettingCurve.nowMinutes()): List<LearnedEntry> =
+        if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).filter { it.isNotEmpty() }.map { e ->
+            val parts = e.split(FIELD)
+            if (parts.size >= 3) {
+                LearnedEntry(parts[0], "", parts[1].toIntOrNull() ?: 0, parts[2].toLongOrNull() ?: now)
+            } else {
+                LearnedEntry(parts[0], "", ForgettingCurve.fromLegacyCount(parts.getOrNull(1)?.toIntOrNull() ?: 1), now)
+            }
         }
 
-    private fun decodeRawPairs(raw: String?): List<Triple<String, String, Int>> =
+    private fun decodePairEntries(raw: String?, now: Long): List<LearnedEntry> =
         if (raw.isNullOrEmpty()) emptyList() else raw.split(SEP).mapNotNull { e ->
             val parts = e.split(FIELD)
-            if (parts.size < 3) null else Triple(parts[0], parts[1], parts[2].toIntOrNull() ?: 1)
+            when {
+                parts.size >= 4 -> LearnedEntry(parts[0], parts[1], parts[2].toIntOrNull() ?: 0, parts[3].toLongOrNull() ?: now)
+                parts.size == 3 -> LearnedEntry(parts[0], parts[1], ForgettingCurve.fromLegacyCount(parts[2].toIntOrNull() ?: 1), now)
+                else -> null
+            }
         }
 
-    private fun decodePairs(raw: String?): Map<String, List<String>> =
-        decodeRawPairs(raw)
-            .groupBy({ it.first }, { it.second to it.third })
+    private fun decodeRawPairs(raw: String?, now: Long = ForgettingCurve.nowMinutes()): List<LearnedEntry> =
+        decodePairEntries(raw, now)
+
+    private fun encodeWords(list: List<LearnedEntry>): String =
+        list.joinToString(SEP) { it.first + FIELD + it.permille + FIELD + it.last }
+
+    private fun encodePairs(list: List<LearnedEntry>): String =
+        list.joinToString(SEP) { it.first + FIELD + it.second + FIELD + it.permille + FIELD + it.last }
+
+    private fun decodePairs(raw: String?): Map<String, List<String>> {
+        val now = ForgettingCurve.nowMinutes()
+        return decodeRawPairs(raw, now)
+            .map { it to ForgettingCurve.effective(it, now) }
+            .filter { it.second >= ForgettingCurve.FLOOR }
+            .groupBy({ it.first.first }, { it.first.second to it.second })
             .mapValues { entry -> entry.value.sortedByDescending { it.second }.map { it.first } }
+    }
 
     private companion object {
         const val MAX_WORDS = 2500
         const val MAX_PAIRS = 3000
-        const val MAX_COUNT = 1000
         const val MAX_IGNORED = 500
         const val MAX_BLOCKED = 2000
         const val MAX_FIXES = 2000
-        const val TRUST_COUNT = 3
-        const val FIX_TRUST_COUNT = 2
     }
 }
 

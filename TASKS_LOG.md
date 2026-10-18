@@ -233,3 +233,19 @@
 - ميزة جديدة: متغيرات داخل الاختصارات النصية: {date} {time} {datetime} {day} تُملأ وقت الاستخدام.
 - تنظيف: حذف متغيرين مكررين بمزوّد التخطيطات.
 - مراجعة يدوية كاملة لكل تغييرات الإصدارات 3.15.x (لا Gradle هنا): تحقق من الحقول والـ Imports والأقواس.
+
+## 3.18.0 (versionCode 53)
+- Clipboard capture: web images copied with a link as text are stored as images; html with only an image stores the image address; text files copied as content URIs are read and stored whole; junk content:// strings are no longer saved as text; the first image URI among several items is used.
+- Image store: concurrent saves no longer delete each other's temp files, more formats (bmp, heic, heif, avif, svg), limit 64 MB.
+- Large text: stored limit raised from 1M to 10M characters, big pastes use larger chunks; keyboard edit limit unchanged (1M).
+- History limits raised: 100 short, 30 long, 25 images.
+- Clipboard panel: filter chips by kind (all, text, links, code, images) shown when more than one kind exists; new Copy action in the long-press menu for text, long text and images (InputBridge.copyToClipboard, copyImageToClipboard).
+- Not built with Gradle here; check CI output first.
+
+## 3.19.0 (versionCode 54)
+- 123 and ABC switch: the old color fade is gone (keys are recreated per page, so no background color animation between key types); rows now rise in with a staggered iOS-style slide and soft fade (IosPush easing, row delay 22ms). Also plays when returning from emoji, clipboard, edit, calc or translate pages.
+- Panel pages (emoji, clipboard, edit, calc, translate) enter with a slight rise and scale (iosEnter modifier in KeyboardScreen.kt); no change to panel height, so the keyboard window does not resize.
+- Top strip mode switch (suggestions, translate, voice, clip edit, emoji search) uses vertical slide with fade instead of a cross fade; toolbar open and close uses scale with fade.
+- App root (onboarding to settings) uses scale with fade, matching the iOS dissolve-zoom.
+- All animations still follow the animation speed setting; speed 0 keeps them instant.
+- Not built with Gradle here; check CI output first.

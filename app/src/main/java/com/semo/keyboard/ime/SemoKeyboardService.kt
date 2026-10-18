@@ -79,6 +79,8 @@ import kotlinx.coroutines.yield
 
 /** أقصى عدد أحرف بدفعة لصق واحدة (النص الطويل يُلصق على دفعات كي لا يتجاوز حدّ حجم رسالة Binder) */
 private const val COMMIT_CHUNK = 4_000
+private const val COMMIT_CHUNK_BIG = 24_000
+private const val COMMIT_BIG_THRESHOLD = 200_000
 private const val SLOW_BACKOFF_MS = 600L
 private const val EXPLICIT_READ_MS = 250L
 private const val FIELD_READ_MS = 1500L
@@ -94,6 +96,7 @@ private val CLIP_FORCE_DELAYS = longArrayOf(0L, 60L, 150L, 300L, 600L, 1200L)
 private val CLIP_POLL_DELAYS = longArrayOf(0L, 60L, 150L, 300L, 600L)
 private const val CLIP_MAX_FAILS = 3
 private const val HTML_CLIP_MAX = 2_000_000
+private val IMG_SRC_REGEX = Regex("""<img[^>]+src\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
 /**
  * خدمة لوحة المفاتيح. تستضيف واجهة Compose داخل نافذة الـ IME.
@@ -411,6 +414,7 @@ class SemoKeyboardService :
 
         // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.AutoCorrect.attach(applicationContext) } }
+        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.EmojiSearch.attach(applicationContext) } }
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.SentenceRules.attach(applicationContext) } }
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
         ioHandler.post { runCatching { VoskModelManager.cleanLeftovers(applicationContext) } }
@@ -443,25 +447,40 @@ class SemoKeyboardService :
             1 -> texts[0]
             else -> texts.distinct().joinToString("\n")
         }
-        val html = if (plain == null) {
+        val htmlRaw = if (plain == null) {
             items.firstNotNullOfOrNull { runCatching { it.htmlText }.getOrNull()?.takeIf { s -> s.isNotBlank() && s.length <= HTML_CLIP_MAX } }
-                ?.let { runCatching { android.text.Html.fromHtml(it, android.text.Html.FROM_HTML_MODE_LEGACY).toString() }.getOrNull() }
-                ?.takeIf { it.isNotBlank() }
         } else null
-        val coerced = if (plain == null && html == null) {
-            items.firstNotNullOfOrNull { runCatching { it.coerceToText(this)?.toString() }.getOrNull()?.takeIf { s -> s.isNotBlank() } }
+        val html = htmlRaw
+            ?.let { runCatching { android.text.Html.fromHtml(it, android.text.Html.FROM_HTML_MODE_LEGACY).toString() }.getOrNull() }
+            ?.replace("\uFFFC", "")
+            ?.takeIf { it.isNotBlank() }
+        val htmlImageUrl = if (plain == null && html == null && htmlRaw != null) {
+            IMG_SRC_REGEX.find(htmlRaw)?.groupValues?.get(1)?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
         } else null
-        val uri = items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme == "content" } }
-        val plainLooksLikeUri = plain == null || plain.trim().let {
-            it.startsWith("content:") || it.startsWith("file:") || it.startsWith("/") || it == uri?.toString()
-        }
+        val contentUris = items.mapNotNull { item -> item.uri?.takeIf { it.scheme == "content" } }
+        val uri = contentUris.firstOrNull { resolveImageMime(descImageMime, it) != null } ?: contentUris.firstOrNull()
+        val plainTrim = plain?.trim()
+        val singleWebLink = plainTrim != null && plainTrim.length <= 2048 && !plainTrim.contains(' ') && !plainTrim.contains('\n') &&
+            (plainTrim.startsWith("http://") || plainTrim.startsWith("https://"))
+        val plainLooksLikeUri = plainTrim == null ||
+            plainTrim.startsWith("content:") || plainTrim.startsWith("file:") || plainTrim.startsWith("/") ||
+            plainTrim == uri?.toString() ||
+            (descImageMime != null && singleWebLink)
         val mime = if (uri != null && plainLooksLikeUri) resolveImageMime(descImageMime, uri) else null
-        // بعض التطبيقات تنسخ الروابط كـ ClipData.Item فيه uri فقط بلا نص (text/uri-list)،
-        // فلو ما لقينا نصًا من أي مصدر سابق نأخذ الرابط من أول uri غير content (http/https/mailto...)
-        val linkText = if (plain == null && html == null && coerced == null) {
-            items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme != null && it.scheme != "content" }?.toString() }
+        val fileText = if (mime == null && uri != null && plainLooksLikeUri) readTextUri(uri) else null
+        val coerced = if (plain == null && html == null && fileText == null && mime == null) {
+            items.firstNotNullOfOrNull { runCatching { it.coerceToText(this)?.toString() }.getOrNull()?.takeIf { s -> s.isNotBlank() && !s.startsWith("content:") && !s.startsWith("file:") } }
         } else null
-        return ClipSnap(plain ?: html ?: coerced ?: linkText, uri, mime)
+        val linkText = if (plain == null && html == null && fileText == null && coerced == null) {
+            items.firstNotNullOfOrNull { item -> item.uri?.takeIf { it.scheme != null && it.scheme != "content" && it.scheme != "file" }?.toString() }
+        } else null
+        val textOut = when {
+            mime != null -> null
+            fileText != null -> fileText
+            plain != null && !(plainTrim!!.startsWith("content:") || plainTrim.startsWith("file:")) -> plain
+            else -> html ?: coerced ?: linkText ?: htmlImageUrl
+        }
+        return ClipSnap(textOut, uri, mime)
     }
 
     /**
@@ -542,6 +561,26 @@ class SemoKeyboardService :
             markHandled()
             viewModel.onClipboardCopied(stored)
         }
+    }
+
+    private fun readTextUri(uri: android.net.Uri): String? {
+        val type = runCatching { contentResolver.getType(uri) }.getOrNull() ?: return null
+        val textual = type.startsWith("text/") || type == "application/json" || type == "application/xml"
+        if (!textual || type == "text/uri-list") return null
+        return runCatching {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                val limit = ClipboardRepository.MAX_TEXT_LENGTH
+                val reader = stream.bufferedReader(Charsets.UTF_8)
+                val sb = StringBuilder()
+                val buf = CharArray(16 * 1024)
+                while (sb.length <= limit) {
+                    val n = reader.read(buf)
+                    if (n < 0) break
+                    sb.append(buf, 0, n)
+                }
+                sb.toString().takeIf { it.isNotBlank() && it.length <= limit }
+            }
+        }.getOrNull()
     }
 
     /** نوع الصورة: من مزوّد المحتوى أولًا (الأدق)، ثم من وصف المقطع؛ null لو الرابط ليس صورة */
@@ -804,6 +843,8 @@ class SemoKeyboardService :
         if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
             com.semo.keyboard.ui.keyboard.EmojiBitmapCache.clear()
             com.semo.keyboard.ime.VoskModelManager.trim()
+            com.semo.keyboard.data.CacheCleaner.clearMemory()
+        } else if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
             com.semo.keyboard.data.CacheCleaner.clearMemory()
         }
     }
@@ -1097,6 +1138,23 @@ class SemoKeyboardService :
             return false
         }
 
+        override fun copyToClipboard(text: String) {
+            runCatching {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                lastCapturedClip = clipKey(text)
+                cm.setPrimaryClip(ClipData.newPlainText("text", text))
+            }
+        }
+
+        override fun copyImageToClipboard(fileName: String, mime: String) {
+            runCatching {
+                val uri = imageStore.contentUri(fileName)
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                lastCapturedClip = uri.toString()
+                cm.setPrimaryClip(ClipData.newUri(contentResolver, "image", uri))
+            }
+        }
+
         override fun keyFeedback(sound: Boolean, haptic: Boolean, kind: KeyFeedback, volume: Float) {
             val now = SystemClock.uptimeMillis()
             lastTypeAt = now
@@ -1115,11 +1173,12 @@ class SemoKeyboardService :
     private suspend fun commitChunked(ic: android.view.inputmethod.InputConnection, text: String) {
         var start = 0
         var failed = false
+        val chunkSize = if (text.length > COMMIT_BIG_THRESHOLD) COMMIT_CHUNK_BIG else COMMIT_CHUNK
         try {
             ic.beginBatchEdit()
             while (start < text.length) {
                 if (currentInputConnection !== ic) return
-                var end = minOf(start + COMMIT_CHUNK, text.length)
+                var end = minOf(start + chunkSize, text.length)
                 if (end < text.length && text[end - 1].isHighSurrogate()) end--
                 if (!ic.commitText(text.substring(start, end), 1)) {
                     failed = true

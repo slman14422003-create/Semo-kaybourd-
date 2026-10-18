@@ -1113,9 +1113,9 @@ private fun AboutPage(repo: SettingsRepository, onReplay: () -> Unit, onBack: ()
         }
     }
 
-    if (updateState != null) {
+    updateState?.let { currentUpdate ->
         UpdateDialog(
-            state = updateState!!,
+            state = currentUpdate,
             onDismiss = { updateState = null },
             onRetry = { startCheck() },
             onDownload = { info -> startDownload(info) },

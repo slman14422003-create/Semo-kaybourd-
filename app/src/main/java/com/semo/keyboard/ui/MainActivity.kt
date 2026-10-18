@@ -1,7 +1,12 @@
 package com.semo.keyboard.ui
 
 import com.semo.keyboard.ui.L
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import android.content.Context
 import android.content.Intent
@@ -145,7 +150,15 @@ private fun Root(
     }
     val showOnboarding = !current.onboardingCompleted || forceOnboarding
     CompositionLocalProvider(LocalLayoutDirection provides if (english) LayoutDirection.Ltr else LayoutDirection.Rtl) {
-    Crossfade(targetState = showOnboarding, animationSpec = tween(380, easing = com.semo.keyboard.ui.anim.IosEaseInOut), label = "root") { onboarding ->
+    AnimatedContent(
+        targetState = showOnboarding,
+        transitionSpec = {
+            (fadeIn(tween(420, delayMillis = 60, easing = com.semo.keyboard.ui.anim.IosPush)) +
+                scaleIn(tween(460, easing = com.semo.keyboard.ui.anim.IosPush), initialScale = 0.95f)) togetherWith
+                (fadeOut(tween(200)) + scaleOut(tween(300, easing = com.semo.keyboard.ui.anim.IosPush), targetScale = 1.04f))
+        },
+        label = "root"
+    ) { onboarding ->
     if (onboarding) {
         OnboardingScreen(
             step = step,

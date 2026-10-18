@@ -118,7 +118,7 @@ class VoskVoice(
             }.getOrNull()
             var failed = audio == null || audio.state != AudioRecord.STATE_INITIALIZED
             if (!failed) {
-                failed = runCatching { audio!!.startRecording() }.isFailure
+                failed = runCatching { audio?.startRecording() }.isFailure
             }
             if (failed) {
                 runCatching { audio?.release() }
@@ -140,7 +140,7 @@ class VoskVoice(
             var crashed = false
             try {
                 while (!stopRequested && !cancelled) {
-                    val read = audio!!.read(buffer, 0, buffer.size)
+                    val read = audio?.read(buffer, 0, buffer.size) ?: -1
                     if (read < 0) {
                         crashed = true
                         break

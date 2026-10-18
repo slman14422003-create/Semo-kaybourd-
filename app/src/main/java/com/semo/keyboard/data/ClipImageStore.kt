@@ -30,7 +30,8 @@ class ClipImageStore(context: Context) {
         if (!app.isUserStorageUnlocked()) return null
         return runCatching {
             dir.mkdirs()
-            dir.listFiles()?.forEach { if (it.name.startsWith(TMP_PREFIX)) it.delete() }
+            val staleBefore = System.currentTimeMillis() - TMP_STALE_MS
+            dir.listFiles()?.forEach { if (it.name.startsWith(TMP_PREFIX) && it.lastModified() < staleBefore) it.delete() }
             val tmp = File(dir, TMP_PREFIX + System.nanoTime())
             val digest = MessageDigest.getInstance("SHA-1")
             var total = 0L
@@ -111,6 +112,11 @@ class ClipImageStore(context: Context) {
         mime.contains("jpeg", ignoreCase = true) || mime.contains("jpg", ignoreCase = true) -> "jpg"
         mime.contains("webp", ignoreCase = true) -> "webp"
         mime.contains("gif", ignoreCase = true) -> "gif"
+        mime.contains("bmp", ignoreCase = true) -> "bmp"
+        mime.contains("heic", ignoreCase = true) -> "heic"
+        mime.contains("heif", ignoreCase = true) -> "heif"
+        mime.contains("avif", ignoreCase = true) -> "avif"
+        mime.contains("svg", ignoreCase = true) -> "svg"
         else -> "img"
     }
 
@@ -118,7 +124,8 @@ class ClipImageStore(context: Context) {
         const val DIR_NAME = "clip_images"
         const val AUTHORITY_SUFFIX = ".clipfiles"
         private const val TMP_PREFIX = "tmp_"
-        private const val MAX_BYTES = 25L * 1024 * 1024
+        private const val MAX_BYTES = 64L * 1024 * 1024
+        private const val TMP_STALE_MS = 2L * 60L * 1000L
 
         private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
             override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount

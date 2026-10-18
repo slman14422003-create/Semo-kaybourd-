@@ -1,10 +1,14 @@
 package com.semo.keyboard.domain.logic
 
+import android.content.Context
+
 /**
  * Keyword search over emoji. The index merges the suggestion dictionary with extra keywords and the category
  * titles, matches whole words first, then word prefixes, then substrings (three letters or more).
  */
 object EmojiSearch {
+
+    private const val ARABIC_ASSET = "emoji/ar_keywords.txt"
 
     private val extra: List<Pair<String, String>> by lazy {
         buildList {
@@ -81,11 +85,54 @@ object EmojiSearch {
         }
     }
 
-    private val index: List<Pair<String, String>> by lazy {
-        (EmojiSuggestions.entries().map { it.key to it.value } + extra)
+    @Volatile
+    private var arabic: List<Pair<String, String>> = emptyList()
+
+    @Volatile
+    private var indexCache: List<Pair<String, String>>? = null
+
+    fun attach(context: Context) {
+        if (arabic.isNotEmpty()) return
+        val loaded = ArrayList<Pair<String, String>>(16384)
+        runCatching {
+            context.applicationContext.assets.open(ARABIC_ASSET).bufferedReader(Charsets.UTF_8).useLines { lines ->
+                for (line in lines) {
+                    val tab = line.indexOf('\t')
+                    if (tab <= 0) continue
+                    val emoji = line.substring(0, tab)
+                    for (w in line.substring(tab + 1).split(',')) {
+                        val word = w.trim()
+                        if (word.isNotEmpty()) loaded.add(word to emoji)
+                    }
+                }
+            }
+        }
+        if (loaded.isNotEmpty()) {
+            arabic = loaded
+            indexCache = null
+            entryCache = null
+        }
+        runCatching {
+            entries
+            nameEntries
+        }
+    }
+
+    private class Entry(val word: String, val emoji: String) {
+        val tokens: List<String> = word.split(' ')
+    }
+
+    @Volatile
+    private var entryCache: List<Entry>? = null
+
+    private val entries: List<Entry>
+        get() = entryCache ?: index.map { Entry(it.first, it.second) }.also { entryCache = it }
+
+    private val index: List<Pair<String, String>>
+        get() = indexCache ?: (EmojiSuggestions.entries().map { it.key to it.value } + extra + arabic)
             .map { normalize(it.first) to it.second }
             .distinct()
-    }
+            .also { indexCache = it }
 
     private fun normalize(raw: String): String {
         val sb = StringBuilder(raw.length)
@@ -100,6 +147,8 @@ object EmojiSearch {
         }
         return sb.toString()
     }
+
+    private val nameEntries: List<Entry> by lazy { nameIndex.map { Entry(it.first, it.second) } }
 
     private val nameIndex: List<Pair<String, String>> by lazy {
         val out = ArrayList<Pair<String, String>>()
@@ -131,15 +180,19 @@ object EmojiSearch {
         val q = normalize(raw)
         if (q.isEmpty()) return emptyList()
         val out = LinkedHashSet<String>()
-        for ((word, emoji) in index) if (word == q) out.add(emoji)
-        for ((word, emoji) in index) if (word.startsWith(q)) out.add(emoji)
-        for ((word, emoji) in index) {
-            if (word.split(' ').any { it.startsWith(q) }) out.add(emoji)
+        val all = entries
+        for (e in all) if (e.word == q) out.add(e.emoji)
+        if (out.size >= limit) return out.take(limit)
+        for (e in all) if (e.word.startsWith(q)) out.add(e.emoji)
+        if (out.size >= limit) return out.take(limit)
+        for (e in all) {
+            if (e.tokens.any { it.startsWith(q) }) out.add(e.emoji)
         }
-        if (q.length >= 3) for ((word, emoji) in index) if (word.contains(q)) out.add(emoji)
+        if (out.size >= limit) return out.take(limit)
+        if (q.length >= 3) for (e in all) if (e.word.contains(q)) out.add(e.emoji)
         if (out.size < limit) {
-            for ((name, emoji) in nameIndex) {
-                if (name.split(' ').any { it.startsWith(q) } || (q.length >= 3 && name.contains(q))) out.add(emoji)
+            for (e in nameEntries) {
+                if (e.tokens.any { it.startsWith(q) } || (q.length >= 3 && e.word.contains(q))) out.add(e.emoji)
                 if (out.size >= limit) break
             }
         }

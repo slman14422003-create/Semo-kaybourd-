@@ -197,11 +197,7 @@ class KeyboardViewModel(
 
     /** الكلمات المتعلَّمة بصيغة مفتاح البحث (للتدقيق الإملائي: الكلمة المتعلَّمة تُعدّ صحيحة) */
     private val learnedKeys: StateFlow<Set<String>> =
-        learnedWordsRepository.trustedWords
-            .map { list ->
-                val keys: Set<String> = list.mapTo(HashSet<String>()) { BigDictionary.key(it) }
-                keys
-            }
+        learnedWordsRepository.trustedKeys
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
@@ -1235,7 +1231,7 @@ class KeyboardViewModel(
             }
             val text = withContext(suggestDispatcher) { hostBridge.fieldText() }.trim()
             val key = "$target|$text"
-            if (key == translateKey && !transient.value.translate!!.error) return@launchSafe
+            if (key == translateKey && transient.value.translate?.error == false) return@launchSafe
             if (text.isEmpty()) {
                 translateKey = key
                 transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi()) } ?: st }
@@ -1300,6 +1296,19 @@ class KeyboardViewModel(
                 bridge.commitText(text)
                 refreshSuggestions()
             }
+        }
+    }
+
+    fun onClipCopy(stored: String) {
+        val state = uiState.value
+        bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, KeyFeedback.MODIFIER, state.soundVolume)
+        when {
+            stored.isClipImage() -> bridge.copyImageToClipboard(stored.clipImageName(), stored.clipImageMime())
+            stored.isClipLong() -> launchSafe {
+                val full = clipboardRepository.fullText(stored)?.takeIf { it.isNotEmpty() } ?: stored.clipLongPreview()
+                if (full.isNotEmpty()) bridge.copyToClipboard(full)
+            }
+            else -> bridge.copyToClipboard(stored)
         }
     }
 
@@ -1680,7 +1689,7 @@ class KeyboardViewModel(
         const val EDIT_READ_MS = 120L
         const val SUGGEST_READ_MS = 400L
         const val FRESH_CLIP_MS = 180_000L
-        const val CLIP_EDIT_MAX = ClipboardRepository.MAX_TEXT_LENGTH
+        const val CLIP_EDIT_MAX = 1_000_000
         const val VOICE_BIAS_MAX = 120
         const val DOUBLE_TAP_MS = 350L
         const val SUGGEST_EXTRA = 3

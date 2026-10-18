@@ -150,6 +150,28 @@ import androidx.compose.runtime.setValue
 
 internal fun tr(arabic: Boolean, ar: String, en: String): String = if (arabic) ar else en
 
+@Composable
+internal fun Modifier.iosEnter(key: Any, skip: Boolean): Modifier {
+    val animScale = LocalAnimScale.current
+    val holder = remember { arrayOf(key) }
+    val progress = remember(key) {
+        val changed = holder[0] != key
+        holder[0] = key
+        Animatable(if (changed && animScale > 0.001f) 0f else 1f)
+    }
+    LaunchedEffect(key) {
+        if (progress.value < 1f) progress.animateTo(1f, scaledTween(animScale, 360, easing = IosPush))
+    }
+    return if (skip) this else this.graphicsLayer {
+        val p = progress.value
+        alpha = 0.2f + 0.8f * p
+        translationY = (1f - p) * 22.dp.toPx()
+        val sc = 0.97f + 0.03f * p
+        scaleX = sc
+        scaleY = sc
+    }
+}
+
 /** إعدادات اللمس القابلة للضبط (مهلة الضغط المطوّل، سرعة الحذف، ضغطة المسافة المطوّلة) تصل لكل المفاتيح */
 internal data class TouchTuning(
     val holdMs: Long = HoldDelay.MEDIUM.millis,
@@ -289,6 +311,25 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         }
     }
 
+    val pageHolder = remember { arrayOf(state.page) }
+    val rowProgress = remember(state.page) {
+        val changed = pageHolder[0] != state.page
+        pageHolder[0] = state.page
+        Array(8) { Animatable(if (changed && animScale > 0.001f) 0f else 1f) }
+    }
+    LaunchedEffect(state.page) {
+        if (rowProgress.any { it.value < 1f }) {
+            coroutineScope {
+                rowProgress.forEachIndexed { i, a ->
+                    launch {
+                        delay((i * 22 * animScale).toLong())
+                        a.animateTo(1f, scaledTween(animScale, 340, easing = IosPush))
+                    }
+                }
+            }
+        }
+    }
+
     val tuning = remember(state.holdDelay, state.backspaceSpeed, state.spaceBarAction) {
         TouchTuning(state.holdDelay.millis, state.backspaceSpeed, state.spaceBarAction)
     }
@@ -315,9 +356,15 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                     .padding(horizontal = metrics.sidePadding)
             ) {
                 if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
-                    Crossfade(
+                    AnimatedContent(
                         targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else if (state.emojiSearch != null) 4 else 0,
-                        animationSpec = scaledTween(animScale, 170),
+                        transitionSpec = {
+                            (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) +
+                                androidx.compose.animation.slideInVertically(scaledTween(animScale, 300, easing = IosPush)) { it / 3 }) togetherWith
+                                (fadeOut(scaledTween(animScale, 100)) +
+                                    androidx.compose.animation.slideOutVertically(scaledTween(animScale, 220, easing = IosPush)) { -it / 3 }) using
+                                SizeTransform(clip = true) { _, _ -> snap() }
+                        },
                         label = "strip"
                     ) { mode ->
                         when (mode) {
@@ -332,7 +379,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
 
                 val shownPage = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
                     state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE) state.page else KeyboardPage.LETTERS
-                run {
+                Box(modifier = Modifier.fillMaxWidth().then(Modifier.iosEnter(shownPage, shownPage == KeyboardPage.LETTERS))) {
                 when (shownPage) {
                     KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
                     KeyboardPage.CLIPBOARD -> ClipboardPanel(
@@ -361,8 +408,16 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                                 viewModel.onSwipeWord(path)
                             }
                     ) {
+                        androidx.compose.runtime.key(state.page) {
                         Column {
                             rows.forEachIndexed { index, row ->
+                                Box(
+                                    modifier = Modifier.graphicsLayer {
+                                        val p = rowProgress[minOf(index, 7)].value
+                                        alpha = 0.25f + 0.75f * p
+                                        translationY = (1f - p) * 14.dp.toPx()
+                                    }
+                                ) {
                                 KeyRow(
                                     row = row,
                                     colors = colors,
@@ -378,7 +433,9 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                                         if (active) viewModel.onTrackpadStart()
                                     }
                                 )
+                                }
                             }
+                        }
                         }
                         SwipeTrail(trail, colors.keyAccent)
                     }
@@ -585,7 +642,7 @@ private fun TopStrip(
                 .weight(1f)
                 .fillMaxHeight(),
             transitionSpec = {
-                fadeIn(scaledTween(animScale, 180, delayMillis = 40)) togetherWith fadeOut(scaledTween(animScale, 90)) using
+                (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) + androidx.compose.animation.scaleIn(scaledSpring(animScale, 0.85f, 420f), initialScale = 0.92f)) togetherWith fadeOut(scaledTween(animScale, 90)) using
                     SizeTransform(clip = false) { _, _ -> snap() }
             },
             label = "stripContent"

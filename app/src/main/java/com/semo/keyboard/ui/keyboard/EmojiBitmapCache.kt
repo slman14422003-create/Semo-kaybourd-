@@ -21,7 +21,7 @@ import kotlinx.coroutines.ensureActive
 internal object EmojiBitmapCache {
 
     private const val GLYPH_DP = 28f
-    private const val CACHE_BYTES = 64 * 1024 * 1024
+    private val CACHE_BYTES = minOf(64L * 1024L * 1024L, Runtime.getRuntime().maxMemory() / 8L).toInt()
     private const val PREFETCH_MAX = 900
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }

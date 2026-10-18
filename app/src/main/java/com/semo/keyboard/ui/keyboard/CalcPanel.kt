@@ -400,8 +400,7 @@ private fun RowScope.CalcKeyView(
             CKind.DELETE -> {}
             else -> {
                 viewModel.onCalcTick()
-                val useSecond = calc.second && key.text2 != null
-                calc.input(if (useSecond) key.text2!! else key.text)
+                calc.input(key.text2?.takeIf { calc.second } ?: key.text)
                 if (calc.second) calc.second = false
             }
         }

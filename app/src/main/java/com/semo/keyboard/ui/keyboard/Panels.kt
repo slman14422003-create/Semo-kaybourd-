@@ -785,9 +785,13 @@ internal fun ClipboardPanel(
     var pinnedOnly by remember { mutableStateOf(false) }
     val hasPinned = remember(state.clipItems) { state.clipItems.any { it.pinned } }
     val hasUnpinned = remember(state.clipItems) { state.clipItems.any { !it.pinned } }
-    val shownItems = remember(state.clipItems, pinnedOnly, hasPinned) {
-        if (pinnedOnly && hasPinned) state.clipItems.filter { it.pinned }
+    var kindFilter by remember { mutableStateOf<ClipKind?>(null) }
+    val kindsPresent = remember(state.clipItems) { state.clipItems.map { ClipClassifier.kindOf(it.text) }.toSet() }
+    val activeKind = kindFilter?.takeIf { it in kindsPresent }
+    val shownItems = remember(state.clipItems, pinnedOnly, hasPinned, activeKind) {
+        val base = if (pinnedOnly && hasPinned) state.clipItems.filter { it.pinned }
         else state.clipItems.sortedByDescending { it.pinned }
+        if (activeKind == null) base else base.filter { ClipClassifier.kindOf(it.text) == activeKind }
     }
 
     var menuKey by remember { mutableStateOf<String?>(null) }
@@ -858,6 +862,22 @@ internal fun ClipboardPanel(
             }
         }
 
+        if (kindsPresent.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                ClipFilterChip(tr(arabic, "الكل", "All"), activeKind == null, colors) { kindFilter = null }
+                if (ClipKind.TEXT in kindsPresent) ClipFilterChip(tr(arabic, "نصوص", "Text"), activeKind == ClipKind.TEXT, colors) { kindFilter = ClipKind.TEXT }
+                if (ClipKind.LINK in kindsPresent) ClipFilterChip(tr(arabic, "روابط", "Links"), activeKind == ClipKind.LINK, colors) { kindFilter = ClipKind.LINK }
+                if (ClipKind.CODE in kindsPresent) ClipFilterChip(tr(arabic, "أكواد", "Code"), activeKind == ClipKind.CODE, colors) { kindFilter = ClipKind.CODE }
+                if (ClipKind.IMAGE in kindsPresent) ClipFilterChip(tr(arabic, "صور", "Images"), activeKind == ClipKind.IMAGE, colors) { kindFilter = ClipKind.IMAGE }
+            }
+        }
+
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -891,6 +911,21 @@ internal fun ClipboardPanel(
     if (menuItem != null) {
         ClipActionBubble(menuItem, arabic, colors, bottomInset, { menuKey = null }, viewModel)
     }
+    }
+}
+
+@Composable
+private fun ClipFilterChip(label: String, selected: Boolean, colors: SemoKeyboardColors, onClick: () -> Unit) {
+    PressBox(modifier = Modifier.height(32.dp), onClick = onClick) { _ ->
+        Box(
+            modifier = Modifier
+                .height(30.dp)
+                .background(if (selected) colors.keyAccent else colors.chip, RoundedCornerShape(50))
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = label, color = if (selected) Color.White else colors.text, fontSize = 14.sp, maxLines = 1)
+        }
     }
 }
 
@@ -1123,6 +1158,10 @@ private fun BoxScope.ClipActionBubble(
                 ClipBubbleRow(R.drawable.ic_clip_paste, tr(arabic, "لصق", "Paste"), colors.text, arabic, colors, true) {
                     onDismiss()
                     viewModel.onClipPaste(item.text)
+                }
+                ClipBubbleRow(R.drawable.ic_clip_paste, tr(arabic, "نسخ", "Copy"), colors.text, arabic, colors, true) {
+                    onDismiss()
+                    viewModel.onClipCopy(item.text)
                 }
                 if (kind != ClipKind.IMAGE) {
                     ClipBubbleRow(R.drawable.ic_clip_edit, tr(arabic, "تعديل", "Edit"), colors.text, arabic, colors, true) {
