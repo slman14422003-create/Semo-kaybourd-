@@ -26,8 +26,14 @@ class ClipImageStore(context: Context) {
         FileProvider.getUriForFile(app, app.packageName + AUTHORITY_SUFFIX, file(name))
 
     /** ينسخ الصورة من رابط الحافظة المؤقت. يرجع اسم الملف أو null لو فشل أو كانت كبيرة جدًا */
+    @Volatile
+    var lastTooLarge: Boolean = false
+        private set
+
     fun saveFromUri(uri: Uri, mime: String): String? {
+        lastTooLarge = false
         if (!app.isUserStorageUnlocked()) return null
+        val maxBytes = ClipLimits.fileBytes(app)
         return runCatching {
             dir.mkdirs()
             val staleBefore = System.currentTimeMillis() - TMP_STALE_MS
@@ -43,8 +49,9 @@ class ClipImageStore(context: Context) {
                         val n = stream.read(buffer)
                         if (n < 0) break
                         total += n
-                        if (total > MAX_BYTES) {
+                        if (total > maxBytes) {
                             tmp.delete()
+                            lastTooLarge = true
                             return null
                         }
                         digest.update(buffer, 0, n)
@@ -124,7 +131,6 @@ class ClipImageStore(context: Context) {
         const val DIR_NAME = "clip_images"
         const val AUTHORITY_SUFFIX = ".clipfiles"
         private const val TMP_PREFIX = "tmp_"
-        private const val MAX_BYTES = 64L * 1024 * 1024
         private const val TMP_STALE_MS = 2L * 60L * 1000L
 
         private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {

@@ -77,4 +77,17 @@
     <string name="auto_pairs_title">إغلاق الأقواس والاقتباسات تلقائيًا</string>
     <string name="auto_pairs_hint">عند كتابة ( [ { أو علامة اقتباس تُضاف علامة الإغلاق ويقف المؤشر بينهما. كتابة علامة الإغلاق تتخطاها، وزر الحذف مباشرة بعدها يحذف الاثنتين</string>
     <string name="shortcut_tokens_hint">يمكن استخدام {date} و{time} و{datetime} و{day} داخل نص الاختصار، وتُستبدل وقت استخدامه</string>
+    <string name="clip_file_copied">هذا الحقل لا يقبل الملفات مباشرة. نُسخ الملف للحافظة، الصقه في تطبيق يدعم الملفات</string>
+    <string name="clip_filter_files">ملفات</string>
+    <string name="clip_paste_cancel">إلغاء</string>
+    <string name="clip_notice_too_large">أكبر من أن يُحفظ (الحد %1$d ميغابايت). يمكنك رفع الحد من إعدادات الحافظة</string>
+    <string name="clip_notice_expired">تعذّرت قراءة ما نسخته. ربما أغلق التطبيق المصدر صلاحية الوصول، انسخه مرة ثانية</string>
+    <string name="clip_notice_storage_full">تعذّر الحفظ بسجل الحافظة، المساحة لا تكفي</string>
+    <string name="clip_limit_file_title">أكبر ملف أو صورة يُحفظ</string>
+    <string name="clip_limit_total_title">المساحة الكلية لسجل الحافظة</string>
+    <string name="clip_limits_hint">العناصر المثبّتة لا تُحذف تلقائيًا. عند تجاوز المساحة الكلية تُحذف أقدم الصور والملفات والنصوص الطويلة غير المثبّتة أولًا</string>
+    <string name="clip_battery_ok">النشاط بالخلفية: بدون قيود</string>
+    <string name="clip_battery_open_list">السماح بنشاط الخلفية بدون قيود</string>
+    <string name="clip_battery_open_app">فتح إعدادات بطارية التطبيق</string>
+    <string name="clip_battery_hint">بعض الهواتف، خصوصًا سامسونج، توقف اللوحة بالخلفية فتفوتها عمليات النسخ. اجعل استهلاك البطارية لهذا التطبيق «غير مقيّد»</string>
 </resources>

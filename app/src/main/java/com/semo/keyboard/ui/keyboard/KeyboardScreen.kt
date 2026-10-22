@@ -119,6 +119,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.semo.keyboard.R
+import com.semo.keyboard.data.ClipLimits
+import com.semo.keyboard.domain.model.ClipNotice
+import com.semo.keyboard.domain.model.isClipFile
+import com.semo.keyboard.domain.model.clipFileSize
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.BackspaceSpeed
 import com.semo.keyboard.domain.model.HoldDelay
@@ -936,11 +940,95 @@ private fun SuggestionCell(
 }
 
 @Composable
+internal fun clipNoticeText(rtl: Boolean, notice: ClipNotice): String {
+    val limit = ClipLimits.fileMb(LocalContext.current)
+    return when (notice) {
+        ClipNotice.TOO_LARGE -> keyboardString(rtl, R.string.clip_notice_too_large, limit)
+        ClipNotice.EXPIRED -> keyboardString(rtl, R.string.clip_notice_expired)
+        ClipNotice.STORAGE_FULL -> keyboardString(rtl, R.string.clip_notice_storage_full)
+    }
+}
+
+internal fun formatClipBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+    bytes >= 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+    bytes >= 1024L -> "${bytes / 1024} KB"
+    else -> "$bytes B"
+}
+
+@Composable
+internal fun PasteProgressStrip(
+    progress: Float,
+    colors: SemoKeyboardColors,
+    rtl: Boolean,
+    viewModel: KeyboardViewModel,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(4.dp)
+                .background(colors.divider, RoundedCornerShape(50))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                    .fillMaxHeight()
+                    .background(colors.keyAccent, RoundedCornerShape(50))
+            )
+        }
+        Text(
+            text = keyboardString(rtl, R.string.clip_paste_cancel),
+            color = colors.keyAccent,
+            fontSize = 14.sp,
+            maxLines = 1,
+            modifier = Modifier
+                .clickable { viewModel.cancelPaste() }
+                .padding(start = 10.dp, top = 4.dp, bottom = 4.dp, end = 4.dp)
+        )
+    }
+}
+
+@Composable
 private fun SuggestionSlots(
     state: KeyboardUiState,
     colors: SemoKeyboardColors,
     viewModel: KeyboardViewModel
 ) {
+    val progress = state.pasteProgress
+    if (progress != null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            PasteProgressStrip(progress, colors, state.language.rtl, viewModel)
+        }
+        return
+    }
+    val notice = state.clipNotice
+    if (notice != null && state.literal.isEmpty() && state.mathResult == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { viewModel.dismissClipNotice() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = clipNoticeText(state.language.rtl, notice),
+                color = colors.suggestion,
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                maxLines = 2,
+                textAlign = TextAlign.Center,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 10.dp)
+            )
+        }
+        return
+    }
     val math = state.mathResult
     if (math != null) {
         Box(
@@ -1040,6 +1128,7 @@ private fun SuggestionSlots(
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = if (latestClip.isClipImage()) keyboardString(state.language.rtl, R.string.suggest_clip_image)
+                    else if (latestClip.isClipFile()) latestClip.clipDisplayText() + "  \u00B7  " + formatClipBytes(latestClip.clipFileSize())
                     else latestClip.clipDisplayText().replace('\n', ' ').trim().let { t ->
                         if (latestClip.isClipLong()) {
                             val n = latestClip.clipLongLength()

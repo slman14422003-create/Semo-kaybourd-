@@ -115,3 +115,11 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - DictionaryManager.BASE_URLS lists mirrors; assets/dict/ar_extra.txt is merged after ar_core.
 - Not yet verified by a Gradle build.
 
+## Clipboard rewrite: files, big text, faster paste (v3.21.0, versionCode 56)
+- ClipboardRepository now sits on SQLite (data/ClipDb.kt, one row per item); public API and stored key formats unchanged; one-time migration from the old clipboard_items DataStore key. No Room on purpose (no new dependency or KSP).
+- New item kind: file (domain/model/KeyModels.kt clipFileKey and helpers, ClipKind.FILE, data/ClipFileStore.kt). Any non-image, non-text content URI is copied to filesDir/clip_files. Paste uses commitContent when the field accepts the mime, else copies a FileProvider URI to the clipboard and toasts (clip_file_copied).
+- Limits in data/ClipLimits.kt (SharedPreferences clip_limits): largest item (default 100 MB) and total budget (default 500 MB); trim() in the repository drops the oldest unpinned non-text items first, never the newest or pinned ones. UI in the Clipboard and privacy settings page.
+- Capture: clipListener reads primaryClip immediately on the main thread and passes it to captureClipboard(early); image mime also sniffed from magic bytes (ClipFileStore.sniffImageMime); text-like files read by extension (ClipFileStore.TEXT_EXTENSIONS). ClipNotice (TOO_LARGE, EXPIRED, STORAGE_FULL) is shown on the suggestion strip and in the clipboard panel via KeyboardViewModel.onClipFailed.
+- Long text: ClipTextStore writes gzip (.gz), reads both .gz and legacy .txt. InputBridge gained commitFile, copyFileToClipboard, copyLargeTextToClipboard (file URI above 150k chars) and cancelPaste. commitChunked adapts chunk size to the target app (45 ms goal) and reports progress through KeyboardViewModel.onPasteProgress (strip with cancel for texts of 40k chars or more).
+- Settings page also has battery rows (ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS and app details) because Samsung kills the IME process in the background.
+- Not yet verified by a Gradle build; check CI output first if something fails.

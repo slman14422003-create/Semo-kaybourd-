@@ -39,13 +39,17 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.semo.keyboard.data.ClipFileStore
 import com.semo.keyboard.data.ClipImageStore
+import com.semo.keyboard.data.ClipLimits
 import com.semo.keyboard.data.ClipboardRepository
 import com.semo.keyboard.data.DictionaryManager
 import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.ShortcutsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.EditAction
+import com.semo.keyboard.domain.model.ClipNotice
+import com.semo.keyboard.domain.model.clipFileKey
 import com.semo.keyboard.domain.model.clipImageKey
 import com.semo.keyboard.domain.model.EnterKind
 import com.semo.keyboard.domain.model.FieldKind
@@ -81,6 +85,11 @@ import kotlinx.coroutines.yield
 private const val COMMIT_CHUNK = 4_000
 private const val COMMIT_CHUNK_BIG = 24_000
 private const val COMMIT_BIG_THRESHOLD = 200_000
+private const val PASTE_TARGET_MS = 45L
+private const val PASTE_MIN_CHUNK = 2_000
+private const val PASTE_MAX_CHUNK = 64_000
+private const val PASTE_PROGRESS_MIN = 40_000
+private const val LARGE_COPY_CHARS = 150_000
 private const val SLOW_BACKOFF_MS = 600L
 private const val EXPLICIT_READ_MS = 250L
 private const val FIELD_READ_MS = 1500L
@@ -200,6 +209,8 @@ class SemoKeyboardService :
     @Volatile private var hasSelection = false
 
     private val imageStore by lazy { ClipImageStore(applicationContext) }
+    private val fileStore by lazy { ClipFileStore(applicationContext) }
+    @Volatile private var pasteCancelled = false
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
@@ -390,7 +401,10 @@ class SemoKeyboardService :
         }
     }
 
-    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard(force = true) }
+    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener {
+        val early = runCatching { (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip }.getOrNull()
+        captureClipboard(force = true, early = early)
+    }
 
     override fun onCreate() {
         savedStateController.performRestore(null)
@@ -424,7 +438,13 @@ class SemoKeyboardService :
         hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
     }
 
-    private class ClipSnap(val text: String?, val uri: android.net.Uri?, val imageMime: String?)
+    private class ClipSnap(
+        val text: String?,
+        val uri: android.net.Uri?,
+        val imageMime: String?,
+        val declaredMime: String? = null,
+        val asFile: Boolean = false
+    )
 
     private fun clipKey(text: String): String {
         var h = -3750763034362895579L
@@ -433,9 +453,9 @@ class SemoKeyboardService :
     }
 
     /** يقرأ الحافظة بخيط خلفي (النص الطويل قد يتأخر) ويرجع null لو فاضية أو حساسة */
-    private fun readClip(): ClipSnap? {
+    private fun readClip(early: ClipData? = null): ClipSnap? {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
-        val clip = cm.primaryClip ?: return null
+        val clip = early ?: cm.primaryClip ?: return null
         if (clip.itemCount == 0) return null
         if (Build.VERSION.SDK_INT >= 33) {
             val sensitive = clip.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true
@@ -483,7 +503,10 @@ class SemoKeyboardService :
             plain != null && !(plainTrim!!.startsWith("content:") || plainTrim.startsWith("file:")) -> plain
             else -> html ?: coerced ?: linkText ?: htmlImageUrl
         }
-        return ClipSnap(textOut, uri, mime)
+        val declared = (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }
+            .firstOrNull { !it.endsWith("/*") && it != ClipDescription.MIMETYPE_TEXT_URILIST }
+        val asFile = textOut == null && mime == null && uri != null && plainLooksLikeUri
+        return ClipSnap(textOut, uri, mime, declared, asFile)
     }
 
     /**
@@ -502,7 +525,7 @@ class SemoKeyboardService :
         return clipFailCount >= CLIP_MAX_FAILS
     }
 
-    private fun captureClipboard(force: Boolean = false) {
+    private fun captureClipboard(force: Boolean = false, early: ClipData? = null) {
         if (passwordField || !viewModel.uiState.value.clipboardEnabled) return
         if (!force && clipJob?.isActive == true) return
         clipJob = serviceScope.launch {
@@ -516,8 +539,9 @@ class SemoKeyboardService :
             val delays = if (force) CLIP_FORCE_DELAYS else CLIP_POLL_DELAYS
             for (attempt in delays.indices) {
                 if (delays[attempt] > 0L) delay(delays[attempt])
-                snap = withContext(Dispatchers.IO) { runCatching { readClip() }.getOrNull() }
-                if (snap != null && (snap.text != null || snap.imageMime != null)) break
+                val first = if (attempt == 0) early else null
+                snap = withContext(Dispatchers.IO) { runCatching { readClip(first) }.getOrNull() }
+                if (snap != null && (snap.text != null || snap.imageMime != null || snap.asFile)) break
             }
             val s = snap ?: return@launch
             fun markHandled() {
@@ -532,12 +556,63 @@ class SemoKeyboardService :
                 val name = withContext(Dispatchers.IO) { runCatching { imageStore.saveFromUri(s.uri, s.imageMime) }.getOrNull() }
                 val stored = if (name != null) clipboardRepository.add(clipImageKey(name, s.imageMime)) else null
                 if (stored == null) {
-                    if (noteClipFailure(id)) markHandled()
+                    if (name == null && imageStore.lastTooLarge) {
+                        lastCapturedClip = id
+                        markHandled()
+                        viewModel.onClipFailed(ClipNotice.TOO_LARGE)
+                    } else if (noteClipFailure(id)) {
+                        markHandled()
+                        viewModel.onClipFailed(ClipNotice.EXPIRED)
+                    }
                     return@launch
                 }
                 lastCapturedClip = id
                 markHandled()
                 viewModel.onClipboardCopied(stored)
+                return@launch
+            }
+            if (s.asFile && s.uri != null) {
+                val id = s.uri.toString()
+                if (!force && id == lastCapturedClip) {
+                    markHandled()
+                    return@launch
+                }
+                val limit = ClipLimits.fileBytes(applicationContext)
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { fileStore.saveFromUri(s.uri, s.declaredMime, limit) }.getOrDefault(ClipFileStore.Result.Failed)
+                }
+                when (result) {
+                    is ClipFileStore.Result.Saved -> {
+                        val stored = clipboardRepository.add(clipFileKey(result.name, result.mime, result.size, result.label))
+                        if (stored == null) {
+                            if (noteClipFailure(id)) {
+                                markHandled()
+                                viewModel.onClipFailed(ClipNotice.STORAGE_FULL)
+                            }
+                            return@launch
+                        }
+                        clipFailKey = null
+                        lastCapturedClip = id
+                        markHandled()
+                        viewModel.onClipboardCopied(stored)
+                    }
+                    is ClipFileStore.Result.TooLarge -> {
+                        lastCapturedClip = id
+                        markHandled()
+                        viewModel.onClipFailed(ClipNotice.TOO_LARGE)
+                    }
+                    is ClipFileStore.Result.NoSpace -> {
+                        lastCapturedClip = id
+                        markHandled()
+                        viewModel.onClipFailed(ClipNotice.STORAGE_FULL)
+                    }
+                    is ClipFileStore.Result.Failed -> {
+                        if (noteClipFailure(id)) {
+                            markHandled()
+                            viewModel.onClipFailed(ClipNotice.EXPIRED)
+                        }
+                    }
+                }
                 return@launch
             }
             val text = s.text
@@ -550,13 +625,22 @@ class SemoKeyboardService :
                 markHandled()
                 return@launch
             }
+            if (text.length > ClipboardRepository.MAX_TEXT_LENGTH) {
+                lastCapturedClip = key
+                markHandled()
+                viewModel.onClipFailed(ClipNotice.TOO_LARGE)
+                return@launch
+            }
             var stored = clipboardRepository.add(text)
             if (stored == null) {
                 delay(300)
                 stored = clipboardRepository.add(text)
             }
             if (stored == null) {
-                if (noteClipFailure(key)) markHandled()
+                if (noteClipFailure(key)) {
+                    markHandled()
+                    viewModel.onClipFailed(ClipNotice.STORAGE_FULL)
+                }
                 return@launch
             }
             clipFailKey = null
@@ -567,8 +651,11 @@ class SemoKeyboardService :
     }
 
     private fun readTextUri(uri: android.net.Uri): String? {
-        val type = runCatching { contentResolver.getType(uri) }.getOrNull() ?: return null
-        val textual = type.startsWith("text/") || type == "application/json" || type == "application/xml"
+        val type = runCatching { contentResolver.getType(uri) }.getOrNull().orEmpty()
+        val generic = type.isEmpty() || type == "application/octet-stream" || type.endsWith("/*")
+        val ext = if (generic) fileStore.displayNameOf(uri)?.substringAfterLast('.', "")?.lowercase().orEmpty() else ""
+        val textual = type.startsWith("text/") || type == "application/json" || type == "application/xml" ||
+            type == "application/javascript" || type == "application/x-sh" || (generic && ext in ClipFileStore.TEXT_EXTENSIONS)
         if (!textual || type == "text/uri-list") return null
         return runCatching {
             contentResolver.openInputStream(uri)?.use { stream ->
@@ -597,7 +684,7 @@ class SemoKeyboardService :
             val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
             contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
             bounds.outMimeType?.takeIf { it.startsWith("image/") && bounds.outWidth > 0 }
-        }.getOrNull()
+        }.getOrNull() ?: ClipFileStore.sniffImageMime(contentResolver, uri)
     }
 
     private var voiceInput: VoiceInput? = null
@@ -1141,6 +1228,54 @@ class SemoKeyboardService :
             return false
         }
 
+        override fun commitFile(fileName: String, mime: String, label: String): Boolean {
+            val uri = runCatching { fileStore.contentUri(fileName) }.getOrNull() ?: return false
+            val ic = currentInputConnection
+            val info = currentInputEditorInfo
+            if (ic != null && info != null) {
+                val supported = EditorInfoCompat.getContentMimeTypes(info)
+                if (supported.any { ClipDescription.compareMimeTypes(mime, it) }) {
+                    val content = InputContentInfoCompat(uri, ClipDescription(label, arrayOf(mime)), null)
+                    val ok = runCatching {
+                        InputConnectionCompat.commitContent(
+                            ic, info, content, InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null
+                        )
+                    }.getOrDefault(false)
+                    if (ok) return true
+                }
+            }
+            copyFileToClipboard(fileName, mime, label)
+            Toast.makeText(this@SemoKeyboardService, getString(com.semo.keyboard.R.string.clip_file_copied), Toast.LENGTH_LONG).show()
+            return false
+        }
+
+        override fun copyFileToClipboard(fileName: String, mime: String, label: String) {
+            runCatching {
+                val uri = fileStore.contentUri(fileName)
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                lastCapturedClip = uri.toString()
+                val description = ClipDescription(label, arrayOf(mime))
+                cm.setPrimaryClip(ClipData(description, ClipData.Item(uri)))
+            }
+        }
+
+        override fun copyLargeTextToClipboard(text: String) {
+            runCatching {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                lastCapturedClip = clipKey(text)
+                val uri = if (text.length > LARGE_COPY_CHARS) fileStore.shareTextFile(text) else null
+                if (uri != null) {
+                    cm.setPrimaryClip(ClipData(ClipDescription("text", arrayOf("text/plain")), ClipData.Item(uri)))
+                } else {
+                    cm.setPrimaryClip(ClipData.newPlainText("text", text))
+                }
+            }
+        }
+
+        override fun cancelPaste() {
+            pasteCancelled = true
+        }
+
         override fun copyToClipboard(text: String) {
             runCatching {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1174,20 +1309,30 @@ class SemoKeyboardService :
     private val pasteMutex = Mutex()
 
     private suspend fun commitChunked(ic: android.view.inputmethod.InputConnection, text: String) {
+        pasteCancelled = false
         var start = 0
         var failed = false
-        val chunkSize = if (text.length > COMMIT_BIG_THRESHOLD) COMMIT_CHUNK_BIG else COMMIT_CHUNK
+        var chunkSize = if (text.length > COMMIT_BIG_THRESHOLD) COMMIT_CHUNK_BIG else COMMIT_CHUNK
+        val showProgress = text.length >= PASTE_PROGRESS_MIN
         try {
             ic.beginBatchEdit()
             while (start < text.length) {
-                if (currentInputConnection !== ic) return
+                if (currentInputConnection !== ic || pasteCancelled) break
                 var end = minOf(start + chunkSize, text.length)
                 if (end < text.length && text[end - 1].isHighSurrogate()) end--
+                val began = SystemClock.uptimeMillis()
                 if (!ic.commitText(text.substring(start, end), 1)) {
                     failed = true
                     break
                 }
+                val took = SystemClock.uptimeMillis() - began
                 start = end
+                chunkSize = when {
+                    took < PASTE_TARGET_MS / 2 -> (chunkSize * 2).coerceAtMost(PASTE_MAX_CHUNK)
+                    took > PASTE_TARGET_MS * 2 -> (chunkSize / 2).coerceAtLeast(PASTE_MIN_CHUNK)
+                    else -> chunkSize
+                }
+                if (showProgress && ::viewModel.isInitialized) viewModel.onPasteProgress(start.toFloat() / text.length)
                 if (start < text.length) yield()
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -1196,6 +1341,7 @@ class SemoKeyboardService :
             failed = true
         } finally {
             runCatching { ic.endBatchEdit() }
+            if (showProgress && ::viewModel.isInitialized) viewModel.onPasteProgress(null)
         }
         if (failed && currentInputConnection === ic && start < text.length) pasteViaClipboard(ic, text.substring(start))
     }

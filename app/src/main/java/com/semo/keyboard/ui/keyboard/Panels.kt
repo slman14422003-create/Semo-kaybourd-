@@ -100,6 +100,7 @@ import com.semo.keyboard.domain.model.clipImageName
 import com.semo.keyboard.domain.logic.ClipClassifier
 import com.semo.keyboard.domain.logic.ClipKind
 import com.semo.keyboard.domain.model.clipDisplayText
+import com.semo.keyboard.domain.model.clipFileSize
 import com.semo.keyboard.domain.model.clipLongLength
 import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.EditAction
@@ -875,6 +876,25 @@ internal fun ClipboardPanel(
                 if (ClipKind.LINK in kindsPresent) ClipFilterChip(tr(arabic, "روابط", "Links"), activeKind == ClipKind.LINK, colors) { kindFilter = ClipKind.LINK }
                 if (ClipKind.CODE in kindsPresent) ClipFilterChip(tr(arabic, "أكواد", "Code"), activeKind == ClipKind.CODE, colors) { kindFilter = ClipKind.CODE }
                 if (ClipKind.IMAGE in kindsPresent) ClipFilterChip(tr(arabic, "صور", "Images"), activeKind == ClipKind.IMAGE, colors) { kindFilter = ClipKind.IMAGE }
+                if (ClipKind.FILE in kindsPresent) ClipFilterChip(clipPanelString(arabic, R.string.clip_filter_files), activeKind == ClipKind.FILE, colors) { kindFilter = ClipKind.FILE }
+            }
+        }
+
+        state.pasteProgress?.let { progress ->
+            PasteProgressStrip(progress, colors, arabic, viewModel)
+        }
+        state.clipNotice?.let { notice ->
+            val noticeText = clipNoticeText(arabic, notice)
+            PressBox(modifier = Modifier.fillMaxWidth(), onClick = { viewModel.dismissClipNotice() }) { _ ->
+                Text(
+                    text = noticeText,
+                    color = colors.textMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 4.dp)
+                )
             }
         }
 
@@ -952,6 +972,25 @@ private fun ClipBody(item: ClipItem, kind: ClipKind, colors: SemoKeyboardColors,
     val shown = remember(item.text) { item.text.clipDisplayText() }
     when (kind) {
         ClipKind.IMAGE -> ClipImageThumb(item.text.clipImageName(), colors)
+        ClipKind.FILE -> Column {
+            Text(
+                text = shown,
+                color = colors.text,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(textDirection = TextDirection.Content)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = formatClipBytes(item.text.clipFileSize()),
+                color = colors.textMuted,
+                fontSize = 11.sp,
+                maxLines = 1
+            )
+        }
         ClipKind.CODE -> Text(
             text = shown,
             color = colors.text,
@@ -1066,7 +1105,7 @@ private fun ClipCard(
                     .padding(horizontal = 5.dp, vertical = 1.dp)
             )
         }
-        if (kind == ClipKind.IMAGE) {
+        if (kind == ClipKind.IMAGE || kind == ClipKind.FILE) {
             PressBox(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -1163,14 +1202,14 @@ private fun BoxScope.ClipActionBubble(
                     onDismiss()
                     viewModel.onClipCopy(item.text)
                 }
-                if (kind != ClipKind.IMAGE) {
+                if (kind != ClipKind.IMAGE && kind != ClipKind.FILE) {
                     ClipBubbleRow(R.drawable.ic_clip_edit, tr(arabic, "تعديل", "Edit"), colors.text, arabic, colors, true) {
                         onDismiss()
                         viewModel.onClipEditStart(item.text)
                     }
                 }
                 val notesReady = remember { Semo.hasNotes(context) }
-                if (kind != ClipKind.IMAGE && notesReady) {
+                if (kind != ClipKind.IMAGE && kind != ClipKind.FILE && notesReady) {
                     ClipBubbleRow(R.drawable.ic_clip_edit, tr(arabic, "حفظ في الملاحظات", "Save to Notes"), colors.text, arabic, colors, true) {
                         onDismiss()
                         Semo.sendToNotes(context, item.text)
@@ -1498,5 +1537,15 @@ private fun RowScope.EditArrowKey(rotation: Float, colors: SemoKeyboardColors, o
                     .rotate(rotation)
             )
         }
+    }
+}
+
+@Composable
+private fun clipPanelString(rtl: Boolean, id: Int): String {
+    val base = LocalContext.current
+    return remember(rtl, id) {
+        val config = android.content.res.Configuration(base.resources.configuration)
+        config.setLocale(java.util.Locale(if (rtl) "ar" else "en"))
+        base.createConfigurationContext(config).getString(id)
     }
 }

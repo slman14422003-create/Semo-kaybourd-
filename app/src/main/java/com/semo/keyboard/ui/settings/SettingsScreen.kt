@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.semo.keyboard.R
+import com.semo.keyboard.data.ClipLimits
 import com.semo.keyboard.data.ClipboardRepository
 import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
@@ -1023,6 +1024,13 @@ private fun PrivacyPage(
     val mediaLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { mediaGranted = it }
+    var fileMb by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ClipLimits.fileMb(ctx)) }
+    var totalMb by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ClipLimits.totalMb(ctx)) }
+    var batteryTick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
+    val unrestricted = batteryTick >= 0 && runCatching {
+        (ctx.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)
+            ?.isIgnoringBatteryOptimizations(ctx.packageName) == true
+    }.getOrDefault(false)
     SubPage(L("الحافظة والخصوصية"), onBack) {
         Section(L("الحافظة")) {
             SwitchRow(L("حفظ سجل الحافظة"), R.drawable.ic_tool_clipboard, IconBlue, settings.clipboardEnabled) {
@@ -1031,6 +1039,56 @@ private fun PrivacyPage(
             Divider()
             ActionRow(if (mediaGranted) L("التقاط لقطات الشاشة تلقائيًا: مفعّل") else L("السماح بالتقاط لقطات الشاشة تلقائيًا")) {
                 if (!mediaGranted) mediaLauncher.launch(mediaPerm)
+            }
+            Divider()
+            Block(com.semo.keyboard.ui.appString(R.string.clip_limit_file_title), R.drawable.ic_tool_clipboard, IconBlue) {
+                Segmented(
+                    options = ClipLimits.FILE_CHOICES_MB.map { it to "$it MB" },
+                    selected = fileMb,
+                    onSelect = {
+                        fileMb = it
+                        ClipLimits.setFileMb(ctx, it)
+                    }
+                )
+            }
+            Divider()
+            Block(com.semo.keyboard.ui.appString(R.string.clip_limit_total_title), R.drawable.ic_tool_clipboard, IconGray) {
+                Segmented(
+                    options = ClipLimits.TOTAL_CHOICES_MB.map { it to (if (it >= 1000) "${it / 1000} GB" else "$it MB") },
+                    selected = totalMb,
+                    onSelect = {
+                        totalMb = it
+                        ClipLimits.setTotalMb(ctx, it)
+                    }
+                )
+            }
+            Hint(com.semo.keyboard.ui.appString(R.string.clip_limits_hint))
+            Divider()
+            ActionRow(
+                if (unrestricted) com.semo.keyboard.ui.appString(R.string.clip_battery_ok)
+                else com.semo.keyboard.ui.appString(R.string.clip_battery_open_list)
+            ) {
+                runCatching {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(intent)
+                }
+                batteryTick++
+            }
+            if (!unrestricted) {
+                Divider()
+                ActionRow(com.semo.keyboard.ui.appString(R.string.clip_battery_open_app)) {
+                    runCatching {
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            android.net.Uri.fromParts("package", ctx.packageName, null)
+                        )
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        ctx.startActivity(intent)
+                    }
+                    batteryTick++
+                }
+                Hint(com.semo.keyboard.ui.appString(R.string.clip_battery_hint))
             }
             Divider()
             ActionRow(L("مسح سجل الحافظة (مع المثبّت)"), DangerRed) { scope.launch { clipboardRepo.clearAll() } }

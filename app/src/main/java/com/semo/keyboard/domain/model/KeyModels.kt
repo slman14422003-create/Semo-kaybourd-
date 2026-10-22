@@ -219,7 +219,26 @@ fun String.clipLongPreview(): String = removePrefix(CLIP_LONG_PREFIX).substringA
 val ClipItem.isLongText: Boolean get() = text.isClipLong()
 
 /** النص الذي يُعرض للمستخدم: المعاينة للنص الطويل، والنص نفسه لغيره */
-fun String.clipDisplayText(): String = if (isClipLong()) clipLongPreview() else this
+const val CLIP_FILE_PREFIX = "\u0004file|"
+
+fun clipFileKey(fileName: String, mime: String, size: Long, label: String): String =
+    "$CLIP_FILE_PREFIX$fileName|${mime.replace('|', ' ')}|$size|${label.replace('|', ' ')}"
+
+fun String.isClipFile(): Boolean = startsWith(CLIP_FILE_PREFIX)
+private fun String.clipFileParts(): List<String> = removePrefix(CLIP_FILE_PREFIX).split('|', limit = 4)
+fun String.clipFileName(): String = clipFileParts().getOrElse(0) { "" }
+fun String.clipFileMime(): String = clipFileParts().getOrElse(1) { "application/octet-stream" }
+fun String.clipFileSize(): Long = clipFileParts().getOrElse(2) { "0" }.toLongOrNull() ?: 0L
+fun String.clipFileLabel(): String = clipFileParts().getOrElse(3) { "" }
+val ClipItem.isFile: Boolean get() = text.isClipFile()
+
+enum class ClipNotice { TOO_LARGE, EXPIRED, STORAGE_FULL }
+
+fun String.clipDisplayText(): String = when {
+    isClipLong() -> clipLongPreview()
+    isClipFile() -> clipFileLabel()
+    else -> this
+}
 
 /** ناتج عملية حسابية مكتوبة قبل المؤشر (مثل 60*30+20 → 1820) */
 @Immutable
@@ -351,6 +370,8 @@ data class KeyboardUiState(
     val mathResult: MathResult? = null,
     val toolbarOpen: Boolean = false,
     val clipItems: List<ClipItem> = emptyList(),
+    val clipNotice: ClipNotice? = null,
+    val pasteProgress: Float? = null,
     val clipEdit: ClipEdit? = null,
     /** توقّع الكلمة التالية (من أنماط كتابتك + قائمة مدمجة) */
     val nextWord: Boolean = true,

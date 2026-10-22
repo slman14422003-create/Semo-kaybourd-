@@ -26,6 +26,10 @@ interface InputBridge {
     fun hideKeyboard()
     /** يلصق صورة من سجل الحافظة (commitContent). يرجع false لو الحقل لا يقبل الصور (فتُنسخ للحافظة بدلها) */
     fun commitImage(fileName: String, mime: String): Boolean
+    fun commitFile(fileName: String, mime: String, label: String): Boolean
+    fun copyFileToClipboard(fileName: String, mime: String, label: String)
+    fun copyLargeTextToClipboard(text: String)
+    fun cancelPaste()
     fun copyToClipboard(text: String)
     fun copyImageToClipboard(fileName: String, mime: String)
     fun textBeforeCursor(length: Int): String

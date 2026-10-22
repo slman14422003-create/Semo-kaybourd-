@@ -2,10 +2,11 @@ package com.semo.keyboard.domain.logic
 
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.clipDisplayText
+import com.semo.keyboard.domain.model.isClipFile
 import com.semo.keyboard.domain.model.isClipImage
 
 /** نوع عنصر الحافظة للتصنيف والتصفية بلوحة الحافظة */
-enum class ClipKind { TEXT, LINK, CODE, IMAGE }
+enum class ClipKind { TEXT, LINK, CODE, IMAGE, FILE }
 
 /**
  * يصنّف عنصر الحافظة من نصه فقط (بلا قراءة ملفات): صورة، رابط، كود، أو نص عادي.
@@ -27,6 +28,7 @@ object ClipClassifier {
 
     fun kindOf(stored: String): ClipKind {
         if (stored.isClipImage()) return ClipKind.IMAGE
+        if (stored.isClipFile()) return ClipKind.FILE
         val t = stored.clipDisplayText().trim()
         if (t.isEmpty()) return ClipKind.TEXT
         // الحالة الشائعة: النص كله رابط واحد بلا شيء آخر

@@ -18,9 +18,14 @@ import com.semo.keyboard.domain.logic.MathEvaluator
 import com.semo.keyboard.domain.logic.SuggestionEngine
 import com.semo.keyboard.domain.logic.SwipeDecoder
 import com.semo.keyboard.domain.logic.WordLists
+import com.semo.keyboard.domain.model.ClipNotice
+import com.semo.keyboard.domain.model.clipFileLabel
+import com.semo.keyboard.domain.model.clipFileMime
+import com.semo.keyboard.domain.model.clipFileName
 import com.semo.keyboard.domain.model.clipImageMime
 import com.semo.keyboard.domain.model.clipImageName
 import com.semo.keyboard.domain.model.clipLongPreview
+import com.semo.keyboard.domain.model.isClipFile
 import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.NumKeyTarget
@@ -111,6 +116,9 @@ class KeyboardViewModel(
         override fun commitImage(fileName: String, mime: String): Boolean =
             if (editing()) false else hostBridge.commitImage(fileName, mime)
 
+        override fun commitFile(fileName: String, mime: String, label: String): Boolean =
+            if (editing()) false else hostBridge.commitFile(fileName, mime, label)
+
         override fun textBeforeCursor(length: Int): String =
             if (editing()) editText().takeLast(length) else hostBridge.textBeforeCursor(length)
 
@@ -176,6 +184,8 @@ class KeyboardViewModel(
         val swipeAlternates: List<String> = emptyList(),
         /** نص نُسخ للتو (شريحة اللصق السريع بشريط الاقتراحات) */
         val freshClip: String? = null,
+        val clipNotice: ClipNotice? = null,
+        val pasteProgress: Float? = null,
         val clipEdit: ClipEdit? = null,
         val translate: TranslateUi? = null,
         val voice: VoiceUi? = null,
@@ -348,6 +358,8 @@ class KeyboardViewModel(
                 keyboardScale = s.keyboardScale,
                 animationSpeed = s.animationSpeed,
                 freshClip = t.freshClip,
+                clipNotice = t.clipNotice,
+                pasteProgress = t.pasteProgress,
                 clipEdit = t.clipEdit,
                 translate = t.translate,
                 voice = t.voice,
@@ -1068,6 +1080,31 @@ class KeyboardViewModel(
         }
     }
 
+    private var clipNoticeJob: Job? = null
+
+    fun onClipFailed(notice: ClipNotice) {
+        transient.update { it.copy(clipNotice = notice) }
+        clipNoticeJob?.cancel()
+        clipNoticeJob = launchSafe {
+            delay(CLIP_NOTICE_MS)
+            transient.update { it.copy(clipNotice = null) }
+        }
+    }
+
+    fun dismissClipNotice() {
+        clipNoticeJob?.cancel()
+        if (transient.value.clipNotice != null) transient.update { it.copy(clipNotice = null) }
+    }
+
+    fun onPasteProgress(progress: Float?) {
+        val current = transient.value.pasteProgress
+        if (progress == null || current == null || kotlin.math.abs(progress - current) >= 0.02f) {
+            transient.update { it.copy(pasteProgress = progress) }
+        }
+    }
+
+    fun cancelPaste() = bridge.cancelPaste()
+
     fun onFreshClipPaste() {
         val stored = transient.value.freshClip ?: return
         val state = uiState.value
@@ -1285,12 +1322,12 @@ class KeyboardViewModel(
     fun onClipPaste(text: String) {
         when {
             text.isClipImage() -> bridge.commitImage(text.clipImageName(), text.clipImageMime())
+            text.isClipFile() -> bridge.commitFile(text.clipFileName(), text.clipFileMime(), text.clipFileLabel())
             text.isClipLong() -> launchSafe {
-                // النص الطويل (كود مثلًا) محفوظ بملف: نقرأه بخيط خلفي ثم نلصقه كاملًا
                 val full = clipboardRepository.fullText(text)?.takeIf { it.isNotEmpty() } ?: text.clipLongPreview()
                 if (full.isNotEmpty()) {
                     bridge.commitText(full)
-                    refreshSuggestions()
+                    if (full.length <= LONG_PASTE_NO_SUGGEST) refreshSuggestions()
                 }
             }
             else -> {
@@ -1305,9 +1342,10 @@ class KeyboardViewModel(
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, KeyFeedback.MODIFIER, state.soundVolume)
         when {
             stored.isClipImage() -> bridge.copyImageToClipboard(stored.clipImageName(), stored.clipImageMime())
+            stored.isClipFile() -> bridge.copyFileToClipboard(stored.clipFileName(), stored.clipFileMime(), stored.clipFileLabel())
             stored.isClipLong() -> launchSafe {
                 val full = clipboardRepository.fullText(stored)?.takeIf { it.isNotEmpty() } ?: stored.clipLongPreview()
-                if (full.isNotEmpty()) bridge.copyToClipboard(full)
+                if (full.isNotEmpty()) bridge.copyLargeTextToClipboard(full)
             }
             else -> bridge.copyToClipboard(stored)
         }
@@ -1323,7 +1361,7 @@ class KeyboardViewModel(
 
     /** بدء تعديل عنصر: يُحمَّل نصه الكامل ويُكتب تعديله بلوحة المفاتيح نفسها ثم يُحفظ بالضغط على ✓ */
     fun onClipEditStart(stored: String) {
-        if (stored.isClipImage()) return
+        if (stored.isClipImage() || stored.isClipFile()) return
         launchSafe {
             val full = clipboardRepository.fullText(stored) ?: return@launchSafe
             transient.update {
@@ -1690,6 +1728,8 @@ class KeyboardViewModel(
         const val EDIT_READ_MS = 120L
         const val SUGGEST_READ_MS = 400L
         const val FRESH_CLIP_MS = 180_000L
+        const val CLIP_NOTICE_MS = 7_000L
+        const val LONG_PASTE_NO_SUGGEST = 4_000
         const val CLIP_EDIT_MAX = 1_000_000
         const val VOICE_BIAS_MAX = 120
         const val DOUBLE_TAP_MS = 350L

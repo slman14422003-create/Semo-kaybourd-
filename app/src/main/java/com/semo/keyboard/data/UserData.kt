@@ -7,17 +7,25 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.semo.keyboard.domain.logic.BigDictionary
 import com.semo.keyboard.domain.model.ClipItem
 import com.semo.keyboard.domain.model.TextShortcut
+import com.semo.keyboard.domain.model.clipFileName
 import com.semo.keyboard.domain.model.clipImageName
 import com.semo.keyboard.domain.model.clipLongKey
 import com.semo.keyboard.domain.model.clipLongName
+import com.semo.keyboard.domain.model.isClipFile
 import com.semo.keyboard.domain.model.isClipImage
 import com.semo.keyboard.domain.model.isClipLong
 import com.semo.keyboard.domain.model.isImage
 import com.semo.keyboard.domain.model.isLongText
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -117,33 +125,59 @@ class ClipboardRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val store = appContext.semoDataStore
-    private val key = stringPreferencesKey("clipboard_items")
+    private val legacyKey = stringPreferencesKey("clipboard_items")
+    private val db by lazy { ClipDb(appContext) }
     private val images = ClipImageStore(appContext)
     private val texts = ClipTextStore(appContext)
+    private val files = ClipFileStore(appContext)
 
-    /**
-     * قبل فك قفل الجهاز بعد التشغيل (Direct Boot) تكون القائمة فارغة ولا نكتب شيئًا.
-     * نقارن النص الخام أولًا: مخزن التفضيلات يُصدر عند أي تغيير (حتى لو الكلمات المتعلَّمة)،
-     * وفك السجل كله بكل مرة كان يبطّئ الكتابة.
-     */
-    val items: Flow<List<ClipItem>> = appContext.credentialPrefsFlow()
-        .map { p -> p[key] }
-        .distinctUntilChanged()
-        .map { raw -> decode(raw) }
+    val items: Flow<List<ClipItem>> = flow {
+        if (!appContext.isUserStorageUnlocked()) {
+            emit(emptyList())
+            while (!appContext.isUserStorageUnlocked()) delay(1500)
+        }
+        migrateLegacy()
+        emitAll(
+            changes.map {
+                withContext(Dispatchers.IO) { runCatching { db.all(LIST_LIMIT) }.getOrDefault(emptyList()) }
+            }
+        )
+    }.distinctUntilChanged()
 
-    /**
-     * يضيف نصًا (أو مفتاح صورة) للسجل ويرجع المفتاح المخزَّن بالسجل (للصق السريع)، أو null لو رُفض.
-     * النص الطويل يُحفظ كاملًا بملف ويُخزَّن بالسجل مفتاح بمعاينة أوله. المسافات البادئة تبقى كما هي (الأكواد).
-     */
+    private suspend fun migrateLegacy() {
+        if (migrated.get()) return
+        val raw = runCatching { store.data.first()[legacyKey] }.getOrNull()
+        if (!raw.isNullOrEmpty()) {
+            withContext(Dispatchers.IO) {
+                val legacy = raw.split(SEP).filter { it.length > 1 }.map { ClipItem(it.substring(1), it[0] == '1') }
+                var ts = System.currentTimeMillis() - legacy.size
+                legacy.asReversed().forEach { item ->
+                    val (kind, bytes) = describe(item.text)
+                    runCatching { db.upsert(item.text, kind, bytes, item.pinned, ts) }
+                    ts++
+                }
+            }
+            runCatching { store.edit { it.remove(legacyKey) } }
+        }
+        migrated.set(true)
+    }
+
+    private fun describe(key: String): Pair<Int, Long> = when {
+        key.isClipImage() -> KIND_IMAGE to images.file(key.clipImageName()).length()
+        key.isClipLong() -> KIND_LONG to texts.sizeOf(key.clipLongName())
+        key.isClipFile() -> KIND_FILE to files.sizeOf(key.clipFileName())
+        else -> KIND_TEXT to key.length * 2L
+    }
+
     private suspend fun prepare(text: String): String? {
         if (!appContext.isUserStorageUnlocked()) return null
         val body = withContext(Dispatchers.Default) {
             val raw = sanitize(text).replace("\r\n", "\n").replace('\r', '\n').replace(SEP, " ")
-            if (raw.isClipImage()) raw else raw.trimEnd().trimStart('\n', '\r')
+            if (raw.isClipImage() || raw.isClipFile()) raw else raw.trimEnd().trimStart('\n', '\r')
         }
         if (body.isBlank()) return null
         return when {
-            body.isClipImage() -> body
+            body.isClipImage() || body.isClipFile() -> body
             body.length > INLINE_MAX -> {
                 if (body.length > MAX_TEXT_LENGTH) return null
                 val name = withContext(Dispatchers.IO) { texts.save(body) ?: texts.save(body) } ?: return null
@@ -155,44 +189,36 @@ class ClipboardRepository(context: Context) {
 
     suspend fun add(text: String): String? {
         val stored = prepare(text) ?: return null
-        store.edit { p ->
-            val list = decode(p[key]).toMutableList()
-            val index = list.indexOfFirst { it.text == stored }
-            if (index == 0) return@edit
-            val pinned = index >= 0 && list[index].pinned
-            if (index >= 0) list.removeAt(index)
-            list.add(0, ClipItem(stored, pinned))
-            val kept = limit(list)
-            // الصور والنصوص الطويلة المحذوفة بحدّ العدد تُمسح ملفاتها أيضًا
-            list.filter { it !in kept }.forEach { deleteBacking(it.text) }
-            p[key] = encode(kept)
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                if (db.newestKey() == stored) return@runCatching stored
+                val (kind, bytes) = describe(stored)
+                db.upsert(stored, kind, bytes)
+                trim()
+                changes.update { it + 1 }
+                stored
+            }.getOrNull()
         }
-        return stored
     }
 
-    /** يستبدل عنصرًا بنص معدَّل في موضعه نفسه مع الإبقاء على التثبيت */
     suspend fun replace(oldStored: String, newText: String): Boolean {
         val stored = prepare(newText) ?: return false
-        store.edit { p ->
-            val list = decode(p[key]).toMutableList()
-            val index = list.indexOfFirst { it.text == oldStored }
-            var pinned = index >= 0 && list[index].pinned
-            if (index >= 0) list.removeAt(index)
-            val dup = list.indexOfFirst { it.text == stored }
-            if (dup >= 0) {
-                pinned = pinned || list[dup].pinned
-                list.removeAt(dup)
-            }
-            list.add(if (index in 0..list.size) index else 0, ClipItem(stored, pinned))
-            val kept = limit(list)
-            list.filter { it !in kept }.forEach { deleteBacking(it.text) }
-            p[key] = encode(kept)
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                val ts = db.tsOf(oldStored) ?: System.currentTimeMillis()
+                val pinned = db.isPinned(oldStored) || db.isPinned(stored)
+                if (oldStored != stored) db.delete(oldStored)
+                val (kind, bytes) = describe(stored)
+                db.upsert(stored, kind, bytes, pinned, ts)
+                trim()
+                changes.update { it + 1 }
+                true
+            }.getOrDefault(false)
         }
-        if (oldStored != stored) deleteBacking(oldStored)
-        return true
+        if (ok && oldStored != stored) deleteBacking(oldStored)
+        return ok
     }
 
-    /** يحذف ما يكسر التخزين: أحرف surrogate منفردة، NUL، وBOM */
     private fun sanitize(s: String): String {
         val sb = StringBuilder(s.length)
         var i = 0
@@ -212,103 +238,140 @@ class ClipboardRepository(context: Context) {
         return sb.toString()
     }
 
-    /** النص الكامل لعنصر الحافظة: يقرأ ملف النص الطويل، ويرجع النص نفسه لغيره (null لو الملف مفقود) */
     suspend fun fullText(stored: String): String? =
         if (stored.isClipLong()) withContext(Dispatchers.IO) { texts.read(stored.clipLongName()) } else stored
 
     suspend fun togglePin(text: String) {
         if (!appContext.isUserStorageUnlocked()) return
-        store.edit { p ->
-            val current = decode(p[key])
-            if (current.none { it.text == text }) return@edit
-            val list = current.map { if (it.text == text) it.copy(pinned = !it.pinned) else it }
-            p[key] = encode(list)
+        withContext(Dispatchers.IO) {
+            runCatching {
+                if (!db.exists(text)) return@runCatching
+                db.setPinned(text, !db.isPinned(text))
+                changes.update { it + 1 }
+            }
         }
     }
 
     suspend fun remove(text: String) {
         if (!appContext.isUserStorageUnlocked()) return
-        deleteBacking(text)
-        store.edit { p -> p[key] = encode(decode(p[key]).filterNot { it.text == text }) }
+        withContext(Dispatchers.IO) {
+            runCatching {
+                db.delete(text)
+                deleteBacking(text)
+                changes.update { it + 1 }
+            }
+        }
     }
 
-    /** يمسح كل العناصر غير المثبّتة */
     suspend fun clearUnpinned() {
         if (!appContext.isUserStorageUnlocked()) return
-        store.edit { p ->
-            val all = decode(p[key])
-            all.filter { !it.pinned }.forEach { deleteBacking(it.text) }
-            p[key] = encode(all.filter { it.pinned })
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val drop = db.rows().filter { !it.pinned }
+                db.deleteKeys(drop.map { it.key })
+                drop.forEach { deleteBacking(it.key) }
+                changes.update { it + 1 }
+            }
         }
     }
 
     suspend fun pruneOrphans() {
         if (!appContext.isUserStorageUnlocked()) return
-        val list = items.first()
-        if (list.isEmpty()) return
-        val textNames = list.filter { it.text.isClipLong() }.map { it.text.clipLongName() }.toSet()
-        val imageNames = list.filter { it.text.isClipImage() }.map { it.text.clipImageName() }.toSet()
         withContext(Dispatchers.IO) {
-            texts.retain(textNames, ORPHAN_MIN_AGE_MS)
-            images.retain(imageNames, ORPHAN_MIN_AGE_MS)
+            runCatching {
+                val keys = db.rows().map { it.key }
+                if (keys.isEmpty()) return@runCatching
+                texts.retain(keys.filter { it.isClipLong() }.map { it.clipLongName() }.toSet(), ORPHAN_MIN_AGE_MS)
+                images.retain(keys.filter { it.isClipImage() }.map { it.clipImageName() }.toSet(), ORPHAN_MIN_AGE_MS)
+                files.retain(keys.filter { it.isClipFile() }.map { it.clipFileName() }.toSet(), ORPHAN_MIN_AGE_MS)
+            }
         }
     }
 
     suspend fun clearAll() {
         if (!appContext.isUserStorageUnlocked()) return
-        images.deleteAll()
-        texts.deleteAll()
-        store.edit { p -> p.remove(key) }
+        withContext(Dispatchers.IO) {
+            runCatching {
+                images.deleteAll()
+                texts.deleteAll()
+                files.deleteAll()
+                db.clear()
+                changes.update { it + 1 }
+            }
+        }
     }
 
-    /** يمسح الملف المرتبط بالعنصر (صورة أو نص طويل)، ولا يفعل شيئًا للنص القصير */
+    suspend fun usedBytes(): Long = withContext(Dispatchers.IO) {
+        runCatching { db.rows().filter { it.kind != KIND_TEXT }.sumOf { it.bytes } }.getOrDefault(0L)
+    }
+
+    private fun trim() {
+        val rows = db.rows()
+        var unpinned = 0
+        var unpinnedLong = 0
+        var unpinnedImages = 0
+        var unpinnedFiles = 0
+        val drop = ArrayList<ClipDb.Row>()
+        val kept = ArrayList<ClipDb.Row>()
+        for (r in rows) {
+            if (r.pinned) {
+                kept.add(r)
+                continue
+            }
+            val ok = when (r.kind) {
+                KIND_IMAGE -> ++unpinnedImages <= MAX_UNPINNED_IMAGES
+                KIND_LONG -> ++unpinnedLong <= MAX_UNPINNED_LONG
+                KIND_FILE -> ++unpinnedFiles <= MAX_UNPINNED_FILES
+                else -> ++unpinned <= MAX_UNPINNED
+            }
+            if (ok) kept.add(r) else drop.add(r)
+        }
+        val budget = ClipLimits.totalBytes(appContext)
+        var total = kept.filter { it.kind != KIND_TEXT }.sumOf { it.bytes }
+        if (total > budget) {
+            val newest = kept.firstOrNull()?.key
+            for (r in kept.asReversed()) {
+                if (total <= budget) break
+                if (r.pinned || r.kind == KIND_TEXT || r.key == newest) continue
+                drop.add(r)
+                total -= r.bytes
+            }
+        }
+        if (drop.isEmpty()) return
+        db.deleteKeys(drop.map { it.key })
+        drop.forEach { deleteBacking(it.key) }
+    }
+
     private fun deleteBacking(text: String) {
         when {
             text.isClipImage() -> images.delete(text.clipImageName())
             text.isClipLong() -> texts.delete(text.clipLongName())
+            text.isClipFile() -> files.delete(text.clipFileName())
         }
     }
 
     private fun previewOf(text: String): String {
         val cut = text.take(PREVIEW_LENGTH)
-        // لا نقطع زوج surrogate (إيموجي) من المنتصف
         return if (cut.isNotEmpty() && cut.last().isHighSurrogate()) cut.dropLast(1) else cut
     }
 
-    private fun limit(list: List<ClipItem>): List<ClipItem> {
-        var unpinned = 0
-        var unpinnedImages = 0
-        var unpinnedLong = 0
-        return list.filter { item ->
-            when {
-                item.pinned -> true
-                item.isImage -> { unpinnedImages++; unpinnedImages <= MAX_UNPINNED_IMAGES }
-                item.isLongText -> { unpinnedLong++; unpinnedLong <= MAX_UNPINNED_LONG }
-                else -> { unpinned++; unpinned <= MAX_UNPINNED }
-            }
-        }
-    }
-
-    private fun encode(list: List<ClipItem>): String =
-        list.joinToString(SEP) { (if (it.pinned) "1" else "0") + it.text }
-
-    private fun decode(raw: String?): List<ClipItem> {
-        if (raw.isNullOrEmpty()) return emptyList()
-        return raw.split(SEP)
-            .filter { it.length > 1 }
-            .map { ClipItem(text = it.substring(1), pinned = it[0] == '1') }
-    }
-
     companion object {
-        /** أطول من هذا يُحفظ بملف مستقل (الأكواد الطويلة والمقالات) */
         private const val INLINE_MAX = 1500
-        /** أقصى طول نص يُحفظ (مليون حرف)؛ الأطول يُتجاهل بدل أن يُلصق مقطوعًا */
         const val MAX_TEXT_LENGTH = 10_000_000
         private const val PREVIEW_LENGTH = 400
         private const val MAX_UNPINNED = 100
         private const val MAX_UNPINNED_LONG = 30
         private const val MAX_UNPINNED_IMAGES = 25
+        private const val MAX_UNPINNED_FILES = 25
+        private const val LIST_LIMIT = 400
         private const val ORPHAN_MIN_AGE_MS = 10L * 60L * 1000L
+        private const val KIND_TEXT = 0
+        private const val KIND_IMAGE = 1
+        private const val KIND_LONG = 2
+        private const val KIND_FILE = 3
+
+        private val changes = MutableStateFlow(0L)
+        private val migrated = AtomicBoolean(false)
     }
 }
 

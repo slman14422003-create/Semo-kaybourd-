@@ -77,4 +77,17 @@
     <string name="auto_pairs_title">Auto-close brackets and quotes</string>
     <string name="auto_pairs_hint">Typing ( [ { or a quote adds its closing mark and puts the cursor between them. Typing the closing mark steps over it, and Backspace right after removes both</string>
     <string name="shortcut_tokens_hint">Expansions can use {date}, {time}, {datetime} and {day}, filled in when the shortcut is used</string>
+    <string name="clip_file_copied">This field does not accept files directly. The file was copied to the clipboard, so paste it into an app that supports files</string>
+    <string name="clip_filter_files">Files</string>
+    <string name="clip_paste_cancel">Cancel</string>
+    <string name="clip_notice_too_large">Too large to save (limit %1$d MB). You can raise the limit in Clipboard settings</string>
+    <string name="clip_notice_expired">Could not read what you copied. The source app may have closed its access, so copy it again</string>
+    <string name="clip_notice_storage_full">Could not save to the clipboard history, not enough storage</string>
+    <string name="clip_limit_file_title">Largest file or image to save</string>
+    <string name="clip_limit_total_title">Total storage for the clipboard history</string>
+    <string name="clip_limits_hint">Pinned items are never removed automatically. When the total is exceeded, the oldest unpinned images, files and long texts are deleted first</string>
+    <string name="clip_battery_ok">Background activity: unrestricted</string>
+    <string name="clip_battery_open_list">Allow unrestricted background activity</string>
+    <string name="clip_battery_open_app">Open the app battery settings</string>
+    <string name="clip_battery_hint">Some phones, especially Samsung, stop the keyboard in the background and then copies are missed. Set battery usage for this app to Unrestricted</string>
 </resources>
