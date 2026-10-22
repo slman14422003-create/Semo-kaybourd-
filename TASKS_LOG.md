@@ -249,3 +249,14 @@
 - App root (onboarding to settings) uses scale with fade, matching the iOS dissolve-zoom.
 - All animations still follow the animation speed setting; speed 0 keeps them instant.
 - Not built with Gradle here; check CI output first.
+
+## 3.20.0 (versionCode 55) — لم يُبنَ هنا، راجع CI
+- صوت النقر: ملفات WAV جديدة أطول وأنعم (16–30ms بدل 4–19ms) مع تلاشٍ بنهاية العينة، وصوت مستقل للمسافة (key_press_space)، وتنويع نغمة الحروف ±3% داخل KeyClickPlayer.
+- KeyFeedback.SPACE: المسافة لها صوت واهتزاز خاصان (يطابق اهتزاز المفاتيح الوظيفية).
+- التصحيح الإنجليزي: جدول أوسع (أخطاء شائعة واختصارات مثل thx/pls) + إصلاح Caps Lock العرضي (hELLO → Hello) بشرط أن تكون الكلمة صالحة بالقاموس.
+- اختبارات: أُضيف app/src/test/.../AutoCorrectTest.kt وتبعية junit.
+- التصحيح العربي: +227 زوجًا بجدول ar_fix.txt (لاكن/هاذا/ذالك، ظ↔ض، سؤال/مسؤول/شيء، تنوين خاطئ «شكرأ»، التصاق «لايوجد»/«صباحالخير»/«اللهيحفظك»، أشهر وأيام) و+10 عبارات بـ ar_rules.txt. رُفض أي مفتاح هو كلمة صحيحة بقاموس ar_core/ar_extra.
+- tools/build_ar_fix.py: يولّد مرشّحي تصحيحات من قوائم تردّدات تنزّلها (FrequencyWords وغيرها) مع فلتر أمان؛ الناتج يُراجع يدويًا ثم يُلصق بـ ar_fix.txt.
+- GitHub Action جديد (.github/workflows/update-ar-fix.yml): شهريًا أو يدويًا ينزّل قائمة تردّدات، يشغّل tools/build_ar_fix.py ثم tools/check_ar_fix.py، ويفتح PR يحدّث assets/dict/ar_fix_auto.txt للمراجعة. لا دمج تلقائي. يتطلب تفعيل «Allow GitHub Actions to create and approve pull requests» بإعدادات الريبو.
+- AutoCorrect يحمّل ar_fix_auto.txt (المولَّد) ثم ar_fix.txt (اليدوي) فوقه، فيتغلّب اليدوي.
+- ar_extra.txt: +76 كلمة لهجية (بدكم، قديش، شفيك، هالحين، معليش...) حتى لا تُعامَل كأخطاء ولا تُستبدل.

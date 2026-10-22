@@ -220,6 +220,7 @@ class SemoKeyboardService :
         val legacy = mapOf(
             KeyFeedback.STANDARD to shot(8, 70),
             KeyFeedback.MODIFIER to shot(9, 90),
+            KeyFeedback.SPACE to shot(9, 90),
             KeyFeedback.SELECTION to shot(6, 50),
             KeyFeedback.DELETE to shot(10, 120),
             KeyFeedback.LONG_PRESS to shot(16, 180)
@@ -240,6 +241,7 @@ class SemoKeyboardService :
         return mapOf(
             KeyFeedback.STANDARD to tick,
             KeyFeedback.MODIFIER to tick,
+            KeyFeedback.SPACE to tick,
             KeyFeedback.SELECTION to tick,
             KeyFeedback.DELETE to click,
             KeyFeedback.LONG_PRESS to heavy
@@ -259,6 +261,7 @@ class SemoKeyboardService :
         return mapOf(
             KeyFeedback.STANDARD to one(tick, 0.8f),
             KeyFeedback.MODIFIER to one(low, 0.9f),
+            KeyFeedback.SPACE to one(low, 0.9f),
             KeyFeedback.SELECTION to one(tick, 0.45f),
             KeyFeedback.DELETE to one(click, 0.55f),
             KeyFeedback.LONG_PRESS to one(click, 1f)

@@ -8,7 +8,7 @@ import com.semo.keyboard.ui.keyboard.KeyFeedback
 
 /**
  * يشغّل أصوات الضغط من ملفات صوتية حقيقية (res/raw) بدل الصوت المولَّد برمجيًا:
- * key_press_click (الحروف العادية)، key_press_delete (الحذف)، key_press_modifier
+ * key_press_click (الحروف العادية)، key_press_delete (الحذف)، key_press_space (المسافة)، key_press_modifier
  * (Shift/مسافة/Return وبقية المفاتيح الوظيفية). نستخدم SoundPool لأن زمن استجابته منخفض
  * جدًا ومناسب لصوت لمسة فورية، وهو يدعم تحميل عدة أصوات قصيرة دفعة واحدة بذاكرة قليلة.
  */
@@ -26,6 +26,7 @@ class KeyClickPlayer(context: Context) {
         )
         .build()
 
+    private val rng = java.util.Random()
     private val soundIds = HashMap<KeyFeedback, Int>()
     @Volatile private var loaded = false
 
@@ -35,6 +36,7 @@ class KeyClickPlayer(context: Context) {
             soundIds[KeyFeedback.STANDARD] = pool.load(appContext, R.raw.key_press_click, 1)
             soundIds[KeyFeedback.DELETE] = pool.load(appContext, R.raw.key_press_delete, 1)
             soundIds[KeyFeedback.MODIFIER] = pool.load(appContext, R.raw.key_press_modifier, 1)
+            soundIds[KeyFeedback.SPACE] = pool.load(appContext, R.raw.key_press_space, 1)
         }
     }
 
@@ -44,7 +46,9 @@ class KeyClickPlayer(context: Context) {
         val v = volume.coerceIn(0f, 1f)
         if (v <= 0.001f) return
         val level = v * v
-        runCatching { pool.play(id, level, level, 1, 0, 1f) }
+        // تنويع بسيط بالنغمة (±3%) حتى لا تبدو الضغطات المتتالية كآلة تكرر نفس العينة
+        val rate = if (kind == KeyFeedback.STANDARD) 0.97f + rng.nextFloat() * 0.06f else 1f
+        runCatching { pool.play(id, level, level, 1, 0, rate) }
     }
 
     fun release() {

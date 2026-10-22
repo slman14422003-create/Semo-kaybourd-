@@ -208,3 +208,7 @@
 
 ## البناء
 `.github/workflows/build.yml` يبني APK تلقائيًا، أو افتح المشروع في Android Studio (Narwhal أو أحدث).
+
+## إسناد البيانات
+ملف `app/src/main/assets/dict/ar_fix_auto.txt` يُولَّد آليًا (workflow باسم Update Arabic corrections) اعتمادًا على قوائم تردّد الكلمات من
+[FrequencyWords](https://github.com/hermitdave/FrequencyWords) (مبنيّة على OpenSubtitles، المحتوى CC BY-SA 4.0). التصحيحات اليدوية في `ar_fix.txt` تتغلّب عليه.

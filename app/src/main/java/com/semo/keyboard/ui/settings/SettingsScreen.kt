@@ -841,7 +841,7 @@ private fun TouchPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             ) {
                 PillButton(L("حرف"), Modifier.weight(1f)) { player.play(KeyFeedback.STANDARD, volume) }
                 PillButton(L("حذف"), Modifier.weight(1f)) { player.play(KeyFeedback.DELETE, volume) }
-                PillButton(L("مسافة"), Modifier.weight(1f)) { player.play(KeyFeedback.MODIFIER, volume) }
+                PillButton(L("مسافة"), Modifier.weight(1f)) { player.play(KeyFeedback.SPACE, volume) }
             }
             Divider()
             SwitchRow(L("الاهتزاز عند الضغط"), R.drawable.ic_set_vibrate, IconOrange, settings.hapticEnabled) {

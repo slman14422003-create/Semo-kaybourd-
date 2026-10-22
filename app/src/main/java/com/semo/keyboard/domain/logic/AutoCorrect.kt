@@ -14,10 +14,40 @@ object AutoCorrect {
         "hes" to "he's", "shes" to "she's",
         "teh" to "the", "adn" to "and", "taht" to "that", "thier" to "their", "becuase" to "because",
         "recieve" to "receive", "definately" to "definitely", "seperate" to "separate",
-        "occured" to "occurred", "wich" to "which", "alot" to "a lot", "untill" to "until", "goign" to "going"
+        "occured" to "occurred", "wich" to "which", "alot" to "a lot", "untill" to "until", "goign" to "going",
+        "tommorow" to "tomorrow", "tomorow" to "tomorrow", "tommorrow" to "tomorrow", "wierd" to "weird",
+        "acommodate" to "accommodate", "accomodate" to "accommodate", "adress" to "address", "agressive" to "aggressive",
+        "apparantly" to "apparently", "beleive" to "believe", "calender" to "calendar", "commited" to "committed",
+        "completly" to "completely", "concious" to "conscious", "enviroment" to "environment", "existance" to "existence",
+        "foriegn" to "foreign", "freind" to "friend", "goverment" to "government", "grammer" to "grammar",
+        "happend" to "happened", "immediatly" to "immediately", "independant" to "independent", "intresting" to "interesting",
+        "knowlege" to "knowledge", "libary" to "library", "maintainance" to "maintenance", "neccessary" to "necessary",
+        "necesary" to "necessary", "noticable" to "noticeable", "occassion" to "occasion", "persistant" to "persistent",
+        "posible" to "possible", "prefered" to "preferred", "probly" to "probably", "publically" to "publicly",
+        "realy" to "really", "refered" to "referred", "relevent" to "relevant", "restaraunt" to "restaurant",
+        "sence" to "sense", "succesful" to "successful", "surprize" to "surprise",
+        "tounge" to "tongue", "truely" to "truly", "writting" to "writing", "yestarday" to "yesterday",
+        "thx" to "thanks", "pls" to "please", "plz" to "please", "whos" to "who's",
+        "theres" to "there's", "heres" to "here's",
+        "wouldve" to "would've", "couldve" to "could've", "shouldve" to "should've", "mustnt" to "mustn't"
     )
 
+    /**
+     * يصلح الضغط الخاطئ على Caps Lock: «hELLO» ← «Hello». نتحقق أن الصورة المصغّرة كلمة إنجليزية صالحة
+     * حتى لا نمسّ أسماء مثل iPhone وmRNA وeBay.
+     */
+    private fun capsLockSlip(word: String): String? {
+        if (word.length < 4 || !word[0].isLowerCase()) return null
+        val rest = word.substring(1)
+        if (!rest.all { it.isUpperCase() }) return null
+        val lower = word.lowercase()
+        if (ValidWords.english?.contains(lower) != true) return null
+        return lower.replaceFirstChar { it.uppercase() }
+    }
+
     private const val ARABIC_ASSET = "dict/ar_fix.txt"
+    /** يُولَّد آليًا بـ tools/build_ar_fix.py عبر GitHub Actions؛ التصحيحات اليدوية أعلاه تتغلّب عليه عند التعارض */
+    private const val ARABIC_AUTO_ASSET = "dict/ar_fix_auto.txt"
     private const val MIN_STEM = 4
     private val prefixes = listOf("وب", "ول", "وك", "و", "ب", "ل", "ك")
 
@@ -27,13 +57,16 @@ object AutoCorrect {
     fun attach(context: Context) {
         if (arabic.isNotEmpty()) return
         val loaded = HashMap<String, String>(4096)
-        runCatching {
-            context.applicationContext.assets.open(ARABIC_ASSET).bufferedReader(Charsets.UTF_8).useLines { lines ->
-                for (line in lines) {
-                    val tab = line.indexOf('\t')
-                    if (tab <= 0) continue
-                    val right = line.substring(tab + 1).trim()
-                    if (right.isNotEmpty()) loaded[line.substring(0, tab)] = right
+        // المولَّد أولًا ثم اليدوي فوقه، فتتغلّب التصحيحات اليدوية عند التعارض
+        for (asset in listOf(ARABIC_AUTO_ASSET, ARABIC_ASSET)) {
+            runCatching {
+                context.applicationContext.assets.open(asset).bufferedReader(Charsets.UTF_8).useLines { lines ->
+                    for (line in lines) {
+                        val tab = line.indexOf('\t')
+                        if (tab <= 0) continue
+                        val right = line.substring(tab + 1).trim()
+                        if (right.isNotEmpty()) loaded[line.substring(0, tab)] = right
+                    }
                 }
             }
         }
@@ -47,6 +80,7 @@ object AutoCorrect {
         if (word.isEmpty() || word.length > 20) return null
         if (ArabicText.isArabicWord(word)) return fixArabic(word)
         if (word.length > 14) return null
+        capsLockSlip(word)?.let { return it }
         val fixed = english[word.lowercase()] ?: return null
         if (fixed == word) return null
         val result = when {

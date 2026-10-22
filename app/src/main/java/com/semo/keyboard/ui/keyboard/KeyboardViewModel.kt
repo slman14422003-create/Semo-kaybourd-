@@ -434,6 +434,7 @@ class KeyboardViewModel(
     private fun feedbackKind(action: KeyAction): KeyFeedback = when (action) {
         is KeyAction.Character -> KeyFeedback.STANDARD
         KeyAction.Backspace -> KeyFeedback.DELETE
+        KeyAction.Space -> KeyFeedback.SPACE
         else -> KeyFeedback.MODIFIER
     }
 
