@@ -55,6 +55,10 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -719,6 +723,13 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 )
             }
             Divider()
+            SwitchRow(
+                L("Manual button positions"), R.drawable.ic_tool_onehand, IconTeal, settings.manualBottomPos,
+                subtitle = L("Drag the globe and hide buttons in the preview to place them. Saved automatically.")
+            ) { scope.launch { repo.setManualBottomPos(it) } }
+            if (settings.manualBottomPos) {
+                BottomPositionPreview(settings, repo)
+            } else {
             var raise by remember(settings.bottomRaiseDp) { mutableFloatStateOf(settings.bottomRaiseDp) }
             SliderRow(
                 title = L("رفع الدائرتين عن أسفل الشاشة"),
@@ -742,6 +753,7 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     onFinish = { scope.launch { repo.setGlobeOffset(globeOffset.roundToInt().toFloat()) } }
                 )
                 Hint(L("حرّكه لفوق أو لتحت حتى تصير الأيقونة بمحاذاة زر إخفاء الكيبورد تمامًا. الوضع التلقائي مضبوط على منتصف شريط التنقل."))
+            }
             }
         }
     }
@@ -1355,6 +1367,92 @@ private fun UpdateProgressBar(indeterminate: Boolean, progress: Float = 0f) {
                 .fillMaxWidth(if (indeterminate) 1f else progress)
                 .height(6.dp)
                 .background(SemoPalette.AccentText, RoundedCornerShape(3.dp))
+        )
+    }
+}
+
+
+@Composable
+private fun BottomPositionPreview(settings: SemoSettings, repo: SettingsRepository) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current.density
+    var gx by remember(settings.globeDx) { mutableFloatStateOf(settings.globeDx) }
+    var gy by remember(settings.globeDy) { mutableFloatStateOf(settings.globeDy) }
+    var hx by remember(settings.hideDx) { mutableFloatStateOf(settings.hideDx) }
+    var hy by remember(settings.hideDy) { mutableFloatStateOf(settings.hideDy) }
+    val commit = { scope.launch { repo.setBottomPositions(gx, gy, hx, hy) }; Unit }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(SemoPalette.Field)
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+                    .fillMaxWidth(0.9f)
+                    .height(60.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SemoPalette.SurfaceHigh)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp)
+                    .width(110.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(SemoPalette.TextHint)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = (6.dp + gx.dp), y = -(2.dp + gy.dp))
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(SemoPalette.Accent)
+                    .pointerInput(Unit) {
+                        detectDragGestures(onDragEnd = { commit() }) { change, drag ->
+                            change.consume()
+                            gx = (gx + drag.x / density).coerceIn(0f, 40f)
+                            gy = (gy - drag.y / density).coerceIn(0f, 24f)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(painterResource(R.drawable.ic_ios_globe), null, tint = Color.White, modifier = Modifier.size(22.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = -(6.dp + hx.dp), y = -(2.dp + hy.dp))
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(SemoPalette.Accent)
+                    .pointerInput(Unit) {
+                        detectDragGestures(onDragEnd = { commit() }) { change, drag ->
+                            change.consume()
+                            hx = (hx - drag.x / density).coerceIn(0f, 40f)
+                            hy = (hy - drag.y / density).coerceIn(0f, 24f)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(painterResource(R.drawable.ic_ios_hide_keyboard), null, tint = Color.White, modifier = Modifier.size(22.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            L("Reset to default"),
+            color = SemoPalette.AccentText,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { gx = 0f; gy = 0f; hx = 0f; hy = 0f; commit() }
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         )
     }
 }

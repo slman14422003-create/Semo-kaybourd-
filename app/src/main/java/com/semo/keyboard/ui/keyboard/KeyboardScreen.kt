@@ -185,6 +185,17 @@ internal data class TouchTuning(
 
 internal val LocalTouchTuning = staticCompositionLocalOf { TouchTuning() }
 
+/** مواضع يدوية لدائرتي الصف السفلي: dx للداخل نحو المنتصف، dy لفوق (dp) */
+internal data class BottomPos(
+    val enabled: Boolean = false,
+    val globeDx: Float = 0f,
+    val globeDy: Float = 0f,
+    val hideDx: Float = 0f,
+    val hideDy: Float = 0f
+)
+
+internal val LocalBottomPos = staticCompositionLocalOf { BottomPos() }
+
 /** صف مفاتيح بلا خلفية (أيقونات عائمة) أو فراغات فقط = الصف الأخير تحت المسافة */
 private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
     row.isNotEmpty() && row.all { it.plain || it.isSpacer }
@@ -243,10 +254,12 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // عن inset أصغر (قياس من جهاز One UI: الـ inset ~24dp بينما مركز الزر على 24dp من الأسفل)
     val navCenter = utilHeight / 2
     // رفع الدائرتين عن أسفل الشاشة: نزيد ارتفاع الصف الأخير بمقدار الرفع ونرفع مركزيهما معه
-    val raise = state.bottomRaiseDp.dp
-    val utilRowHeight = if (navButtons) 0.dp else utilHeight + raise
+    val manual = state.manualBottomPos
+    val raise = if (manual) 0.dp else state.bottomRaiseDp.dp
+    val manualExtra = if (manual) maxOf(state.globeDy, state.hideDy).dp else 0.dp
+    val utilRowHeight = if (navButtons) 0.dp else utilHeight + raise + manualExtra
     val globeMax = (utilRowHeight - 24.dp).coerceAtLeast(24.dp)
-    val globeCenter = (navCenter + raise + state.globeOffsetDp.dp).coerceAtLeast(24.dp).coerceAtMost(globeMax)
+    val globeCenter = (navCenter + raise + (if (manual) 0f else state.globeOffsetDp).dp).coerceAtLeast(24.dp).coerceAtMost(globeMax)
     // صفحات الإيموجي/الحافظة/التحرير: شريطها السفلي كان يقع تحت زر إخفاء الكيبورد (يتداخل مع لمس النظام)،
     // فنحجز منطقة شريط التنقل أسفل الصفحة ونقصّر المحتوى بنفس المقدار
     val bottomReserve = if (edgeToEdgeIme && !navButtons) utilHeight else 0.dp
@@ -338,9 +351,14 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         TouchTuning(state.holdDelay.millis, state.backspaceSpeed, state.spaceBarAction)
     }
 
+    val bottomPos = remember(state.manualBottomPos, state.globeDx, state.globeDy, state.hideDx, state.hideDy) {
+        BottomPos(state.manualBottomPos, state.globeDx, state.globeDy, state.hideDx, state.hideDy)
+    }
+
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Ltr,
         LocalTouchTuning provides tuning,
+        LocalBottomPos provides bottomPos,
         LocalKeyboardScale provides state.keyboardScale,
         LocalAnimScale provides animScale
     ) {
@@ -711,8 +729,14 @@ private fun TopStrip(
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = state.toolbarOpen && moreOpen && remaining.isNotEmpty(),
-                enter = androidx.compose.animation.expandVertically(scaledTween(animScale, 220, easing = IosEaseOut)) + fadeIn(scaledTween(animScale, 180)),
-                exit = androidx.compose.animation.shrinkVertically(scaledTween(animScale, 160, easing = IosEaseOut)) + fadeOut(scaledTween(animScale, 100))
+                enter = androidx.compose.animation.expandVertically(
+                    animationSpec = scaledTween(animScale, 320, easing = IosPush),
+                    expandFrom = Alignment.Top
+                ) + fadeIn(scaledTween(animScale, 260, delayMillis = 70, easing = IosEaseOut)),
+                exit = fadeOut(scaledTween(animScale, 110, easing = IosEaseOut)) + androidx.compose.animation.shrinkVertically(
+                    animationSpec = scaledTween(animScale, 260, delayMillis = 40, easing = IosPush),
+                    shrinkTowards = Alignment.Top
+                )
             ) {
                 val fits = 46.dp * remaining.size <= fullWidth - 4.dp
                 Row(
@@ -1425,6 +1449,7 @@ private fun RowScope.KeyButton(
     val verticalPadding = if (def.plain) 0.dp else metrics.rowSpacing / 2
     // دائرة الإخفاء تلتصق بالحافة اليمنى بنفس بعد دائرة الكرة عن الحافة اليسرى (تناظر تام)
     val endSide = def.action == KeyAction.HideKeyboard
+    val bottomPos = LocalBottomPos.current
     Box(
         modifier = Modifier
             .weight(def.weight)
@@ -1445,6 +1470,14 @@ private fun RowScope.KeyButton(
     ) {
         Box(
             modifier = (if (def.plain) Modifier.widthIn(max = 96.dp).fillMaxWidth().height(48.dp).offset(y = (24.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
+                .then(
+                    if (def.plain && bottomPos.enabled) {
+                        Modifier.offset(
+                            x = if (endSide) (-bottomPos.hideDx).dp else bottomPos.globeDx.dp,
+                            y = (-(if (endSide) bottomPos.hideDy else bottomPos.globeDy)).dp
+                        )
+                    } else Modifier
+                )
                 .drawBehind {
                     if (!def.plain) {
                         drawRoundRect(

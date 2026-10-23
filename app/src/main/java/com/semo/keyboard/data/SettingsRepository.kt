@@ -199,6 +199,11 @@ class SettingsRepository(context: Context) {
         val GLOBE_OFFSET = floatPreferencesKey("globe_offset_dp")
         val HIDE_BUTTON = stringPreferencesKey("hide_button_mode")
         val BOTTOM_RAISE = floatPreferencesKey("bottom_raise_dp")
+        val BOTTOM_MANUAL = booleanPreferencesKey("bottom_manual_pos")
+        val GLOBE_DX = floatPreferencesKey("globe_dx_dp")
+        val GLOBE_DY = floatPreferencesKey("globe_dy_dp")
+        val HIDE_DX = floatPreferencesKey("hide_dx_dp")
+        val HIDE_DY = floatPreferencesKey("hide_dy_dp")
         val RECENT_EMOJIS = stringPreferencesKey("recent_emojis")
         val NEXT_WORD = booleanPreferencesKey("next_word")
         val SPELL_CHECK = booleanPreferencesKey("spell_check")
@@ -261,6 +266,11 @@ class SettingsRepository(context: Context) {
                 globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f),
                 hideButtonMode = p[Keys.HIDE_BUTTON].toEnumOr(HideButtonMode.ARROW),
                 bottomRaiseDp = (p[Keys.BOTTOM_RAISE] ?: 0f).coerceIn(0f, 40f),
+                manualBottomPos = p[Keys.BOTTOM_MANUAL] ?: false,
+                globeDx = (p[Keys.GLOBE_DX] ?: 0f).coerceIn(0f, 40f),
+                globeDy = (p[Keys.GLOBE_DY] ?: 0f).coerceIn(0f, 24f),
+                hideDx = (p[Keys.HIDE_DX] ?: 0f).coerceIn(0f, 40f),
+                hideDy = (p[Keys.HIDE_DY] ?: 0f).coerceIn(0f, 24f),
                 nextWord = p[Keys.NEXT_WORD] ?: true,
                 spellCheck = p[Keys.SPELL_CHECK] ?: true,
                 suggestEmojis = p[Keys.SUGGEST_EMOJIS] ?: true,
@@ -346,6 +356,17 @@ class SettingsRepository(context: Context) {
     suspend fun setMathResults(v: Boolean) { store.edit { it[Keys.MATH_RESULTS] = v } }
     suspend fun setGlobeOffset(v: Float) { store.edit { it[Keys.GLOBE_OFFSET] = v.coerceIn(-16f, 16f) } }
     suspend fun setHideButtonMode(v: HideButtonMode) { store.edit { it[Keys.HIDE_BUTTON] = v.name } }
+    suspend fun setManualBottomPos(v: Boolean) { store.edit { it[Keys.BOTTOM_MANUAL] = v } }
+
+    suspend fun setBottomPositions(globeDx: Float, globeDy: Float, hideDx: Float, hideDy: Float) {
+        store.edit {
+            it[Keys.GLOBE_DX] = globeDx.coerceIn(0f, 40f)
+            it[Keys.GLOBE_DY] = globeDy.coerceIn(0f, 24f)
+            it[Keys.HIDE_DX] = hideDx.coerceIn(0f, 40f)
+            it[Keys.HIDE_DY] = hideDy.coerceIn(0f, 24f)
+        }
+    }
+
     suspend fun setBottomRaise(v: Float) { store.edit { it[Keys.BOTTOM_RAISE] = v.coerceIn(0f, 40f) } }
     suspend fun setRecentEmojis(list: List<String>) { store.edit { it[Keys.RECENT_EMOJIS] = list.joinToString(" ") } }
     suspend fun setNextWord(v: Boolean) { store.edit { it[Keys.NEXT_WORD] = v } }
