@@ -55,6 +55,11 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import kotlin.math.hypot
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1375,26 +1380,67 @@ private fun UpdateProgressBar(indeterminate: Boolean, progress: Float = 0f) {
 @Composable
 private fun BottomPositionPreview(settings: SemoSettings, repo: SettingsRepository) {
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current.density
+    val dens = LocalDensity.current.density
     var gx by remember(settings.globeDx) { mutableFloatStateOf(settings.globeDx) }
     var gy by remember(settings.globeDy) { mutableFloatStateOf(settings.globeDy) }
     var hx by remember(settings.hideDx) { mutableFloatStateOf(settings.hideDx) }
     var hy by remember(settings.hideDy) { mutableFloatStateOf(settings.hideDy) }
+    var boxW by remember { mutableFloatStateOf(0f) }
+    val boxH = 200f
     val commit = { scope.launch { repo.setBottomPositions(gx, gy, hx, hy) }; Unit }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(150.dp)
+                .height(boxH.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SemoPalette.Field)
+                .onSizeChanged { boxW = it.width.toFloat() }
+                .pointerInput(settings.globeDx, settings.globeDy, settings.hideDx, settings.hideDy) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val wDp = boxW / dens
+                        val px = down.position.x / dens
+                        val py = down.position.y / dens
+                        val gcx = 28f + gx
+                        val gcy = boxH - 24f - gy
+                        val hcx = wDp - 28f - hx
+                        val hcy = boxH - 24f - hy
+                        val dg = hypot(px - gcx, py - gcy)
+                        val dh = hypot(px - hcx, py - hcy)
+                        val target = if (minOf(dg, dh) > 64f) 0 else if (dg <= dh) 1 else 2
+                        if (target == 0) return@awaitEachGesture
+                        down.consume()
+                        val grabX = if (target == 1) px - gcx else px - hcx
+                        val grabY = if (target == 1) py - gcy else py - hcy
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            if (ch.changedToUpIgnoreConsumed()) {
+                                ch.consume()
+                                break
+                            }
+                            val x = ch.position.x / dens - grabX
+                            val y = ch.position.y / dens - grabY
+                            if (target == 1) {
+                                gx = (x - 28f).coerceIn(0f, 40f)
+                                gy = (boxH - 24f - y).coerceIn(0f, 24f)
+                            } else {
+                                hx = (wDp - 28f - x).coerceIn(0f, 40f)
+                                hy = (boxH - 24f - y).coerceIn(0f, 24f)
+                            }
+                            ch.consume()
+                        }
+                        commit()
+                    }
+                }
         ) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 10.dp)
                     .fillMaxWidth(0.9f)
-                    .height(60.dp)
+                    .height(90.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(SemoPalette.SurfaceHigh)
             )
@@ -1413,14 +1459,7 @@ private fun BottomPositionPreview(settings: SemoSettings, repo: SettingsReposito
                     .offset(x = (6.dp + gx.dp), y = -(2.dp + gy.dp))
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(SemoPalette.Accent)
-                    .pointerInput(Unit) {
-                        detectDragGestures(onDragEnd = { commit() }) { change, drag ->
-                            change.consume()
-                            gx = (gx + drag.x / density).coerceIn(0f, 40f)
-                            gy = (gy - drag.y / density).coerceIn(0f, 24f)
-                        }
-                    },
+                    .background(SemoPalette.Accent),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(painterResource(R.drawable.ic_ios_globe), null, tint = Color.White, modifier = Modifier.size(22.dp))
@@ -1431,20 +1470,18 @@ private fun BottomPositionPreview(settings: SemoSettings, repo: SettingsReposito
                     .offset(x = -(6.dp + hx.dp), y = -(2.dp + hy.dp))
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(SemoPalette.Accent)
-                    .pointerInput(Unit) {
-                        detectDragGestures(onDragEnd = { commit() }) { change, drag ->
-                            change.consume()
-                            hx = (hx - drag.x / density).coerceIn(0f, 40f)
-                            hy = (hy - drag.y / density).coerceIn(0f, 24f)
-                        }
-                    },
+                    .background(SemoPalette.Accent),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(painterResource(R.drawable.ic_ios_hide_keyboard), null, tint = Color.White, modifier = Modifier.size(22.dp))
             }
         }
         Spacer(Modifier.height(8.dp))
+        Text(
+            "${gx.toInt()} / ${gy.toInt()}   |   ${hx.toInt()} / ${hy.toInt()}",
+            color = SemoPalette.TextHint,
+            fontSize = 12.sp
+        )
         Text(
             L("Reset to default"),
             color = SemoPalette.AccentText,
