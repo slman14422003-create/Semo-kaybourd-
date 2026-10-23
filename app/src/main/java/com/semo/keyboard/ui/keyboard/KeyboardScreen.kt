@@ -650,7 +650,8 @@ private fun TopStrip(
     val animScale = LocalAnimScale.current
     var moreOpen by remember(state.toolbarOpen) { mutableStateOf(false) }
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val slots = ((maxWidth - 4.dp - 46.dp) / 46.dp).toInt().coerceAtLeast(1)
+        val fullWidth = maxWidth
+        val slots = ((fullWidth - 4.dp - 46.dp) / 46.dp).toInt().coerceAtLeast(1)
         val enabled = state.toolbarItems
         val disabled = ToolbarItem.values().filter { it !in enabled }
         val needMore = enabled.size > slots || disabled.isNotEmpty()
@@ -713,7 +714,7 @@ private fun TopStrip(
                 enter = androidx.compose.animation.expandVertically(scaledTween(animScale, 220, easing = IosEaseOut)) + fadeIn(scaledTween(animScale, 180)),
                 exit = androidx.compose.animation.shrinkVertically(scaledTween(animScale, 160, easing = IosEaseOut)) + fadeOut(scaledTween(animScale, 100))
             ) {
-                val fits = 46.dp * remaining.size <= maxWidth - 4.dp
+                val fits = 46.dp * remaining.size <= fullWidth - 4.dp
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
