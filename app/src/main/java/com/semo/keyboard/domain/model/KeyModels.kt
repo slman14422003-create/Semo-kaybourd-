@@ -372,6 +372,7 @@ data class KeyboardUiState(
     val freshClip: String? = null,
     val removedWord: String? = null,
     val toolbarOpen: Boolean = false,
+    val learnedNotice: List<String>? = null,
     val clipItems: List<ClipItem> = emptyList(),
     val clipNotice: ClipNotice? = null,
     val pasteProgress: Float? = null,
