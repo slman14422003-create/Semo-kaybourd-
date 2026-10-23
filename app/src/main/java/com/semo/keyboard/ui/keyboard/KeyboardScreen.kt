@@ -619,6 +619,28 @@ private fun RowScope.OneHandSide(
 // ============================ الشريط العلوي ============================
 
 @Composable
+private fun ToolbarButton(
+    item: ToolbarItem,
+    index: Int,
+    state: KeyboardUiState,
+    colors: SemoKeyboardColors,
+    viewModel: KeyboardViewModel
+) {
+    val d = index * 28
+    when (item) {
+        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors, popDelay = d, active = state.page == KeyboardPage.EMOJI) { viewModel.openPage(KeyboardPage.EMOJI) }
+        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors, popDelay = d, active = state.page == KeyboardPage.CLIPBOARD) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
+        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors, popDelay = d, active = state.page == KeyboardPage.NUMPAD) { viewModel.openPage(KeyboardPage.NUMPAD) }
+        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors, popDelay = d, active = state.page == KeyboardPage.CALC) { viewModel.openPage(KeyboardPage.CALC) }
+        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors, popDelay = d, active = state.page == KeyboardPage.EDIT) { viewModel.openPage(KeyboardPage.EDIT) }
+        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = d) { viewModel.cycleOneHand() }
+        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = d) { viewModel.openSettings() }
+        ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = d) { viewModel.openTranslate() }
+        ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = d) { viewModel.openVoice() }
+    }
+}
+
+@Composable
 private fun TopStrip(
     state: KeyboardUiState,
     colors: SemoKeyboardColors,
@@ -626,59 +648,84 @@ private fun TopStrip(
     viewModel: KeyboardViewModel
 ) {
     val animScale = LocalAnimScale.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(metrics.stripHeight)
-            .padding(horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        StripIconButton(
-            iconRes = R.drawable.ic_tool_chevron,
-            colors = colors,
-            rotate = if (state.toolbarOpen) 180f else 0f,
-            filled = false,
-            onClick = { viewModel.toggleToolbar() }
-        )
-        AnimatedContent(
-            targetState = state.toolbarOpen,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            transitionSpec = {
-                (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) + androidx.compose.animation.scaleIn(scaledSpring(animScale, 0.85f, 420f), initialScale = 0.92f)) togetherWith fadeOut(scaledTween(animScale, 90)) using
-                    SizeTransform(clip = false) { _, _ -> snap() }
-            },
-            label = "stripContent"
-        ) { open ->
-            if (open) {
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val fits = 46.dp * state.toolbarItems.size <= maxWidth
-                    val toolsScroll = rememberScrollState()
-                Row(
-                    modifier = if (fits) Modifier.fillMaxSize() else Modifier.fillMaxSize().horizontalScroll(toolsScroll),
-                    horizontalArrangement = if (fits) Arrangement.SpaceEvenly else Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // العناصر والترتيب من إعدادات «شريط الأدوات»
-                    state.toolbarItems.forEachIndexed { index, item ->
-                        when (item) {
-                        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors, popDelay = index * 28, active = state.page == KeyboardPage.EMOJI) { viewModel.openPage(KeyboardPage.EMOJI) }
-                        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors, popDelay = index * 28, active = state.page == KeyboardPage.CLIPBOARD) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
-                        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors, popDelay = index * 28, active = state.page == KeyboardPage.NUMPAD) { viewModel.openPage(KeyboardPage.NUMPAD) }
-                        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors, popDelay = index * 28, active = state.page == KeyboardPage.CALC) { viewModel.openPage(KeyboardPage.CALC) }
-                        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors, popDelay = index * 28, active = state.page == KeyboardPage.EDIT) { viewModel.openPage(KeyboardPage.EDIT) }
-                        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = index * 28) { viewModel.cycleOneHand() }
-                        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28) { viewModel.openSettings() }
-                        ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28) { viewModel.openTranslate() }
-                        ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = index * 28) { viewModel.openVoice() }
+    var moreOpen by remember(state.toolbarOpen) { mutableStateOf(false) }
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val slots = ((maxWidth - 4.dp - 46.dp) / 46.dp).toInt().coerceAtLeast(1)
+        val enabled = state.toolbarItems
+        val disabled = ToolbarItem.values().filter { it !in enabled }
+        val needMore = enabled.size > slots || disabled.isNotEmpty()
+        val visible = if (needMore) enabled.take((slots - 1).coerceAtLeast(0)) else enabled
+        val remaining = if (needMore) enabled.drop(visible.size) + disabled else emptyList()
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(metrics.stripHeight)
+                    .padding(horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StripIconButton(
+                    iconRes = R.drawable.ic_tool_chevron,
+                    colors = colors,
+                    rotate = if (state.toolbarOpen) 180f else 0f,
+                    filled = false,
+                    onClick = { viewModel.toggleToolbar() }
+                )
+                AnimatedContent(
+                    targetState = state.toolbarOpen,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    transitionSpec = {
+                        (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) + androidx.compose.animation.scaleIn(scaledSpring(animScale, 0.85f, 420f), initialScale = 0.92f)) togetherWith fadeOut(scaledTween(animScale, 90)) using
+                            SizeTransform(clip = false) { _, _ -> snap() }
+                    },
+                    label = "stripContent"
+                ) { open ->
+                    if (open) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            visible.forEachIndexed { index, item ->
+                                ToolbarButton(item, index, state, colors, viewModel)
+                            }
+                            if (needMore) {
+                                StripIconButton(
+                                    iconRes = R.drawable.ic_tool_chevron,
+                                    colors = colors,
+                                    rotate = if (moreOpen) 270f else 90f,
+                                    popDelay = visible.size * 28,
+                                    active = moreOpen
+                                ) { moreOpen = !moreOpen }
+                            }
+                        }
+                    } else {
+                        Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                            SuggestionsRow(state, colors, viewModel)
                         }
                     }
                 }
-                }
-            } else {
-                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                    SuggestionsRow(state, colors, viewModel)
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = state.toolbarOpen && moreOpen && remaining.isNotEmpty(),
+                enter = androidx.compose.animation.expandVertically(scaledTween(animScale, 220, easing = IosEaseOut)) + fadeIn(scaledTween(animScale, 180)),
+                exit = androidx.compose.animation.shrinkVertically(scaledTween(animScale, 160, easing = IosEaseOut)) + fadeOut(scaledTween(animScale, 100))
+            ) {
+                val fits = 46.dp * remaining.size <= maxWidth - 4.dp
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(metrics.stripHeight)
+                        .padding(horizontal = 2.dp)
+                        .then(if (fits) Modifier else Modifier.horizontalScroll(rememberScrollState())),
+                    horizontalArrangement = if (fits) Arrangement.SpaceEvenly else Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    remaining.forEachIndexed { index, item ->
+                        ToolbarButton(item, index, state, colors, viewModel)
+                    }
                 }
             }
         }
