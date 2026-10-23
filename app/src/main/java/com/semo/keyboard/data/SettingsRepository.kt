@@ -260,7 +260,7 @@ class SettingsRepository(context: Context) {
                 mathResults = p[Keys.MATH_RESULTS] ?: true,
                 globeOffsetDp = (p[Keys.GLOBE_OFFSET] ?: 0f).coerceIn(-16f, 16f),
                 hideButtonMode = p[Keys.HIDE_BUTTON].toEnumOr(HideButtonMode.ARROW),
-                bottomRaiseDp = (p[Keys.BOTTOM_RAISE] ?: 14f).coerceIn(0f, 40f),
+                bottomRaiseDp = (p[Keys.BOTTOM_RAISE] ?: 0f).coerceIn(0f, 40f),
                 nextWord = p[Keys.NEXT_WORD] ?: true,
                 spellCheck = p[Keys.SPELL_CHECK] ?: true,
                 suggestEmojis = p[Keys.SUGGEST_EMOJIS] ?: true,

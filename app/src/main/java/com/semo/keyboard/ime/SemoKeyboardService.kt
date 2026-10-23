@@ -207,6 +207,7 @@ class SemoKeyboardService :
 
     /** هل يوجد نص محدد؟ نحدّثه من onUpdateSelection بدل سؤال التطبيق (getSelectedText) عند كل حذف */
     @Volatile private var hasSelection = false
+    @Volatile private var caretPos = -1
 
     private val imageStore by lazy { ClipImageStore(applicationContext) }
     private val fileStore by lazy { ClipFileStore(applicationContext) }
@@ -871,6 +872,7 @@ class SemoKeyboardService :
         }
         KeyboardStatusHelper.markImeSeen(this)
         hasSelection = (info?.initialSelStart ?: 0) != (info?.initialSelEnd ?: 0)
+        caretPos = info?.initialSelEnd ?: -1
         val startIc = currentInputConnection
         val startCaps = if (inputType == 0) false else readWithin(START_READ_MS, true) { shouldCapitalize(inputType, startIc) }
         voiceInput?.cancel()
@@ -895,6 +897,7 @@ class SemoKeyboardService :
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         hasSelection = newSelStart != newSelEnd
+        caretPos = newSelEnd
         // نجمع تحديثات المؤشر المتتالية (تصل مع كل حرف) بمهمة واحدة، لأن كل واحدة تكلّف استدعاءات للتطبيق
         mainHandler.removeCallbacks(cursorMovedTask)
         mainHandler.postDelayed(cursorMovedTask, 70)
@@ -1061,8 +1064,25 @@ class SemoKeyboardService :
 
         override fun moveCursor(delta: Int) {
             if (delta == 0) return
-            val code = if (delta > 0) android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT
-            runCatching { repeat(abs(delta)) { sendDownUpKeyEvents(code) } }
+            val ic = currentInputConnection ?: return
+            runCatching {
+                val probe = ic.getTextAfterCursor(1, 0)?.firstOrNull() ?: ic.getTextBeforeCursor(1, 0)?.lastOrNull()
+                val rtl = probe != null && Character.getDirectionality(probe).let {
+                    it == Character.DIRECTIONALITY_RIGHT_TO_LEFT || it == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
+                }
+                val d = if (rtl) -delta else delta
+                val moved = if (d > 0) (ic.getTextAfterCursor(d, 0)?.length ?: 0) else -(ic.getTextBeforeCursor(-d, 0)?.length ?: 0)
+                if (moved == 0) return
+                val base = caretPos
+                if (base >= 0) {
+                    val target = (base + moved).coerceAtLeast(0)
+                    ic.setSelection(target, target)
+                    caretPos = target
+                } else {
+                    val code = if (d > 0) android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                    repeat(abs(d)) { sendDownUpKeyEvents(code) }
+                }
+            }
         }
 
         override fun moveCursorVertical(lines: Int) {

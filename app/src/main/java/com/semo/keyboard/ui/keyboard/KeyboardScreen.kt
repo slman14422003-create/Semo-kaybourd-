@@ -626,7 +626,7 @@ private fun ToolbarButton(
     colors: SemoKeyboardColors,
     viewModel: KeyboardViewModel
 ) {
-    val d = index * 28
+    val d = index * 16
     when (item) {
         ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors, popDelay = d, active = state.page == KeyboardPage.EMOJI) { viewModel.openPage(KeyboardPage.EMOJI) }
         ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors, popDelay = d, active = state.page == KeyboardPage.CLIPBOARD) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
@@ -678,7 +678,7 @@ private fun TopStrip(
                         .weight(1f)
                         .fillMaxHeight(),
                     transitionSpec = {
-                        (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) + androidx.compose.animation.scaleIn(scaledSpring(animScale, 0.85f, 420f), initialScale = 0.92f)) togetherWith fadeOut(scaledTween(animScale, 90)) using
+                        (fadeIn(scaledTween(animScale, 280, delayMillis = 60, easing = IosEaseOut)) + androidx.compose.animation.scaleIn(scaledSpring(animScale, 0.92f, 300f), initialScale = 0.96f)) togetherWith fadeOut(scaledTween(animScale, 140, easing = IosEaseOut)) using
                             SizeTransform(clip = false) { _, _ -> snap() }
                     },
                     label = "stripContent"
@@ -697,7 +697,7 @@ private fun TopStrip(
                                     iconRes = R.drawable.ic_tool_chevron,
                                     colors = colors,
                                     rotate = if (moreOpen) 270f else 90f,
-                                    popDelay = visible.size * 28,
+                                    popDelay = visible.size * 16,
                                     active = moreOpen
                                 ) { moreOpen = !moreOpen }
                             }
@@ -749,11 +749,11 @@ private fun StripIconButton(
     val press by animateFloatAsState(if (pressed) 0.88f else 1f, scaledSpring(animScale, dampingRatio = 0.7f, stiffness = 700f), label = "stripPress")
     val on by animateFloatAsState(if (active) 1f else 0f, scaledTween(animScale, 200), label = "stripActive")
     val rot by animateFloatAsState(rotate, scaledTween(animScale, 320, easing = IosPush), label = "stripRotate")
-    val pop = remember { Animatable(if (popDelay >= 0) 0.4f else 1f) }
+    val pop = remember { Animatable(if (popDelay >= 0) 0.6f else 1f) }
     LaunchedEffect(popDelay, animScale) {
         if (popDelay >= 0) {
             if (animScale > 0.001f) delay((popDelay * animScale).toLong())
-            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.8f, stiffness = 420f))
+            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.88f, stiffness = 380f))
         }
     }
     val iconTint = if (filled) colors.text else colors.textMuted
@@ -770,7 +770,7 @@ private fun StripIconButton(
                     val sc = press * pop.value
                     scaleX = sc
                     scaleY = sc
-                    alpha = if (popDelay >= 0) ((pop.value - 0.4f) / 0.6f).coerceIn(0f, 1f) else 1f
+                    alpha = if (popDelay >= 0) ((pop.value - 0.6f) / 0.4f).coerceIn(0f, 1f) else 1f
                 }
                 .drawBehind {
                     if (on > 0.01f) {
@@ -1483,10 +1483,19 @@ private fun RowScope.KeyButton(
 
         // فقاعة معاينة الحرف بشكل بالون iOS: رأس أعرض من المفتاح يتصل به برقبة، ويغطي المفتاح كله.
         // بالصف الأول نقصّر الرأس كي لا تقصّه نافذة اللوحة.
-        if (showPreview && pressed && isLetterKey && !hideLabels && !popupOpen) {
+        var previewVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(pressed) {
+            if (pressed) previewVisible = true
+            else {
+                delay(130)
+                previewVisible = false
+            }
+        }
+        if (showPreview && previewVisible && isLetterKey && !hideLabels && !popupOpen) {
             val pop = remember { Animatable(0.8f) }
             val previewScale = LocalAnimScale.current
-            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.86f, stiffness = 900f)) }
+            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.86f, stiffness = 650f)) }
+            val previewAlpha by animateFloatAsState(if (pressed) 1f else 0f, scaledTween(previewScale, 130, easing = IosEaseOut), label = "previewAlpha")
             val headHeight = if (isTopRow) 40.dp else 56.dp
             val inset = 10.dp
             Box(
@@ -1506,6 +1515,7 @@ private fun RowScope.KeyButton(
                     .graphicsLayer {
                         scaleX = pop.value
                         scaleY = pop.value
+                        alpha = previewAlpha
                         transformOrigin = TransformOrigin(0.5f, 1f)
                     }
                     .shadow(3.dp, balloonShape)

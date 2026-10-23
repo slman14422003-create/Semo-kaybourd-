@@ -288,7 +288,7 @@ data class SemoSettings(
     /** شكل دائرة إخفاء اللوحة بالصف السفلي */
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
     /** رفع دائرتي الصف السفلي عن أسفل الشاشة (dp) كي لا تلتصقا بشريط التنقل */
-    val bottomRaiseDp: Float = 14f,
+    val bottomRaiseDp: Float = 0f,
     /** توقّع الكلمة التالية (من أنماط كتابتك + قائمة مدمجة) */
     val nextWord: Boolean = true,
     /** تدقيق إملائي: اقتراح التصحيح بالشريط لو الكلمة غير موجودة بالقاموس */
@@ -367,7 +367,7 @@ data class KeyboardUiState(
     val mathResults: Boolean = true,
     val globeOffsetDp: Float = 0f,
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
-    val bottomRaiseDp: Float = 14f,
+    val bottomRaiseDp: Float = 0f,
     /** نص نُسخ للتو: يظهر كشريحة لصق سريعة بشريط الاقتراحات لمدة قصيرة */
     val freshClip: String? = null,
     val removedWord: String? = null,
