@@ -55,6 +55,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.runtime.CompositionLocalProvider
 import kotlin.math.hypot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
@@ -1388,6 +1391,7 @@ private fun BottomPositionPreview(settings: SemoSettings, repo: SettingsReposito
     var boxW by remember { mutableFloatStateOf(0f) }
     val boxH = 200f
     val commit = { scope.launch { repo.setBottomPositions(gx, gy, hx, hy) }; Unit }
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
         Box(
             modifier = Modifier
@@ -1491,5 +1495,6 @@ private fun BottomPositionPreview(settings: SemoSettings, repo: SettingsReposito
                 .clickable { gx = 0f; gy = 0f; hx = 0f; hy = 0f; commit() }
                 .padding(horizontal = 8.dp, vertical = 6.dp)
         )
+    }
     }
 }
