@@ -392,7 +392,7 @@ class SettingsRepository(context: Context) {
 
     private companion object {
         val KEEP_ON_RESET = setOf(
-            "learned_words", "learned_bigrams", "ignored_corrections", "learned_fixes", "blocked_words", "text_shortcuts", "clipboard_items", "last_cache_clear"
+            "learned_words", "learned_bigrams", "ignored_corrections", "learned_fixes", "learn_candidates", "rank_choices", "rank_profiles", "blocked_words", "text_shortcuts", "clipboard_items", "last_cache_clear"
         )
     }
 }

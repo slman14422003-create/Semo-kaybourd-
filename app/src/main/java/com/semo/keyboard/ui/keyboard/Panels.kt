@@ -258,7 +258,7 @@ private class EmojiPick(val emoji: String, val variants: List<String>)
 private class EmojiSection(val title: String, val iconRes: Int, val emojis: List<String>)
 
 private fun emojiCategoryIcon(titleEn: String): Int = when (titleEn) {
-    "Smileys" -> R.drawable.ic_emoji_smileys
+    "Smileys", "Smileys & People" -> R.drawable.ic_emoji_smileys
     "People" -> R.drawable.ic_emoji_people
     "Hearts" -> R.drawable.ic_emoji_hearts
     "Nature" -> R.drawable.ic_emoji_nature

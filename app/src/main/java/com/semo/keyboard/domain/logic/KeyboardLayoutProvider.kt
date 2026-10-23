@@ -274,9 +274,11 @@ object KeyboardLayoutProvider {
 
     /** Curated categories plus every other emoji of the Unicode set ([EmojiExtra]); built once. */
     val emojiCategories: List<EmojiCategory> by lazy {
-        EmojiData.categories.map { cat ->
-            cat.copy(emojis = (cat.emojis + EmojiExtra.forCategory(cat.titleEn)).distinct())
-        }
+        EmojiOrder.arrange(
+            EmojiData.categories.map { cat ->
+                cat.copy(emojis = (cat.emojis + EmojiExtra.forCategory(cat.titleEn)).distinct())
+            }
+        )
     }
 
     /** الأرقام المعروضة حسب لغة اللوحة وخيار الأرقام الهندية */

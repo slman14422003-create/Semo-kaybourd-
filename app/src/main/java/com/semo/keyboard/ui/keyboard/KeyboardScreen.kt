@@ -245,8 +245,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // رفع الدائرتين عن أسفل الشاشة: نزيد ارتفاع الصف الأخير بمقدار الرفع ونرفع مركزيهما معه
     val raise = state.bottomRaiseDp.dp
     val utilRowHeight = if (navButtons) 0.dp else utilHeight + raise
-    val globeMax = (utilRowHeight - 14.dp).coerceAtLeast(14.dp)
-    val globeCenter = (navCenter + raise + state.globeOffsetDp.dp).coerceAtLeast(14.dp).coerceAtMost(globeMax)
+    val globeMax = (utilRowHeight - 24.dp).coerceAtLeast(24.dp)
+    val globeCenter = (navCenter + raise + state.globeOffsetDp.dp).coerceAtLeast(24.dp).coerceAtMost(globeMax)
     // صفحات الإيموجي/الحافظة/التحرير: شريطها السفلي كان يقع تحت زر إخفاء الكيبورد (يتداخل مع لمس النظام)،
     // فنحجز منطقة شريط التنقل أسفل الصفحة ونقصّر المحتوى بنفس المقدار
     val bottomReserve = if (edgeToEdgeIme && !navButtons) utilHeight else 0.dp
@@ -326,8 +326,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
             coroutineScope {
                 rowProgress.forEachIndexed { i, a ->
                     launch {
-                        delay((i * 22 * animScale).toLong())
-                        a.animateTo(1f, scaledTween(animScale, 340, easing = IosPush))
+                        delay((i * 14 * animScale).toLong())
+                        a.animateTo(1f, scaledTween(animScale, 280, easing = IosPush))
                     }
                 }
             }
@@ -663,15 +663,15 @@ private fun TopStrip(
                     // العناصر والترتيب من إعدادات «شريط الأدوات»
                     state.toolbarItems.forEachIndexed { index, item ->
                         when (item) {
-                        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.EMOJI), active = state.page == KeyboardPage.EMOJI) { viewModel.openPage(KeyboardPage.EMOJI) }
-                        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.CLIPBOARD), active = state.page == KeyboardPage.CLIPBOARD) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
-                        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.NUMPAD), active = state.page == KeyboardPage.NUMPAD) { viewModel.openPage(KeyboardPage.NUMPAD) }
-                        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.CALC), active = state.page == KeyboardPage.CALC) { viewModel.openPage(KeyboardPage.CALC) }
-                        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.CURSOR), active = state.page == KeyboardPage.EDIT) { viewModel.openPage(KeyboardPage.EDIT) }
-                        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.ONEHAND)) { viewModel.cycleOneHand() }
-                        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.SETTINGS)) { viewModel.openSettings() }
-                        ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.TRANSLATE)) { viewModel.openTranslate() }
-                        ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = index * 28, tint = toolTint(ToolbarItem.VOICE)) { viewModel.openVoice() }
+                        ToolbarItem.EMOJI -> StripIconButton(R.drawable.ic_ios_emoji, colors, popDelay = index * 28, active = state.page == KeyboardPage.EMOJI) { viewModel.openPage(KeyboardPage.EMOJI) }
+                        ToolbarItem.CLIPBOARD -> StripIconButton(R.drawable.ic_tool_clipboard, colors, popDelay = index * 28, active = state.page == KeyboardPage.CLIPBOARD) { viewModel.openPage(KeyboardPage.CLIPBOARD) }
+                        ToolbarItem.NUMPAD -> StripIconButton(R.drawable.ic_tool_numpad, colors, popDelay = index * 28, active = state.page == KeyboardPage.NUMPAD) { viewModel.openPage(KeyboardPage.NUMPAD) }
+                        ToolbarItem.CALC -> StripIconButton(R.drawable.ic_tool_calc, colors, popDelay = index * 28, active = state.page == KeyboardPage.CALC) { viewModel.openPage(KeyboardPage.CALC) }
+                        ToolbarItem.CURSOR -> StripIconButton(R.drawable.ic_tool_cursor, colors, popDelay = index * 28, active = state.page == KeyboardPage.EDIT) { viewModel.openPage(KeyboardPage.EDIT) }
+                        ToolbarItem.ONEHAND -> StripIconButton(R.drawable.ic_tool_onehand, colors, popDelay = index * 28) { viewModel.cycleOneHand() }
+                        ToolbarItem.SETTINGS -> StripIconButton(R.drawable.ic_tool_settings, colors, popDelay = index * 28) { viewModel.openSettings() }
+                        ToolbarItem.TRANSLATE -> StripIconButton(R.drawable.ic_tool_translate, colors, popDelay = index * 28) { viewModel.openTranslate() }
+                        ToolbarItem.VOICE -> StripIconButton(R.drawable.ic_ios_mic, colors, popDelay = index * 28) { viewModel.openVoice() }
                         }
                     }
                 }
@@ -685,18 +685,6 @@ private fun TopStrip(
     }
 }
 
-private fun toolTint(item: ToolbarItem): Color = when (item) {
-    ToolbarItem.EMOJI -> Color(0xFFFFB020)
-    ToolbarItem.CLIPBOARD -> Color(0xFF0A84FF)
-    ToolbarItem.NUMPAD -> Color(0xFF5E6CE8)
-    ToolbarItem.CALC -> Color(0xFFFF7A1A)
-    ToolbarItem.CURSOR -> Color(0xFF1FB5A3)
-    ToolbarItem.ONEHAND -> Color(0xFFA066F0)
-    ToolbarItem.SETTINGS -> Color(0xFF8E8E93)
-    ToolbarItem.TRANSLATE -> Color(0xFF30B0F0)
-    ToolbarItem.VOICE -> Color(0xFFFF453A)
-}
-
 @Composable
 private fun StripIconButton(
     iconRes: Int,
@@ -704,43 +692,23 @@ private fun StripIconButton(
     rotate: Float = 0f,
     filled: Boolean = true,
     popDelay: Int = -1,
-    tint: Color = Color.Unspecified,
     active: Boolean = false,
     onClick: () -> Unit
 ) {
     val animScale = LocalAnimScale.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val press by animateFloatAsState(if (pressed) 0.86f else 1f, scaledSpring(animScale, dampingRatio = 0.52f, stiffness = 620f), label = "stripPress")
-    val lift by animateFloatAsState(if (pressed) 1f else 0f, scaledTween(animScale, 120), label = "stripLift")
-    val on by animateFloatAsState(if (active) 1f else 0f, scaledTween(animScale, 240), label = "stripActive")
+    val press by animateFloatAsState(if (pressed) 0.88f else 1f, scaledSpring(animScale, dampingRatio = 0.7f, stiffness = 700f), label = "stripPress")
+    val on by animateFloatAsState(if (active) 1f else 0f, scaledTween(animScale, 200), label = "stripActive")
     val rot by animateFloatAsState(rotate, scaledTween(animScale, 320, easing = IosPush), label = "stripRotate")
     val pop = remember { Animatable(if (popDelay >= 0) 0.4f else 1f) }
     LaunchedEffect(popDelay, animScale) {
         if (popDelay >= 0) {
             if (animScale > 0.001f) delay((popDelay * animScale).toLong())
-            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.7f, stiffness = 380f))
+            pop.animateTo(1f, scaledSpring(animScale, dampingRatio = 0.8f, stiffness = 420f))
         }
     }
-    val tinted = filled && tint != Color.Unspecified
-    val shape = RoundedCornerShape(11.dp)
-    val topAmount = 0.24f + 0.16f * on + 0.10f * lift
-    val bottomAmount = 0.10f + 0.12f * on + 0.06f * lift
-    val fillModifier = when {
-        tinted -> Modifier
-            .background(
-                Brush.verticalGradient(listOf(lerp(colors.chip, tint, topAmount), lerp(colors.chip, tint, bottomAmount))),
-                shape
-            )
-            .border(1.dp, tint.copy(alpha = 0.22f + 0.5f * on), shape)
-        filled -> Modifier.background(colors.chip, shape)
-        else -> Modifier
-    }
-    val iconTint = when {
-        !filled -> colors.textMuted
-        tinted -> lerp(colors.text, tint, 0.82f)
-        else -> colors.text
-    }
+    val iconTint = if (filled) colors.text else colors.textMuted
     Box(
         modifier = Modifier
             .size(width = 46.dp, height = 40.dp)
@@ -756,7 +724,14 @@ private fun StripIconButton(
                     scaleY = sc
                     alpha = if (popDelay >= 0) ((pop.value - 0.4f) / 0.6f).coerceIn(0f, 1f) else 1f
                 }
-                .then(fillModifier),
+                .drawBehind {
+                    if (on > 0.01f) {
+                        drawRoundRect(
+                            color = colors.chip.copy(alpha = colors.chip.alpha * on),
+                            cornerRadius = CornerRadius(11.dp.toPx())
+                        )
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -764,8 +739,7 @@ private fun StripIconButton(
                 contentDescription = null,
                 tint = iconTint,
                 modifier = Modifier
-                    .size(if (filled) 20.dp else 22.dp)
-                    .graphicsLayer { translationY = -1.5.dp.toPx() * lift }
+                    .size(if (filled) 23.dp else 22.dp)
                     .rotate(rot)
             )
         }
@@ -1001,6 +975,7 @@ private fun SuggestionSlots(
     colors: SemoKeyboardColors,
     viewModel: KeyboardViewModel
 ) {
+    val sug by viewModel.suggestionUi.collectAsState()
     val progress = state.pasteProgress
     if (progress != null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1009,7 +984,7 @@ private fun SuggestionSlots(
         return
     }
     val notice = state.clipNotice
-    if (notice != null && state.literal.isEmpty() && state.mathResult == null) {
+    if (notice != null && sug.literal.isEmpty() && sug.mathResult == null) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1029,7 +1004,39 @@ private fun SuggestionSlots(
         }
         return
     }
-    val math = state.mathResult
+    val learned = state.learnedNotice
+    if (learned != null && learned.isNotEmpty() && sug.literal.isEmpty() && sug.mathResult == null) {
+        val label = if (learned.size == 1) keyboardString(state.language.rtl, R.string.learned_one, learned[0])
+        else keyboardString(state.language.rtl, R.string.learned_many, learned.size)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = colors.suggestion,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(textDirection = TextDirection.Content),
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = keyboardString(state.language.rtl, R.string.learned_undo),
+                color = colors.keyAccent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                modifier = Modifier
+                    .clickable { viewModel.undoLearned() }
+                    .padding(start = 12.dp, top = 6.dp, bottom = 6.dp)
+            )
+        }
+        return
+    }
+    val math = sug.mathResult
     if (math != null) {
         Box(
             modifier = Modifier
@@ -1050,7 +1057,7 @@ private fun SuggestionSlots(
         return
     }
 
-    val latestClip = if (state.literal.isEmpty() && state.clipboardEnabled) state.freshClip else null
+    val latestClip = if (sug.literal.isEmpty() && state.clipboardEnabled) state.freshClip else null
     val longPressLabel = keyboardString(state.language.rtl, R.string.suggest_remove_action)
 
     fun wordSlot(text: String, bold: Boolean): SuggestionSlot = SuggestionSlot(
@@ -1062,9 +1069,9 @@ private fun SuggestionSlots(
 
     val slots = buildList {
         if (latestClip != null) {
-            state.suggestions.take(2).forEach { word -> add(wordSlot(word, false)) }
-        } else if (state.literal.isNotEmpty()) {
-            val literal = state.literal
+            sug.suggestions.take(2).forEach { word -> add(wordSlot(word, false)) }
+        } else if (sug.literal.isNotEmpty()) {
+            val literal = sug.literal
             add(
                 SuggestionSlot(
                     text = "\u201C$literal\u201D",
@@ -1073,9 +1080,9 @@ private fun SuggestionSlots(
                     onLongPress = { viewModel.removeSuggestion(literal) }
                 )
             )
-            state.suggestions.take(2).forEachIndexed { index, word -> add(wordSlot(word, index == 0)) }
+            sug.suggestions.take(2).forEachIndexed { index, word -> add(wordSlot(word, index == 0)) }
         } else {
-            state.suggestions.take(3).forEach { word -> add(wordSlot(word, false)) }
+            sug.suggestions.take(3).forEach { word -> add(wordSlot(word, false)) }
         }
     }
 
@@ -1384,12 +1391,12 @@ private fun RowScope.KeyButton(
                 top = if (def.plain) 0.dp else verticalPadding,
                 // منطقة الكرة (ارتفاعها 42dp) تلتصق بأسفل الصف مع حشوة سفلية تجعل مركزها
                 // على بعد plainCenterFromBottom من أسفل الشاشة = نفس مستوى أزرار شريط التنقل
-                bottom = if (def.plain) (plainCenterFromBottom - 21.dp).coerceAtLeast(0.dp) else verticalPadding
+                bottom = if (def.plain) (plainCenterFromBottom - 24.dp).coerceAtLeast(0.dp) else verticalPadding
             ),
         contentAlignment = if (def.plain) (if (endSide) Alignment.BottomEnd else Alignment.BottomStart) else Alignment.TopStart
     ) {
         Box(
-            modifier = (if (def.plain) Modifier.widthIn(max = 96.dp).fillMaxWidth().height(42.dp).offset(y = (21.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
+            modifier = (if (def.plain) Modifier.widthIn(max = 96.dp).fillMaxWidth().height(48.dp).offset(y = (24.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
                 .drawBehind {
                     if (!def.plain) {
                         drawRoundRect(
@@ -1753,7 +1760,7 @@ private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pres
     Box(contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(44.dp)
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -1770,7 +1777,7 @@ private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pres
             contentAlignment = Alignment.Center
         ) {
             if (!def.ringOnly) {
-                KeyContent(def, colors.text, iconSize = 20.dp)
+                KeyContent(def, colors.text, iconSize = 24.dp)
             }
         }
         if (def.badge.isNotEmpty()) {

@@ -90,4 +90,7 @@
     <string name="clip_battery_open_list">السماح بنشاط الخلفية بدون قيود</string>
     <string name="clip_battery_open_app">فتح إعدادات بطارية التطبيق</string>
     <string name="clip_battery_hint">بعض الهواتف، خصوصًا سامسونج، توقف اللوحة بالخلفية فتفوتها عمليات النسخ. اجعل استهلاك البطارية لهذا التطبيق «غير مقيّد»</string>
+    <string name="learned_one">تعلّمت «%1$s»</string>
+    <string name="learned_many">تعلّمت %1$d كلمات جديدة</string>
+    <string name="learned_undo">تراجع</string>
 </resources>

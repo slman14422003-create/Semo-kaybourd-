@@ -18,6 +18,9 @@ import com.semo.keyboard.domain.logic.MathEvaluator
 import com.semo.keyboard.domain.logic.SuggestionEngine
 import com.semo.keyboard.domain.logic.SwipeDecoder
 import com.semo.keyboard.domain.logic.WordLists
+import com.semo.keyboard.domain.logic.InputProfile
+import com.semo.keyboard.domain.logic.LearnFilter
+import com.semo.keyboard.domain.logic.PersonalRank
 import com.semo.keyboard.domain.model.ClipNotice
 import com.semo.keyboard.domain.model.clipFileLabel
 import com.semo.keyboard.domain.model.clipFileMime
@@ -43,6 +46,7 @@ import com.semo.keyboard.domain.model.KeyDefinition
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.KeyboardPage
 import com.semo.keyboard.domain.model.KeyboardUiState
+import com.semo.keyboard.domain.model.SuggestionUi
 import com.semo.keyboard.domain.model.MathResult
 import com.semo.keyboard.domain.model.OneHandMode
 import com.semo.keyboard.domain.model.SemoSettings
@@ -70,6 +74,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -185,6 +190,7 @@ class KeyboardViewModel(
         /** نص نُسخ للتو (شريحة اللصق السريع بشريط الاقتراحات) */
         val freshClip: String? = null,
         val clipNotice: ClipNotice? = null,
+        val learnedNotice: List<String>? = null,
         val pasteProgress: Float? = null,
         val clipEdit: ClipEdit? = null,
         val translate: TranslateUi? = null,
@@ -221,6 +227,37 @@ class KeyboardViewModel(
 
     private val learnedFixes: StateFlow<Map<String, String>> =
         learnedWordsRepository.learnedFixes.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    private val wordScores: StateFlow<Map<String, Double>> =
+        learnedWordsRepository.wordScores.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    private val rankData: StateFlow<LearnedWordsRepository.RankData?> =
+        learnedWordsRepository.rankData.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val profileId = MutableStateFlow(InputProfile.GENERAL)
+
+    private class RankSnapshot(
+        override val version: Long,
+        val scores: Map<String, Double>,
+        val choices: Map<String, Double>,
+        val profile: Map<String, Double>
+    ) : PersonalRank {
+        override fun boost(prefixKey: String, wordKey: String): Double {
+            val strength = scores[wordKey] ?: 0.0
+            val choice = choices["$prefixKey|$wordKey"] ?: 0.0
+            val inProfile = profile[wordKey] ?: 0.0
+            return strength * 30.0 + choice.coerceIn(-3.0, 4.0) * 22.0 + inProfile.coerceIn(0.0, 6.0) * 3.0
+        }
+    }
+
+    @Volatile
+    private var rankVersion = 0L
+
+    private val rank: StateFlow<PersonalRank> =
+        combine(wordScores, rankData, profileId) { scores, data, profile ->
+            RankSnapshot(++rankVersion, scores, data?.choices ?: emptyMap(), data?.profiles?.get(profile) ?: emptyMap())
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, RankSnapshot(0L, emptyMap(), emptyMap(), emptyMap()))
 
     private val blockedKeys: StateFlow<Set<String>> =
         learnedWordsRepository.blocked
@@ -293,6 +330,11 @@ class KeyboardViewModel(
     private val shortcuts: StateFlow<List<TextShortcut>> =
         shortcutsRepository.shortcuts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val suggestionUi: StateFlow<SuggestionUi> =
+        transient.map { SuggestionUi(it.suggestions, it.literal, it.mathResult) }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, SuggestionUi())
+
     val uiState: StateFlow<KeyboardUiState> =
         combine(
             transient,
@@ -339,10 +381,7 @@ class KeyboardViewModel(
                 globeOffsetDp = s.globeOffsetDp,
                 hideButtonMode = s.hideButtonMode,
                 bottomRaiseDp = s.bottomRaiseDp,
-                suggestions = t.suggestions,
-                literal = t.literal,
                 removedWord = t.removedWord,
-                mathResult = t.mathResult,
                 toolbarOpen = t.toolbarOpen,
                 clipItems = clips,
                 nextWord = s.nextWord,
@@ -359,6 +398,7 @@ class KeyboardViewModel(
                 animationSpeed = s.animationSpeed,
                 freshClip = t.freshClip,
                 clipNotice = t.clipNotice,
+                learnedNotice = t.learnedNotice,
                 pasteProgress = t.pasteProgress,
                 clipEdit = t.clipEdit,
                 translate = t.translate,
@@ -377,8 +417,13 @@ class KeyboardViewModel(
         capitalize: Boolean,
         enterKind: EnterKind,
         suggestionsAllowed: Boolean,
-        fieldKind: FieldKind = FieldKind.TEXT
+        fieldKind: FieldKind = FieldKind.TEXT,
+        profile: String = InputProfile.GENERAL
     ) {
+        if (profileId.value != profile) {
+            flushLearning()
+            profileId.value = profile
+        }
         val autoCap = uiState.value.autoCapitalize
         transient.update {
             it.copy(
@@ -475,6 +520,7 @@ class KeyboardViewModel(
         when (action) {
             is KeyAction.Character -> {
                 if (transient.value.freshClip != null) transient.update { it.copy(freshClip = null) }
+                if (transient.value.learnedNotice != null) transient.update { it.copy(learnedNotice = null) }
                 val ch = action.char.first()
                 if (state.autoPairs && tryAutoPair(action.char)) {
                     consumeOneShotShift()
@@ -499,7 +545,7 @@ class KeyboardViewModel(
                         } else {
                             val typedWord = SuggestionEngine.currentWord(before)
                             finishEditWatch(before, typedWord)
-                            learnWord(typedWord)
+                            learnWord(typedWord, before)
                             rememberFinal(before, typedWord)
                         }
                     }
@@ -520,7 +566,7 @@ class KeyboardViewModel(
                 } else {
                     val corrected = applyAutoCorrect(before)
                     val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
-                    learnWord(finalWord)
+                    learnWord(finalWord, if (corrected == null) before else null)
                     learnPair(before, corrected?.original ?: finalWord, finalWord)
                     if (corrected == null) {
                         finishEditWatch(before, finalWord)
@@ -543,7 +589,7 @@ class KeyboardViewModel(
                 if (before != null) {
                     val corrected = applyAutoCorrect(before)
                     val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
-                    learnWord(finalWord)
+                    learnWord(finalWord, if (corrected == null) before else null)
                     learnPair(before, corrected?.original ?: finalWord, finalWord)
                     if (corrected == null) finishEditWatch(before, finalWord) else editWatch = null
                 }
@@ -597,7 +643,8 @@ class KeyboardViewModel(
         ) {
             bridge.deleteSurrounding(pendingUndo.fixed.length + 1)
             bridge.commitText(pendingUndo.original)
-            // المستخدم رجع عن التصحيح فورًا: تعلّم ألّا تُصحَّح هذه الكلمة ثانيةً
+            retractPending(pendingUndo.fixed)
+            learnStrong(pendingUndo.original)
             launchSafe {
                 learnedWordsRepository.ignoreCorrection(pendingUndo.original)
                 learnedWordsRepository.forgetFix(pendingUndo.original)
@@ -645,6 +692,7 @@ class KeyboardViewModel(
         ) {
             editWatch = last
             lastFinal = null
+            retractPending(last.original)
         }
     }
 
@@ -653,6 +701,7 @@ class KeyboardViewModel(
         editWatch = null
         if (finalWord.length < 3 || finalWord == watch.original) return
         if (prefixOf(before, finalWord) != watch.prefix) return
+        launchSafe { learnedWordsRepository.weakenWord(watch.original) }
         learnManualEdit(watch.original, finalWord)
     }
 
@@ -967,6 +1016,7 @@ class KeyboardViewModel(
             if (token.length > word.length && state.smartWriting && ArabicText.isArabicWord(suggestion) && Arabizi.hasDigitSignal(token)) word = token
             learnPair(before, word, suggestion.substringBefore(' '))
             recordFix(word, suggestion.substringBefore(' '))
+            if (word.isNotEmpty()) recordChoice(word, suggestion, transient.value.suggestions)
             bridge.replaceBeforeCursor(word.length, "$suggestion ")
         }
         // تتمة من عدة كلمات: نتعلّم كل كلمة وكل زوج متتالٍ فيها (لا نحفظ العبارة كلها ككلمة واحدة)
@@ -1476,8 +1526,14 @@ class KeyboardViewModel(
         if (word.firstOrNull()?.code?.let { it < 0x0600 } == true) word.lowercase() else word
 
     private val pendingWords = ArrayList<String>()
+    private val pendingStrong = ArrayList<String>()
+    private val pendingSuspects = ArrayList<String>()
     private val pendingPairs = ArrayList<Pair<String, String>>()
+    private val pendingChoices = ArrayList<Triple<String, String, Double>>()
+    private val pendingProfileWords = ArrayList<String>()
+    private val topShown = ConcurrentHashMap<String, String>()
     private var learnFlushJob: Job? = null
+    private var learnedNoticeJob: Job? = null
 
     private fun scheduleLearnFlush() {
         learnFlushJob?.cancel()
@@ -1487,21 +1543,124 @@ class KeyboardViewModel(
         }
     }
 
-    /** يكتب ما تعلّمته اللوحة دفعة واحدة (يُستدعى بعد هدوء الكتابة وعند إخفاء اللوحة) */
     fun flushLearning() {
         learnFlushJob?.cancel()
-        if (pendingWords.isEmpty() && pendingPairs.isEmpty()) return
+        if (pendingWords.isEmpty() && pendingStrong.isEmpty() && pendingSuspects.isEmpty() &&
+            pendingPairs.isEmpty() && pendingChoices.isEmpty() && pendingProfileWords.isEmpty()
+        ) return
         val words = pendingWords.toList()
+        val strong = pendingStrong.toList()
+        val suspects = pendingSuspects.toList()
         val pairs = pendingPairs.toList()
+        val choices = pendingChoices.toList()
+        val profileWords = pendingProfileWords.toList()
+        val profile = profileId.value
         pendingWords.clear()
+        pendingStrong.clear()
+        pendingSuspects.clear()
         pendingPairs.clear()
-        viewModelScope.launch(Dispatchers.Default + safeHandler) { learnedWordsRepository.learnBatch(words, pairs) }
+        pendingChoices.clear()
+        pendingProfileWords.clear()
+        viewModelScope.launch(Dispatchers.Default + safeHandler) {
+            val fresh = learnedWordsRepository.learnBatch(words, pairs, strong, suspects)
+            learnedWordsRepository.applyRank(choices, profile, profileWords)
+            if (fresh.isNotEmpty()) showLearned(fresh)
+        }
     }
 
-    private fun learnWord(word: String) {
+    private fun showLearned(words: List<String>) {
+        transient.update { it.copy(learnedNotice = words.take(LEARNED_NOTICE_MAX)) }
+        learnedNoticeJob?.cancel()
+        learnedNoticeJob = launchSafe {
+            delay(LEARNED_NOTICE_MS)
+            transient.update { it.copy(learnedNotice = null) }
+        }
+    }
+
+    fun undoLearned() {
+        val words = transient.value.learnedNotice ?: return
+        learnedNoticeJob?.cancel()
+        transient.update { it.copy(learnedNotice = null) }
+        viewModelScope.launch(Dispatchers.Default + safeHandler) { learnedWordsRepository.removeWords(words) }
+    }
+
+    private fun scriptCodeOf(script: Script): Int = when (script) {
+        Script.ARABIC -> 1
+        Script.LATIN -> 2
+        else -> 0
+    }
+
+    private fun isTypoLike(word: String, lang: KeyboardLanguage): Boolean {
+        val lower = word.lowercase()
+        return SuggestionEngine.corrections(word, lang, learnedKeys.value, limit = 2, context = "").any {
+            val c = it.lowercase()
+            c != lower && kotlin.math.abs(c.length - lower.length) <= 1 && editDistance(lower, c) <= 1
+        }
+    }
+
+    private fun retractPending(word: String) {
+        val n = normalizeForLearning(word)
+        pendingWords.removeAll { it == n }
+        pendingStrong.removeAll { it == n || it == word }
+        pendingSuspects.removeAll { it == n }
+        pendingPairs.removeAll { it.second == n }
+        pendingProfileWords.removeAll { it == word }
+    }
+
+    private fun learnStrong(word: String) {
+        if (!canLearn() || !LearnFilter.acceptable(word)) return
+        pendingStrong.add(word)
+        flushLearning()
+    }
+
+    private fun settleChoice(finalWord: String) {
+        if (topShown.isEmpty()) return
+        val finalKey = BigDictionary.key(finalWord)
+        val entries = topShown.entries.map { it.key to it.value }.sortedBy { it.first.length }
+        topShown.clear()
+        val first = entries.firstOrNull { it.first.length >= 2 && finalKey.startsWith(it.first) } ?: return
+        if (first.second != finalKey) {
+            pendingChoices.add(Triple(first.first, first.second, -0.5))
+            pendingChoices.add(Triple(first.first, finalKey, 0.5))
+        }
+    }
+
+    private fun recordChoice(prefix: String, chosen: String, shown: List<String>) {
+        val prefixKey = BigDictionary.key(prefix)
+        val chosenKey = BigDictionary.key(chosen.substringBefore(' '))
+        topShown.clear()
+        if (prefixKey.isEmpty() || chosenKey.isEmpty() || !chosenKey.startsWith(prefixKey)) return
+        pendingChoices.add(Triple(prefixKey, chosenKey, 1.0))
+        val index = shown.indexOf(chosen)
+        for (i in 0 until index) {
+            val other = shown[i]
+            if (other.contains(' ')) continue
+            val otherKey = BigDictionary.key(other)
+            if (otherKey.isNotEmpty() && otherKey != chosenKey && otherKey.startsWith(prefixKey)) {
+                pendingChoices.add(Triple(prefixKey, otherKey, -0.5))
+            }
+        }
+        scheduleLearnFlush()
+    }
+
+    private fun learnWord(word: String, before: String? = null) {
         if (!canLearn() || word.length < 3) return
+        settleChoice(word)
+        if (!LearnFilter.acceptable(word)) return
+        pendingProfileWords.add(word)
+        if (before != null && LearnFilter.looksLikeName(word, before)) {
+            pendingStrong.add(word)
+            flushLearning()
+            return
+        }
         val normalized = normalizeForLearning(word)
-        pendingWords.add(normalized)
+        val lang = SuggestionEngine.languageOf(word, uiState.value.language)
+        when {
+            !BigDictionary.isLoaded(lang) -> pendingWords.add(normalized)
+            SuggestionEngine.isKnown(word, lang, learnedKeys.value) -> pendingWords.add(normalized)
+            isTypoLike(word, lang) -> pendingSuspects.add(normalized)
+            else -> pendingStrong.add(normalized)
+        }
         scheduleLearnFlush()
     }
 
@@ -1531,6 +1690,7 @@ class KeyboardViewModel(
     }
 
     private var refreshJob: Job? = null
+    private var lastRefreshRequest = 0L
 
     private val suggestExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "semo-suggest").apply { priority = Thread.NORM_PRIORITY - 1 }
@@ -1549,8 +1709,11 @@ class KeyboardViewModel(
      */
     private fun refreshSuggestions() {
         refreshJob?.cancel()
+        val now = android.os.SystemClock.uptimeMillis()
+        val burst = now - lastRefreshRequest < 70L
+        lastRefreshRequest = now
         refreshJob = launchSafe {
-            delay(30)
+            delay(if (burst) 55L else 30L)
             val state = uiState.value
             val t = transient.value
             if (!t.suggestionsAllowed || (!state.suggestionsEnabled && !state.mathResults)) {
@@ -1629,7 +1792,9 @@ class KeyboardViewModel(
                 }
                 else -> emptyList()
             }
-            return SuggestionResult(if (emoji != null) listOf(emoji) + base.take(2) else base.take(3), "", null, clear)
+            topShown.clear()
+            val scoped = LearnFilter.keepSameScript(base, prevWord.ifEmpty { null }, scriptCodeOf(state.language.script))
+            return SuggestionResult(if (emoji != null) listOf(emoji) + scoped.take(2) else scoped.take(3), "", null, clear)
         }
         val language = SuggestionEngine.languageOf(word, state.language)
         val ctxWords = lastWords(before.dropLast(word.length), 2)
@@ -1637,8 +1802,9 @@ class KeyboardViewModel(
         val ctxPrev2 = if (ctxWords.size >= 2) ctxWords[0] else ""
         var completions = SuggestionEngine.suggest(
             word, language, learnedWords.value, limit = 3 + SUGGEST_EXTRA,
-            context = ctxPrev, bigrams = learnedBigrams.value, context2 = ctxPrev2
+            context = ctxPrev, bigrams = learnedBigrams.value, context2 = ctxPrev2, rank = rank.value
         ).filter { !it.equals(word, ignoreCase = true) && allowed(it) }.take(3)
+        if (word.length >= 2 && completions.isNotEmpty()) topShown[BigDictionary.key(word)] = BigDictionary.key(completions[0])
         // الكلمة غير معروفة وما كفت الإكمالات: نكمّل بتصحيحات «هل تقصد»
         if (completions.size < 2 && state.spellCheck) {
             completions = (completions + SuggestionEngine.corrections(word, language, learnedKeys.value, limit = 2 + SUGGEST_EXTRA, context = ctxPrev)
@@ -1647,6 +1813,7 @@ class KeyboardViewModel(
         }
         val learnedFix = learnedFixes.value[word.lowercase()]?.let { caseLike(word, it) }?.takeIf { it != word && allowed(it) }
         if (learnedFix != null) completions = (listOf(learnedFix) + completions).distinctBy { it.lowercase() }
+        completions = LearnFilter.keepSameScript(completions, word, 0)
         // تتمة الجملة: من أفضل إكمال نكمل بكلمات مرجّحة (الخانة الثانية) بدل إكمال ثانٍ
         var list = completions.take(2)
         if (completions.isNotEmpty() && state.nextWord) {
@@ -1729,6 +1896,8 @@ class KeyboardViewModel(
         const val SUGGEST_READ_MS = 400L
         const val FRESH_CLIP_MS = 180_000L
         const val CLIP_NOTICE_MS = 7_000L
+        const val LEARNED_NOTICE_MS = 4_000L
+        const val LEARNED_NOTICE_MAX = 4
         const val LONG_PASTE_NO_SUGGEST = 4_000
         const val CLIP_EDIT_MAX = 1_000_000
         const val VOICE_BIAS_MAX = 120

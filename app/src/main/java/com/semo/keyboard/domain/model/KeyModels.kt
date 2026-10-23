@@ -319,6 +319,14 @@ data class SemoSettings(
     val hideAppIcon: Boolean = false
 )
 
+/** Fast-changing strip content, kept out of [KeyboardUiState] so a suggestion update does not recompose the whole keyboard. */
+@Immutable
+data class SuggestionUi(
+    val suggestions: List<String> = emptyList(),
+    val literal: String = "",
+    val mathResult: MathResult? = null
+)
+
 @Immutable
 data class KeyboardUiState(
     val page: KeyboardPage = KeyboardPage.LETTERS,
@@ -362,12 +370,7 @@ data class KeyboardUiState(
     val bottomRaiseDp: Float = 14f,
     /** نص نُسخ للتو: يظهر كشريحة لصق سريعة بشريط الاقتراحات لمدة قصيرة */
     val freshClip: String? = null,
-    /** اقتراحات الإكمال (بدون الكلمة المكتوبة نفسها) */
-    val suggestions: List<String> = emptyList(),
-    /** الكلمة الجارية كما كُتبت: تظهر بين علامتي اقتباس بأول خانة (مثل iOS) */
-    val literal: String = "",
     val removedWord: String? = null,
-    val mathResult: MathResult? = null,
     val toolbarOpen: Boolean = false,
     val clipItems: List<ClipItem> = emptyList(),
     val clipNotice: ClipNotice? = null,

@@ -90,4 +90,7 @@
     <string name="clip_battery_open_list">Allow unrestricted background activity</string>
     <string name="clip_battery_open_app">Open the app battery settings</string>
     <string name="clip_battery_hint">Some phones, especially Samsung, stop the keyboard in the background and then copies are missed. Set battery usage for this app to Unrestricted</string>
+    <string name="learned_one">Learned \u201C%1$s\u201D</string>
+    <string name="learned_many">Learned %1$d new words</string>
+    <string name="learned_undo">Undo</string>
 </resources>

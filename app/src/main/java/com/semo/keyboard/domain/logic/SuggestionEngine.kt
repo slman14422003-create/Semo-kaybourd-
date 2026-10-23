@@ -61,13 +61,14 @@ object SuggestionEngine {
         limit: Int = 3,
         context: String = "",
         bigrams: Map<String, List<String>> = emptyMap(),
-        context2: String = ""
+        context2: String = "",
+        rank: PersonalRank? = null
     ): List<String> {
         if (prefix.isEmpty()) return emptyList()
         val key = "${language.name}|$prefix|$context|$context2|$limit|${ModelVersion.current()}|" +
-            "${System.identityHashCode(learned)}|${learned.size}|${System.identityHashCode(bigrams)}|${bigrams.size}"
+            "${System.identityHashCode(learned)}|${learned.size}|${System.identityHashCode(bigrams)}|${bigrams.size}|${rank?.version ?: -1L}"
         suggestCache.get(key)?.let { return it }
-        val result = suggestUncached(prefix, language, learned, limit, context, bigrams, context2)
+        val result = suggestUncached(prefix, language, learned, limit, context, bigrams, context2, rank)
         suggestCache.put(key, result)
         return result
     }
@@ -79,7 +80,8 @@ object SuggestionEngine {
         limit: Int,
         context: String,
         bigrams: Map<String, List<String>>,
-        context2: String
+        context2: String,
+        rank: PersonalRank?
     ): List<String> {
         if (prefix.isEmpty()) return emptyList()
         val pk = BigDictionary.key(prefix)
@@ -138,6 +140,10 @@ object SuggestionEngine {
         // 6) قائمة الكلمات الإنكليزية الصالحة (نحو 114 ألف) تكمّل لو لسا ما اكتملت الاقتراحات
         if (cands.size < limit && language == KeyboardLanguage.ENGLISH) {
             ValidWords.english?.withPrefix(p, limit)?.forEach { w -> add(w, 1.0) }
+        }
+
+        if (rank != null) {
+            for ((k, c) in cands) c.score += rank.boost(pk, k)
         }
 
         val result = ArrayList(cands.values.sortedByDescending { it.score }.take(limit).map { matchCase(prefix, it.word) })

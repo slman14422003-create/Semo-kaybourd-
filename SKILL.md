@@ -123,3 +123,21 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Long text: ClipTextStore writes gzip (.gz), reads both .gz and legacy .txt. InputBridge gained commitFile, copyFileToClipboard, copyLargeTextToClipboard (file URI above 150k chars) and cancelPaste. commitChunked adapts chunk size to the target app (45 ms goal) and reports progress through KeyboardViewModel.onPasteProgress (strip with cancel for texts of 40k chars or more).
 - Settings page also has battery rows (ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS and app details) because Samsung kills the IME process in the background.
 - Not yet verified by a Gradle build; check CI output first if something fails.
+
+## Learning and suggestion quality (v3.22.0, versionCode 57)
+- Why one use did not stick: a learned word is trusted (exempt from autocorrect) only at effective strength 0.7, which took about 3 uses. Unknown, non-typo-like words are now learned with weight 3 (trusted at once); known words keep weight 1.
+- KeyboardViewModel.learnWord(word, before) classifies: name (LearnFilter.looksLikeName) or far-from-dictionary word -> pendingStrong (flushed at once for names), typo-like word (isTypoLike, edit distance 1 from a correction) -> pendingSuspects (promoted on second use via learn_candidates), known word -> pendingWords. LearnFilter.acceptable rejects digits, mixed scripts, repeats. Dictionary not loaded -> old behavior.
+- Autocorrect undo (handleBackspace): retractPending(fixed), learnStrong(original), ignoreCorrection, forgetFix. First backspace into the last finished word retracts it from pending lists; replacing it calls weakenWord(original).
+- LearnedEntry has uses (optional fifth field, estimated from strength for old data); ForgettingCurve.halfLifeHours doubles per use up to 5 doublings.
+- Rank: PersonalRank (domain/logic/PersonalRank.kt) implemented by KeyboardViewModel.RankSnapshot from wordScores, rank_choices (prefix to word, 30 day half-life) and rank_profiles (per InputProfile). SuggestionEngine.suggest(rank = ...) adds boost and includes rank.version in the cache key. Service passes InputProfile.classify(packageName, search) to onStartInput.
+- Learned notice: transient learnedNotice list shown on the strip with Undo (undoLearned), cleared on typing or after 4 s. Strings learned_one, learned_many, learned_undo.
+- Script filter on next-word and completions: LearnFilter.keepSameScript.
+- Not yet verified by a Gradle build; check CI output first if something fails.
+
+## Plain line toolbar, bigger circles, Samsung emoji order (v3.23.0, versionCode 58)
+- Top strip tools (KeyboardScreen StripIconButton): no colored tint, no gradient or border; plain outline icons (23dp) in the text color, only the active tool gets a soft chip background. toolTint removed.
+- Bottom circles (globe and hide ring): 36dp to 44dp, icon 20dp to 24dp, container 42dp to 48dp with the same center (24dp constants in KeyboardScreen util row and globeMax).
+- Emoji order: domain/logic/EmojiOrder.kt (generated from the Unicode CLDR order) regroups EmojiData plus EmojiExtra into 8 sections like Samsung: Smileys & People, Nature, Food, Activities, Travel, Objects, Symbols, Flags. Hearts and People are merged into the first section, skin tone and hair components are not shown as standalone emoji, anything missing from the order list is appended to its old group. Wired in KeyboardLayoutProvider.emojiCategories; icon map in Panels.emojiCategoryIcon accepts "Smileys & People".
+- Not yet verified by a Gradle build; check CI output first if something fails.
+- Perf pass: suggestions, literal and math result moved out of KeyboardUiState into SuggestionUi (KeyboardViewModel.suggestionUi), collected only by SuggestionSlots, so a suggestion update no longer re-emits uiState or recomposes the keyboard root. refreshSuggestions debounce is 30ms, 55ms during fast typing bursts (less cross-process text reads). Page-switch row stagger 22ms/340ms to 14ms/280ms.
+- Not done: local text tracking to skip text reads (needs device testing), generated baseline profile (needs Macrobenchmark on a device).

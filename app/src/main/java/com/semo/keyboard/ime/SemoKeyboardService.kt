@@ -877,7 +877,11 @@ class SemoKeyboardService :
         voiceComposing = false
         voicePrefixValue = null
         viewModel.setNavSetting(detectNavButtons())
-        viewModel.onStartInput(page, startCaps == true, enterKindFor(info), !noSuggestions, fieldKind)
+        val startEnter = enterKindFor(info)
+        viewModel.onStartInput(
+            page, startCaps == true, startEnter, !noSuggestions, fieldKind,
+            com.semo.keyboard.domain.logic.InputProfile.classify(info?.packageName, startEnter == EnterKind.SEARCH)
+        )
         if (startCaps == null) {
             mainHandler.removeCallbacks(cursorMovedTask)
             mainHandler.postDelayed(cursorMovedTask, 150)
