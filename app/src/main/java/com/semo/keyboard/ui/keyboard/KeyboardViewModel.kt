@@ -382,6 +382,7 @@ class KeyboardViewModel(
                 hideButtonMode = s.hideButtonMode,
                 bottomRaiseDp = s.bottomRaiseDp,
                 manualBottomPos = s.manualBottomPos,
+                autoFit = s.autoFit,
                 globeDx = s.globeDx,
                 globeDy = s.globeDy,
                 hideDx = s.hideDx,

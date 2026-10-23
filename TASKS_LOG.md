@@ -289,3 +289,8 @@
 - GitHub Action جديد (.github/workflows/update-ar-fix.yml): شهريًا أو يدويًا ينزّل قائمة تردّدات، يشغّل tools/build_ar_fix.py ثم tools/check_ar_fix.py، ويفتح PR يحدّث assets/dict/ar_fix_auto.txt للمراجعة. لا دمج تلقائي. يتطلب تفعيل «Allow GitHub Actions to create and approve pull requests» بإعدادات الريبو.
 - AutoCorrect يحمّل ar_fix_auto.txt (المولَّد) ثم ar_fix.txt (اليدوي) فوقه، فيتغلّب اليدوي.
 - ar_extra.txt: +76 كلمة لهجية (بدكم، قديش، شفيك، هالحين، معليش...) حتى لا تُعامَل كأخطاء ولا تُستبدل.
+
+## 3.24.0 (versionCode 59) - not built here, check CI
+- Auto fit to screen: new switch (default on) in Appearance. Key height is fitted to a share of screen height (portrait, landscape, tablet), and the globe and hide buttons get their raise and inward offset automatically from the display corner radius (API 31+) and the navigation style. Manual positions still take priority. Logic in domain/logic/AutoFit.kt.
+- More Arabic dictionaries: Downloads page has a new section with five optional packs (Leipzig Wikipedia 1M, Leipzig news 1M, Ayaspell Hunspell, Arabic Wiktionary titles, Arabic Wikipedia titles). Words are stored as sorted 64-bit hashes (memory mapped, ExtraWords) used for spell checks and known-word tests; frequency packs also add their top 60k words to the Arabic suggestion dictionary. Code in data/ArabicPacks.kt.
+- Sources and URLs could not be checked in this environment (no network).

@@ -123,6 +123,7 @@ import com.semo.keyboard.data.ClipLimits
 import com.semo.keyboard.domain.model.ClipNotice
 import com.semo.keyboard.domain.model.isClipFile
 import com.semo.keyboard.domain.model.clipFileSize
+import com.semo.keyboard.domain.logic.AutoFit
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.BackspaceSpeed
 import com.semo.keyboard.domain.model.HoldDelay
@@ -218,11 +219,18 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
-    val metrics = remember(state.style, state.size, state.keySpacing, state.keyboardScale, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow) {
+    val metrics = remember(state.style, state.size, state.keySpacing, state.keyboardScale, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow, state.autoFit) {
         // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
         val width = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
         val base = keyMetrics(state.style, state.size, width, state.keySpacing, state.keyboardScale)
-        if (screenWidthDp > screenHeightDp) {
+        if (state.autoFit) {
+            val rowsCount = if (state.numberRow) 5f else 4f
+            val keyH = AutoFit.keyHeight(
+                screenWidthDp, screenHeightDp, base.keyHeight.value, base.rowSpacing.value,
+                base.stripHeight.value, base.utilHeight.value, rowsCount
+            )
+            base.copy(keyHeight = keyH.dp)
+        } else if (screenWidthDp > screenHeightDp) {
             // الوضع الأفقي: العرض كبير فكانت المفاتيح تطلع بأقصى ارتفاع وتغطي معظم الشاشة.
             // نحصر ارتفاع اللوحة بحوالي نصف الشاشة كي يبقى الحقل النصي ظاهرًا.
             val rowsCount = if (state.numberRow) 5f else 4f
@@ -241,11 +249,15 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // حيث تقع هذه الأيقونات بمستوى مؤشر الرجوع للرئيسية)، فتتنسّق مع شريط One UI السفلي.
     val edgeToEdgeIme = Build.VERSION.SDK_INT >= 35
     val density = LocalDensity.current
+    val context = LocalContext.current
     val navInset = if (edgeToEdgeIme) with(density) { WindowInsets.navigationBars.getBottom(density).coerceAtLeast(0).toDp() } else 0.dp
     val tappableBottom = runCatching { WindowInsets.tappableElement.getBottom(density) }.getOrDefault(0)
     val insetNavButtons = tappableBottom > 0 || (edgeToEdgeIme && navInset >= 40.dp)
     LaunchedEffect(insetNavButtons) { viewModel.setNavInset(insetNavButtons) }
     val navButtons = state.navButtons
+    val cornerDp = remember(configuration.screenWidthDp, configuration.screenHeightDp, configuration.orientation, density.density) {
+        AutoFit.cornerRadiusDp(context, density.density)
+    }
     // صف الأيقونات بنفس ارتفاع شريط التنقل بالضبط، وأيقونة الكرة تتوسّط ارتفاعه تمامًا، لأن النظام
     // يوسّط أزرار الشريط (زر إخفاء الكيبورد) بنفس المنتصف. ويمكن للمستخدم تعديل الفرق الصغير
     // بين الأجهزة من الإعدادات (globeOffsetDp).
@@ -255,11 +267,12 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     val navCenter = utilHeight / 2
     // رفع الدائرتين عن أسفل الشاشة: نزيد ارتفاع الصف الأخير بمقدار الرفع ونرفع مركزيهما معه
     val manual = state.manualBottomPos
-    val raise = if (manual) 0.dp else state.bottomRaiseDp.dp
+    val autoPos = state.autoFit && !manual
+    val raise = if (manual) 0.dp else if (autoPos) AutoFit.bottomRaise(cornerDp, navButtons).dp else state.bottomRaiseDp.dp
     val manualExtra = if (manual) maxOf(state.globeDy, state.hideDy).dp else 0.dp
     val utilRowHeight = if (navButtons) 0.dp else utilHeight + raise + manualExtra
     val globeMax = (utilRowHeight - 24.dp).coerceAtLeast(24.dp)
-    val globeCenter = (navCenter + raise + (if (manual) 0f else state.globeOffsetDp).dp).coerceAtLeast(24.dp).coerceAtMost(globeMax)
+    val globeCenter = (navCenter + raise + (if (manual || autoPos) 0f else state.globeOffsetDp).dp).coerceAtLeast(24.dp).coerceAtMost(globeMax)
     // صفحات الإيموجي/الحافظة/التحرير: شريطها السفلي كان يقع تحت زر إخفاء الكيبورد (يتداخل مع لمس النظام)،
     // فنحجز منطقة شريط التنقل أسفل الصفحة ونقصّر المحتوى بنفس المقدار
     val bottomReserve = if (edgeToEdgeIme && !navButtons) utilHeight else 0.dp
@@ -351,8 +364,10 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         TouchTuning(state.holdDelay.millis, state.backspaceSpeed, state.spaceBarAction)
     }
 
-    val bottomPos = remember(state.manualBottomPos, state.globeDx, state.globeDy, state.hideDx, state.hideDy) {
-        BottomPos(state.manualBottomPos, state.globeDx, state.globeDy, state.hideDx, state.hideDy)
+    val autoInset = AutoFit.bottomInset(cornerDp, navButtons)
+    val bottomPos = remember(state.manualBottomPos, state.autoFit, autoInset, state.globeDx, state.globeDy, state.hideDx, state.hideDy) {
+        if (state.autoFit && !state.manualBottomPos) BottomPos(true, autoInset, 0f, autoInset, 0f)
+        else BottomPos(state.manualBottomPos, state.globeDx, state.globeDy, state.hideDx, state.hideDy)
     }
 
     CompositionLocalProvider(

@@ -21,12 +21,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.semo.keyboard.R
+import com.semo.keyboard.data.ArabicPacks
 import com.semo.keyboard.data.DictionaryManager
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.KeyboardLanguage
 import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.ime.VoskModelManager
 import com.semo.keyboard.ui.L
+import com.semo.keyboard.ui.appString
 import com.semo.keyboard.ui.theme.SemoPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,6 +43,7 @@ internal fun DownloadsPage(repo: SettingsRepository, settings: SemoSettings, onB
         StorageSummarySection()
         VoiceDownloadsBlock()
         LanguageDownloadsBlock(repo, settings)
+        ArabicPacksBlock()
         Section(L("الكاش")) {
             CacheBlock(repo, settings)
         }
@@ -57,7 +60,8 @@ private fun StorageSummarySection() {
     LaunchedEffect(voiceStates, active) {
         withContext(Dispatchers.IO) {
             voiceBytes = VoskModelManager.totalInstalledBytes(context)
-            wordBytes = KeyboardLanguage.values().sumOf { DictionaryManager.downloadedBytes(context, it) }
+            wordBytes = KeyboardLanguage.values().sumOf { DictionaryManager.downloadedBytes(context, it) } +
+                ArabicPacks.totalBytes(context)
         }
     }
     Section(L("المساحة المستعملة")) {
@@ -151,6 +155,90 @@ internal fun LanguageDownloadsBlock(repo: SettingsRepository, settings: SemoSett
                         scope.launch {
                             withContext(Dispatchers.IO) { DictionaryManager.delete(context, lang) }
                             DictionaryManager.lastResult.value = "${L("حُذف ما نُزِّل للغة ")}${lang.nativeName}"
+                            refresh++
+                        }
+                    }
+                }
+            }
+        }
+        if (result.isNotEmpty() && active == null) {
+            Text(result, color = SemoPalette.TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun ArabicPacksBlock() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val active by ArabicPacks.activePack.collectAsState()
+    val progress by ArabicPacks.progressText.collectAsState()
+    val result by ArabicPacks.lastResult.collectAsState()
+    var refresh by remember { mutableStateOf(0) }
+    val connecting = appString(R.string.packs_connecting)
+    val installedLabel = appString(R.string.packs_installed)
+    val notInstalledLabel = appString(R.string.packs_not_installed)
+    val wordsLabel = appString(R.string.packs_words)
+    val doneLabel = appString(R.string.packs_done)
+    val failedLabel = appString(R.string.packs_failed)
+    val deletedLabel = appString(R.string.packs_deleted)
+    Section(appString(R.string.packs_section)) {
+        Text(
+            appString(R.string.packs_intro),
+            color = SemoPalette.TextHint,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(14.dp)
+        )
+        ArabicPacks.all.forEach { pack ->
+            Divider()
+            val installed = remember(refresh, active) { ArabicPacks.isInstalled(context, pack) }
+            val bytes = remember(refresh, active) { ArabicPacks.installedBytes(context, pack) }
+            val count = remember(refresh, active) { if (installed) ArabicPacks.wordCount(context, pack) else 0 }
+            val running = active == pack.id
+            val busy = active != null
+            val packTitle = appString(pack.titleRes)
+            val state = when {
+                running -> progress.ifEmpty { connecting }
+                installed -> "$installedLabel · $count $wordsLabel · " + Formatter.formatShortFileSize(context, bytes)
+                else -> notInstalledLabel
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconBadge(R.drawable.ic_set_dictionary, if (installed) IconGreen else IconBlue)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(packTitle, color = SemoPalette.TextPrimary, fontSize = 15.sp)
+                    Text(appString(pack.descRes), color = SemoPalette.TextHint, fontSize = 12.sp, lineHeight = 17.sp)
+                    Text(state, color = SemoPalette.TextSecondary, fontSize = 12.sp, lineHeight = 17.sp)
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 14.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SolidButton(
+                    text = if (running) appString(R.string.packs_downloading) else if (installed) appString(R.string.packs_update) else appString(R.string.packs_download),
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    scope.launch {
+                        val outcome = withContext(Dispatchers.IO) { ArabicPacks.download(context, pack) { } }
+                        outcome.onSuccess { n ->
+                            ArabicPacks.lastResult.value = "$doneLabel: $packTitle · $n $wordsLabel"
+                        }.onFailure {
+                            ArabicPacks.lastResult.value = failedLabel
+                        }
+                        refresh++
+                    }
+                }
+                if (installed) {
+                    SolidButton(text = appString(R.string.packs_delete), enabled = !busy, modifier = Modifier.weight(1f)) {
+                        scope.launch {
+                            withContext(Dispatchers.IO) { ArabicPacks.delete(context, pack) }
+                            ArabicPacks.lastResult.value = deletedLabel
                             refresh++
                         }
                     }

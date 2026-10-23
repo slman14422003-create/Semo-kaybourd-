@@ -98,6 +98,7 @@ object DictionaryManager {
         val all = LinkedHashSet<String>()
         all.addAll(readCore(context, language))
         all.addAll(downloaded)
+        if (language == KeyboardLanguage.ARABIC) all.addAll(ArabicPacks.rankedWords(context))
         return all.toList()
     }
 
@@ -137,6 +138,7 @@ object DictionaryManager {
         appContext = app
         loadValidWords(app)
         val unlocked = app.isUserStorageUnlocked()
+        if (language == KeyboardLanguage.ARABIC) ArabicPacks.attach(app)
 
         val wf = wordsFile(app, language)
         val downloaded = if (unlocked && wf.exists()) {

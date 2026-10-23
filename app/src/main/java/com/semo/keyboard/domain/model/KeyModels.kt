@@ -290,6 +290,7 @@ data class SemoSettings(
     /** رفع دائرتي الصف السفلي عن أسفل الشاشة (dp) كي لا تلتصقا بشريط التنقل */
     val bottomRaiseDp: Float = 0f,
     val manualBottomPos: Boolean = false,
+    val autoFit: Boolean = true,
     val globeDx: Float = 0f,
     val globeDy: Float = 0f,
     val hideDx: Float = 0f,
@@ -374,6 +375,7 @@ data class KeyboardUiState(
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
     val bottomRaiseDp: Float = 0f,
     val manualBottomPos: Boolean = false,
+    val autoFit: Boolean = true,
     val globeDx: Float = 0f,
     val globeDy: Float = 0f,
     val hideDx: Float = 0f,

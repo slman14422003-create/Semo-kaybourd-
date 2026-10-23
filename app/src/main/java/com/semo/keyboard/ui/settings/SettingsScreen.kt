@@ -603,6 +603,11 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             ThemePickerBlock(repo, settings)
         }
         Section(L("الشكل")) {
+            SwitchRow(
+                com.semo.keyboard.ui.appString(R.string.auto_fit_title), R.drawable.ic_set_height, IconTeal, settings.autoFit,
+                subtitle = com.semo.keyboard.ui.appString(R.string.auto_fit_sub)
+            ) { scope.launch { repo.setAutoFit(it) } }
+            Divider()
             Block(L("الوضع (فاتح / داكن)"), R.drawable.ic_set_theme, IconGray) {
                 Segmented(
                     options = listOf(ThemeMode.SYSTEM to L("حسب النظام"), ThemeMode.LIGHT to L("فاتح"), ThemeMode.DARK to L("داكن")),
@@ -736,6 +741,8 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             ) { scope.launch { repo.setManualBottomPos(it) } }
             if (settings.manualBottomPos) {
                 BottomPositionPreview(settings, repo)
+            } else if (settings.autoFit) {
+                Hint(com.semo.keyboard.ui.appString(R.string.auto_fit_bottom_hint))
             } else {
             var raise by remember(settings.bottomRaiseDp) { mutableFloatStateOf(settings.bottomRaiseDp) }
             SliderRow(

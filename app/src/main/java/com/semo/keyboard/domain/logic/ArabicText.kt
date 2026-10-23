@@ -56,6 +56,7 @@ object ArabicText {
     fun endingFix(word: String, language: com.semo.keyboard.domain.model.KeyboardLanguage): String? {
         if (word.length < 4) return null
         if (BigDictionary.rankOf(word, language) >= 0) return null
+        if (com.semo.keyboard.data.ExtraWords.contains(BigDictionary.key(word), language)) return null
         val stem = word.dropLast(1)
         val candidate = when (word.last()) {
             'ه' -> stem + 'ة'

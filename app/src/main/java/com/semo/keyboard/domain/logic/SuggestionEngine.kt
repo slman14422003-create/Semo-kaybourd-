@@ -205,6 +205,7 @@ object SuggestionEngine {
         val k = BigDictionary.key(word)
         if (k.isEmpty() || k in learnedKeys) return true
         if (BigDictionary.rankOf(k, language) >= 0) return true
+        if (com.semo.keyboard.data.ExtraWords.contains(k, language)) return true
         if (language == KeyboardLanguage.ENGLISH && ValidWords.english?.contains(k) == true) return true
         if (language.script == Script.ARABIC && k.length >= 4) {
             for (stem in ArabicText.stems(k)) {
