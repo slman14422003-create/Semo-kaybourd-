@@ -410,6 +410,7 @@ class SemoKeyboardService :
     override fun onCreate() {
         savedStateController.performRestore(null)
         super.onCreate()
+        glassWindow.attach()
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
         clickPlayer = KeyClickPlayer(applicationContext)
@@ -798,7 +799,7 @@ class SemoKeyboardService :
     override fun onCreateInputView(): View {
         val composeView = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnLifecycleDestroyed(lifecycle))
-            setContent { KeyboardScreen(viewModel = viewModel, onChrome = ::applyChrome) }
+            setContent { KeyboardScreen(viewModel = viewModel, onChrome = ::applyChrome, blurEnabled = glassWindow.blurEnabled) }
         }
         installViewTreeOwners(composeView)
         window?.window?.decorView?.let { installViewTreeOwners(it) }
@@ -808,6 +809,8 @@ class SemoKeyboardService :
         return composeView
     }
 
+    private val glassWindow = GlassWindowController(this)
+    private val GLASS_BLUR_DP = 28
     @Volatile private var overlayInsets = false
 
     /**
@@ -835,17 +838,14 @@ class SemoKeyboardService :
             overlayInsets = overlay
             window?.window?.decorView?.requestLayout()
         }
+        val glass = android.graphics.Color.alpha(panelColor) < 250
+        glassWindow.update(glass, (GLASS_BLUR_DP * resources.displayMetrics.density).toInt())
         if (panelColor == chromeColor && dark == chromeDark) return
         val w = window?.window ?: return
         chromeColor = panelColor
         chromeDark = dark
         runCatching {
-            val glass = android.graphics.Color.alpha(panelColor) < 250
             w.navigationBarColor = if (glass) android.graphics.Color.TRANSPARENT else panelColor
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val canBlur = glass && runCatching { getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)
-                w.setBackgroundBlurRadius(if (canBlur) 70 else 0)
-            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) w.isNavigationBarContrastEnforced = false
             WindowCompat.getInsetsController(w, w.decorView).isAppearanceLightNavigationBars = !dark
         }
@@ -970,6 +970,7 @@ class SemoKeyboardService :
     }
 
     override fun onDestroy() {
+        glassWindow.detach()
         runCatching {
             (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipListener)
         }

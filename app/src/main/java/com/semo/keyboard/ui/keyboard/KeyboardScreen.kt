@@ -208,19 +208,19 @@ private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
  *
  * [onChrome] تُبلّغ الخدمة بلون اللوحة ليُلوَّن به شريط التنقل ويُضبط تباين أيقوناته.
  */
+private val NoWindowBlur = kotlinx.coroutines.flow.MutableStateFlow(false)
+
 @Composable
-fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }) {
+fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> },
+    blurEnabled: kotlinx.coroutines.flow.StateFlow<Boolean> = NoWindowBlur
+) {
     val state by viewModel.uiState.collectAsState()
     val isDark = when (state.themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val blurContext = LocalContext.current
-    val blurAvailable = remember {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            runCatching { blurContext.getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)
-    }
+    val blurAvailable by blurEnabled.collectAsState()
     val colors = remember(state.style, isDark, state.keyboardTheme, blurAvailable, state.glassOpacity, state.glassOverlay) {
         // Without real background blur the panel gets extra opacity so keys stay readable over busy content
         val level = if (blurAvailable || !state.glassOverlay) state.glassOpacity else (state.glassOpacity + 0.25f).coerceAtMost(1f)
@@ -390,131 +390,124 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean, Boolea
         LocalKeyboardScale provides state.keyboardScale,
         LocalAnimScale provides animScale
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (colors.glass) {
-                        Modifier.drawBehind {
-                            val img = glassBackdrop
-                            if (img != null) {
-                                drawImage(
-                                    image = img,
-                                    dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)),
-                                    alpha = backdropAlpha,
-                                    filterQuality = androidx.compose.ui.graphics.FilterQuality.Medium
-                                )
-                            }
-                            drawRect(colors.panel)
-                        }
-                    } else Modifier.background(colors.panel, panelShape)
-                )
-                .padding(bottom = extraBottom)
+        FrostedGlassKeyboardContainer(
+            enabled = colors.glass,
+            dark = isDark,
+            tint = colors.panel,
+            backdrop = glassBackdrop,
+            backdropAlpha = backdropAlpha,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            if (state.oneHand == OneHandMode.RIGHT) {
-                OneHandSide(state, colors, sideHeight, viewModel)
-            }
-
-            Column(
+            Row(
                 modifier = Modifier
-                    .weight(if (oneHanded) 0.84f else 1f)
-                    .padding(horizontal = metrics.sidePadding)
+                    .fillMaxWidth()
+                    .padding(bottom = extraBottom)
             ) {
-                if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
-                    AnimatedContent(
-                        targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else if (state.emojiSearch != null) 4 else 0,
-                        transitionSpec = {
-                            (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) +
-                                androidx.compose.animation.slideInVertically(scaledTween(animScale, 300, easing = IosPush)) { it / 3 }) togetherWith
-                                (fadeOut(scaledTween(animScale, 100)) +
-                                    androidx.compose.animation.slideOutVertically(scaledTween(animScale, 220, easing = IosPush)) { -it / 3 }) using
-                                SizeTransform(clip = true) { _, _ -> snap() }
-                        },
-                        label = "strip"
-                    ) { mode ->
-                        when (mode) {
-                            1 -> ClipEditBar(state, colors, metrics.stripHeight, viewModel)
-                            2 -> TranslateBar(state, colors, metrics.stripHeight, viewModel)
-                            3 -> VoiceBar(state, colors, metrics.stripHeight, viewModel)
-                            4 -> EmojiSearchBar(state, colors, metrics.stripHeight, viewModel)
-                            else -> TopStrip(state, colors, metrics, viewModel)
-                        }
-                    }
+                if (state.oneHand == OneHandMode.RIGHT) {
+                    OneHandSide(state, colors, sideHeight, viewModel)
                 }
 
-                val shownPage = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
-                    state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE) state.page else KeyboardPage.LETTERS
-                Box(modifier = Modifier.fillMaxWidth().then(Modifier.iosEnter(shownPage, shownPage == KeyboardPage.LETTERS))) {
-                when (shownPage) {
-                    KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
-                    KeyboardPage.CLIPBOARD -> ClipboardPanel(
-                        state, colors,
-                        (panelHeight + metrics.stripHeight + 96.dp).coerceAtMost((screenHeightDp * 0.6f).dp),
-                        bottomReserve, viewModel
-                    )
-                    KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
-                    KeyboardPage.TRANSLATE -> TranslatePanel(state, colors, panelHeight - bottomReserve, viewModel)
-                    KeyboardPage.CALC -> CalcPanel(
-                        state, colors,
-                        // نفس ارتفاع صفحة الحروف (الشريط + المفاتيح) كي لا يرتفع الكيبورد عند فتح الحاسبة
-                        panelHeight + metrics.stripHeight - bottomReserve,
-                        metrics.keyShape, metrics.keyRadius,
-                        metrics.keySpacing.coerceIn(3.dp, 6.dp), 4.dp,
-                        viewModel
-                    )
-                    else -> Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer {
-                                alpha = pageAlpha.value
-                                translationX = langShift.value * this.density
+                Column(
+                    modifier = Modifier
+                        .weight(if (oneHanded) 0.84f else 1f)
+                        .padding(horizontal = metrics.sidePadding)
+                ) {
+                    if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
+                        AnimatedContent(
+                            targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else if (state.emojiSearch != null) 4 else 0,
+                            transitionSpec = {
+                                (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) +
+                                    androidx.compose.animation.slideInVertically(scaledTween(animScale, 300, easing = IosPush)) { it / 3 }) togetherWith
+                                    (fadeOut(scaledTween(animScale, 100)) +
+                                        androidx.compose.animation.slideOutVertically(scaledTween(animScale, 220, easing = IosPush)) { -it / 3 }) using
+                                    SizeTransform(clip = true) { _, _ -> snap() }
+                            },
+                            label = "strip"
+                        ) { mode ->
+                            when (mode) {
+                                1 -> ClipEditBar(state, colors, metrics.stripHeight, viewModel)
+                                2 -> TranslateBar(state, colors, metrics.stripHeight, viewModel)
+                                3 -> VoiceBar(state, colors, metrics.stripHeight, viewModel)
+                                4 -> EmojiSearchBar(state, colors, metrics.stripHeight, viewModel)
+                                else -> TopStrip(state, colors, metrics, viewModel)
                             }
-                            .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis) { path ->
-                                viewModel.onSwipeWord(path)
-                            }
-                    ) {
-                        androidx.compose.runtime.key(state.page) {
-                        Column {
-                            rows.forEachIndexed { index, row ->
-                                Box(
-                                    modifier = Modifier.graphicsLayer {
-                                        val p = rowProgress[minOf(index, 7)].value
-                                        alpha = 0.25f + 0.75f * p
-                                        translationY = (1f - p) * 14.dp.toPx()
+                        }
+                    }
+
+                    val shownPage = if (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.CLIPBOARD ||
+                        state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE) state.page else KeyboardPage.LETTERS
+                    Box(modifier = Modifier.fillMaxWidth().then(Modifier.iosEnter(shownPage, shownPage == KeyboardPage.LETTERS))) {
+                    when (shownPage) {
+                        KeyboardPage.EMOJI -> EmojiPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                        KeyboardPage.CLIPBOARD -> ClipboardPanel(
+                            state, colors,
+                            (panelHeight + metrics.stripHeight + 96.dp).coerceAtMost((screenHeightDp * 0.6f).dp),
+                            bottomReserve, viewModel
+                        )
+                        KeyboardPage.EDIT -> EditPanel(state, colors, panelHeight - bottomReserve, viewModel)
+                        KeyboardPage.TRANSLATE -> TranslatePanel(state, colors, panelHeight - bottomReserve, viewModel)
+                        KeyboardPage.CALC -> CalcPanel(
+                            state, colors,
+                            // نفس ارتفاع صفحة الحروف (الشريط + المفاتيح) كي لا يرتفع الكيبورد عند فتح الحاسبة
+                            panelHeight + metrics.stripHeight - bottomReserve,
+                            metrics.keyShape, metrics.keyRadius,
+                            metrics.keySpacing.coerceIn(3.dp, 6.dp), 4.dp,
+                            viewModel
+                        )
+                        else -> Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                    alpha = pageAlpha.value
+                                    translationX = langShift.value * this.density
+                                }
+                                .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis) { path ->
+                                    viewModel.onSwipeWord(path)
+                                }
+                        ) {
+                            androidx.compose.runtime.key(state.page) {
+                            Column {
+                                rows.forEachIndexed { index, row ->
+                                    Box(
+                                        modifier = Modifier.graphicsLayer {
+                                            val p = rowProgress[minOf(index, 7)].value
+                                            alpha = 0.25f + 0.75f * p
+                                            translationY = (1f - p) * 14.dp.toPx()
+                                        }
+                                    ) {
+                                    KeyRow(
+                                        row = row,
+                                        colors = colors,
+                                        metrics = metrics,
+                                        rowHeight = rowHeights[index],
+                                        showPreview = state.keyPreview,
+                                        hideLabels = trackpad,
+                                        isTopRow = index == 0,
+                                        plainCenterFromBottom = globeCenter,
+                                        viewModel = viewModel,
+                                        onTrackpad = { active ->
+                                            trackpad = active
+                                            if (active) viewModel.onTrackpadStart()
+                                        }
+                                    )
                                     }
-                                ) {
-                                KeyRow(
-                                    row = row,
-                                    colors = colors,
-                                    metrics = metrics,
-                                    rowHeight = rowHeights[index],
-                                    showPreview = state.keyPreview,
-                                    hideLabels = trackpad,
-                                    isTopRow = index == 0,
-                                    plainCenterFromBottom = globeCenter,
-                                    viewModel = viewModel,
-                                    onTrackpad = { active ->
-                                        trackpad = active
-                                        if (active) viewModel.onTrackpadStart()
-                                    }
-                                )
                                 }
                             }
+                            }
+                            SwipeTrail(trail, colors.keyAccent)
                         }
-                        }
-                        SwipeTrail(trail, colors.keyAccent)
+                    }
+                    }
+                    if (bottomReserve > 0.dp &&
+                        (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE)
+                    ) {
+                        Spacer(Modifier.height(bottomReserve))
                     }
                 }
-                }
-                if (bottomReserve > 0.dp &&
-                    (state.page == KeyboardPage.EMOJI || state.page == KeyboardPage.EDIT || state.page == KeyboardPage.CALC || state.page == KeyboardPage.TRANSLATE)
-                ) {
-                    Spacer(Modifier.height(bottomReserve))
-                }
-            }
 
-            if (state.oneHand == OneHandMode.LEFT) {
-                OneHandSide(state, colors, sideHeight, viewModel)
+                if (state.oneHand == OneHandMode.LEFT) {
+                    OneHandSide(state, colors, sideHeight, viewModel)
+                }
             }
         }
     }
