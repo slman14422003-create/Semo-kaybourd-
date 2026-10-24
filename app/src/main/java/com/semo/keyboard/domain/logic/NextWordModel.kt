@@ -132,11 +132,12 @@ object NextWordModel {
         language: KeyboardLanguage,
         learned: Map<String, List<String>>,
         limit: Int = 3,
-        prev2: String = ""
+        prev2: String = "",
+        prev3: String = ""
     ): List<String> {
-        val key = "${language.name}|$prev|$prev2|$limit|${ModelVersion.current()}|${System.identityHashCode(learned)}|${learned.size}"
+        val key = "${language.name}|$prev|$prev2|$prev3|$limit|${ModelVersion.current()}|${System.identityHashCode(learned)}|${learned.size}"
         predictCache.get(key)?.let { return it }
-        val result = predictUncached(prev, language, learned, limit, prev2)
+        val result = predictUncached(prev, language, learned, limit, prev2, prev3)
         predictCache.put(key, result)
         return result
     }
@@ -146,11 +147,17 @@ object NextWordModel {
         language: KeyboardLanguage,
         learned: Map<String, List<String>>,
         limit: Int,
-        prev2: String
+        prev2: String,
+        prev3: String
     ): List<String> {
         val k = BigDictionary.key(prev)
         if (k.isEmpty()) return emptyList()
         val out = LinkedHashSet<String>()
+        if (prev3.isNotEmpty() && prev2.isNotEmpty()) {
+            val k3 = BigDictionary.key(prev3)
+            val k2b = BigDictionary.key(prev2)
+            if (k3.isNotEmpty() && k2b.isNotEmpty()) learned["$k3 $k2b $k"]?.forEach { if (out.size < limit) out.add(it) }
+        }
         if (prev2.isNotEmpty()) {
             val k2 = BigDictionary.key(prev2)
             if (k2.isNotEmpty()) learned["$k2 $k"]?.forEach { if (out.size < limit) out.add(it) }

@@ -94,6 +94,7 @@ import com.semo.keyboard.domain.model.SemoSettings
 import com.semo.keyboard.domain.model.ThemeMode
 import com.semo.keyboard.ime.KeyClickPlayer
 import com.semo.keyboard.ui.keyboard.KeyFeedback
+import com.semo.keyboard.domain.model.KeyboardTheme
 import com.semo.keyboard.ui.theme.SemoPalette
 import kotlinx.coroutines.launch
 
@@ -449,6 +450,11 @@ private fun TypingPage(
             ) { scope.launch { repo.setAutoCorrect(it) } }
             Divider()
             SwitchRow(
+                L("Auto-complete words"), R.drawable.ic_set_text, IconBlue, settings.autoComplete,
+                subtitle = L("Completes a half-typed word from your learned words and the dictionary when you press space. Backspace right after undoes it")
+            ) { scope.launch { repo.setAutoComplete(it) } }
+            Divider()
+            SwitchRow(
                 com.semo.keyboard.ui.appString(R.string.auto_sentence_title), R.drawable.ic_set_text, IconPurple, settings.autoSentenceFix,
                 subtitle = com.semo.keyboard.ui.appString(R.string.auto_sentence_hint)
             ) { scope.launch { repo.setAutoSentenceFix(it) } }
@@ -616,6 +622,19 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 )
             }
             Divider()
+            if (settings.keyboardTheme == KeyboardTheme.GLASS) {
+                var glassDraft by remember(settings.glassOpacity) { mutableStateOf(settings.glassOpacity) }
+                SliderRow(
+                    title = "Glass transparency",
+                    valueLabel = "${((1f - glassDraft) * 100).roundToInt()}%",
+                    value = glassDraft,
+                    range = 0.15f..1f,
+                    steps = 16,
+                    onChange = { glassDraft = it },
+                    onFinish = { scope.launch { repo.setGlassOpacity(glassDraft) } }
+                )
+                Divider()
+            }
             var scaleDraft by remember(settings.keyboardScale) { mutableStateOf(settings.keyboardScale) }
             SliderRow(
                 title = L("حجم الكيبورد"),

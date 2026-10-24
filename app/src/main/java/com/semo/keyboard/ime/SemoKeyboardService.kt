@@ -822,7 +822,12 @@ class SemoKeyboardService :
         chromeColor = panelColor
         chromeDark = dark
         runCatching {
-            w.navigationBarColor = panelColor
+            val glass = android.graphics.Color.alpha(panelColor) < 250
+            w.navigationBarColor = if (glass) android.graphics.Color.TRANSPARENT else panelColor
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val canBlur = glass && runCatching { getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)
+                w.setBackgroundBlurRadius(if (canBlur) 70 else 0)
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) w.isNavigationBarContrastEnforced = false
             WindowCompat.getInsetsController(w, w.decorView).isAppearanceLightNavigationBars = !dark
         }

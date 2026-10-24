@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 @StringRes
 internal fun themeNameRes(theme: KeyboardTheme): Int = when (theme) {
     KeyboardTheme.IOS -> R.string.theme_ios
+    KeyboardTheme.GLASS -> R.string.theme_glass
     KeyboardTheme.MIDNIGHT -> R.string.theme_midnight
     KeyboardTheme.OCEAN -> R.string.theme_ocean
     KeyboardTheme.FOREST -> R.string.theme_forest

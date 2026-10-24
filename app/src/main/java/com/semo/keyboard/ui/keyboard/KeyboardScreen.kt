@@ -144,6 +144,7 @@ import com.semo.keyboard.ui.theme.SemoKeyboardColors
 import com.semo.keyboard.ui.theme.keyMetrics
 import com.semo.keyboard.ui.theme.LocalKeyboardScale
 import com.semo.keyboard.ui.theme.semoColors
+import com.semo.keyboard.ui.theme.withGlassOpacity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -215,7 +216,16 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val colors = remember(state.style, isDark, state.keyboardTheme) { semoColors(state.style, isDark, state.keyboardTheme) }
+    val blurContext = LocalContext.current
+    val blurAvailable = remember {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            runCatching { blurContext.getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)
+    }
+    val colors = remember(state.style, isDark, state.keyboardTheme, blurAvailable, state.glassOpacity) {
+        // Without real background blur the panel gets extra opacity so keys stay readable over busy content
+        val level = if (blurAvailable) state.glassOpacity else (state.glassOpacity + 0.25f).coerceAtMost(1f)
+        semoColors(state.style, isDark, state.keyboardTheme).withGlassOpacity(level)
+    }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
@@ -1494,7 +1504,7 @@ private fun RowScope.KeyButton(
                     } else Modifier
                 )
                 .drawBehind {
-                    if (!def.plain) {
+                    if (!def.plain && !colors.glass) {
                         drawRoundRect(
                             color = shadowColor,
                             topLeft = Offset(0f, 1.dp.toPx()),

@@ -81,7 +81,8 @@ object SuggestionEngine {
         context: String,
         bigrams: Map<String, List<String>>,
         context2: String,
-        rank: PersonalRank?
+        rank: PersonalRank?,
+        sink: ((List<Pair<String, Double>>) -> Unit)? = null
     ): List<String> {
         if (prefix.isEmpty()) return emptyList()
         val pk = BigDictionary.key(prefix)
@@ -146,6 +147,7 @@ object SuggestionEngine {
             for ((k, c) in cands) c.score += rank.boost(pk, k)
         }
 
+        sink?.invoke(cands.values.sortedByDescending { it.score }.map { it.word to it.score })
         val result = ArrayList(cands.values.sortedByDescending { it.score }.take(limit).map { matchCase(prefix, it.word) })
 
         if (language.script == Script.ARABIC) {
@@ -170,6 +172,39 @@ object SuggestionEngine {
             }
         }
         return if (result.isEmpty()) listOf(prefix) else result
+    }
+
+    /**
+     * Auto-complete on word end: returns the full word when a half-typed, unknown word has one clear
+     * completion from learned words / context / dictionary. Conservative: the typed part must cover at
+     * least 60% of the target, the target must be at most 4 letters longer, and it must clearly beat
+     * the runner-up (1.35x score), otherwise null.
+     */
+    fun autoComplete(
+        word: String,
+        language: KeyboardLanguage,
+        learned: List<String>,
+        learnedKeys: Set<String>,
+        context: String = "",
+        context2: String = "",
+        bigrams: Map<String, List<String>> = emptyMap(),
+        rank: PersonalRank? = null
+    ): String? {
+        if (word.length < 3 || word.length > 14) return null
+        if (word.any { !it.isLetter() && it != '\'' }) return null
+        if (word.drop(1).any { it.isUpperCase() }) return null
+        if (isKnown(word, language, learnedKeys)) return null
+        var scored: List<Pair<String, Double>> = emptyList()
+        suggestUncached(word, language, learned, 6, context, bigrams, context2, rank) { scored = it }
+        val top = scored.firstOrNull() ?: return null
+        val second = scored.getOrNull(1)
+        val tk = BigDictionary.key(top.first)
+        val wk = BigDictionary.key(word)
+        if (tk.length <= wk.length || tk.length - wk.length > 4) return null
+        if (wk.length < tk.length * 0.6) return null
+        if (top.second < 30.0) return null
+        if (second != null && top.second < second.second * 1.35) return null
+        return matchCase(word, top.first)
     }
 
     // ---------------- التدقيق الإملائي ----------------

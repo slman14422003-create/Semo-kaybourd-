@@ -1049,7 +1049,7 @@ private fun ClipCard(
             .height(112.dp)
             .drawBehind {
                 drawRoundRect(
-                    color = colors.keyShadow.copy(alpha = 0.55f),
+                    color = if (colors.glass) Color.Transparent else colors.keyShadow.copy(alpha = 0.55f),
                     topLeft = Offset(0f, 1.5.dp.toPx()),
                     size = size,
                     cornerRadius = CornerRadius(16.dp.toPx())

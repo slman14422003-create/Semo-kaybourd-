@@ -371,6 +371,8 @@ class KeyboardViewModel(
                 swipeTyping = s.swipeTyping,
                 autoCorrect = s.autoCorrect,
                 autoSentenceFix = s.autoSentenceFix,
+                autoComplete = s.autoComplete,
+                glassOpacity = s.glassOpacity,
                 smartWriting = s.smartWriting,
                 autoPairs = s.autoPairs,
                 layoutVariants = s.layoutVariants,
@@ -750,9 +752,15 @@ class KeyboardViewModel(
         if (fixed == null && state.autoCorrect && word.lowercase() !in ignoredCorrections.value) {
             fixed = correctWord(word, lastWords(before.dropLast(word.length), 1).lastOrNull().orEmpty())
         }
+        var completed = false
+        if (fixed == null && state.autoComplete && word.lowercase() !in ignoredCorrections.value) {
+            fixed = completeWord(before, word)
+            completed = fixed != null
+        }
         val result = fixed ?: return null
         if (result == word) return null
         bridge.replaceBeforeCursor(word.length, result)
+        if (completed) learnStrong(result)
         return Correction(word, result)
     }
 
@@ -768,6 +776,18 @@ class KeyboardViewModel(
             fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value, prev)?.takeIf { allowed(it) }
         }
         return fixed?.takeIf { it != word }
+    }
+
+    private fun completeWord(before: String, word: String): String? {
+        val state = uiState.value
+        val language = SuggestionEngine.languageOf(word, state.language)
+        val ctx = lastWords(before.dropLast(word.length), 2)
+        val prev = ctx.lastOrNull().orEmpty()
+        val prev2 = if (ctx.size >= 2) ctx[0] else ""
+        return SuggestionEngine.autoComplete(
+            word, language, learnedWords.value, learnedKeys.value,
+            prev, prev2, learnedBigrams.value, rank.value
+        )?.takeIf { allowed(it) && it != word }
     }
 
     private fun learnedFixWithClitic(lower: String): String? {
@@ -1686,6 +1706,13 @@ class KeyboardViewModel(
         val prev2 = if (before2.endsWith(' ')) SuggestionEngine.currentWord(before2.trimEnd(' ')) else ""
         pendingPairs.add(prev to next)
         if (prev2.isNotEmpty()) pendingPairs.add("${BigDictionary.key(prev2)} ${BigDictionary.key(prev)}" to next)
+        if (prev2.isNotEmpty()) {
+            val before3 = before2.trimEnd(' ').dropLast(prev2.length)
+            val prev3 = if (before3.endsWith(' ')) SuggestionEngine.currentWord(before3.trimEnd(' ')) else ""
+            if (prev3.isNotEmpty()) {
+                pendingPairs.add("${BigDictionary.key(prev3)} ${BigDictionary.key(prev2)} ${BigDictionary.key(prev)}" to next)
+            }
+        }
         scheduleLearnFlush()
     }
 
@@ -1787,7 +1814,8 @@ class KeyboardViewModel(
                     if (prevWord.isNotEmpty()) {
                         val ctx = lastWords(trimmed, 3)
                         val prev2 = if (ctx.size >= 2) ctx[ctx.size - 2] else ""
-                        val words = NextWordModel.predict(prevWord, lang, learnedBigrams.value, 3 + SUGGEST_EXTRA, prev2)
+                        val prev3 = if (ctx.size >= 3) ctx[ctx.size - 3] else ""
+                        val words = NextWordModel.predict(prevWord, lang, learnedBigrams.value, 3 + SUGGEST_EXTRA, prev2, prev3)
                             .filter { allowed(it) }.take(3)
                         val withPhrase = if (words.isNotEmpty()) {
                             val phrase = fitPhrase(NextWordModel.phrase(lang, learnedBigrams.value, ctx, words[0], 4))

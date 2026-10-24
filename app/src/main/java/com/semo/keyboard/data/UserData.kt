@@ -662,7 +662,7 @@ class LearnedWordsRepository(context: Context) {
                 for ((prev, next) in newPairs) {
                     val a = clean(if (prev.contains(' ')) prev else BigDictionary.key(prev))
                     val b = clean(next)
-                    if (a.isEmpty() || a.length > 61 || b.length < 2 || b.length > 30) continue
+                    if (a.isEmpty() || a.length > 95 || b.length < 2 || b.length > 30) continue
                     if (blockedKeys.isNotEmpty() && (BigDictionary.key(b.lowercase()) in blockedKeys || a.split(' ').any { BigDictionary.key(it) in blockedKeys })) continue
                     val old = list.indexOfFirst { it.first == a && it.second == b }
                     var base = 0.0

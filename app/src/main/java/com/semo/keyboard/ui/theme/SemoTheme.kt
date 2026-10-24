@@ -72,7 +72,8 @@ data class SemoKeyboardColors(
     val onShiftActive: Color,
     val bubble: Color,
     val divider: Color,
-    val suggestion: Color
+    val suggestion: Color,
+    val glass: Boolean = false
 )
 
 /** ألوان iOS 18 الداكنة المقيسة من صورة مرجعية، مع تغميق خفيف بنسبة 8% */
@@ -111,6 +112,56 @@ private val Ios18Light = SemoKeyboardColors(
     divider = Color(0xFFB4B7BF),
     suggestion = Color(0xFF1C1C1E)
 )
+
+/** Frosted glass: translucent panel and keys so the app behind shows through, like iOS */
+private val GlassDark = SemoKeyboardColors(
+    panel = Color(0x73101214),
+    key = Color(0x40FFFFFF),
+    keyPressed = Color(0x66FFFFFF),
+    keySpecial = Color(0x24FFFFFF),
+    keyAccent = Color(0xFF0A84FF),
+    text = Color(0xFFFFFFFF),
+    textMuted = Color(0xCCD0D2D6),
+    textOnAccent = Color.White,
+    keyShadow = Color(0x33000000),
+    chip = Color(0x40FFFFFF),
+    shiftActive = Color(0xE6FFFFFF),
+    onShiftActive = Color(0xFF000000),
+    bubble = Color(0xF2606266),
+    divider = Color(0x33FFFFFF),
+    suggestion = Color(0xFFF2F3F5),
+    glass = true
+)
+
+private val GlassLight = SemoKeyboardColors(
+    panel = Color(0x80F2F3F7),
+    key = Color(0xC7FFFFFF),
+    keyPressed = Color(0x80FFFFFF),
+    keySpecial = Color(0x66ADB1BB),
+    keyAccent = Color(0xFF007AFF),
+    text = Color(0xFF000000),
+    textMuted = Color(0xFF55596A),
+    textOnAccent = Color.White,
+    keyShadow = Color(0x26000000),
+    chip = Color(0xC7FFFFFF),
+    shiftActive = Color(0xF2FFFFFF),
+    onShiftActive = Color(0xFF000000),
+    bubble = Color(0xFFFFFFFF),
+    divider = Color(0x33000000),
+    suggestion = Color(0xFF1C1C1E),
+    glass = true
+)
+
+/** Scales the glass theme's translucency; [opacity] 0.6 equals the default look, 1 is nearly solid */
+fun SemoKeyboardColors.withGlassOpacity(opacity: Float): SemoKeyboardColors {
+    if (!glass) return this
+    val f = opacity.coerceIn(0.15f, 1f) / 0.6f
+    fun Color.a(): Color = copy(alpha = (alpha * f).coerceIn(0.04f, 1f))
+    return copy(
+        panel = panel.a(), key = key.a(), keyPressed = keyPressed.a(), keySpecial = keySpecial.a(),
+        chip = chip.a(), divider = divider.a(), keyShadow = keyShadow.a()
+    )
+}
 
 private fun mix(a: Color, b: Color, t: Float): Color = Color(
     red = a.red + (b.red - a.red) * t,
@@ -186,6 +237,7 @@ private val ThemeMintLight = lightTheme(0xFFD0E6E3, 0xFFA8CBC6, 0xFF00A896, 0xFF
 fun semoColors(style: KeyboardStyle, dark: Boolean, theme: KeyboardTheme = KeyboardTheme.IOS): SemoKeyboardColors = when (style) {
     KeyboardStyle.IOS18 -> when (theme) {
         KeyboardTheme.IOS -> if (dark) Ios18Dark else Ios18Light
+        KeyboardTheme.GLASS -> if (dark) GlassDark else GlassLight
         KeyboardTheme.MIDNIGHT -> if (dark) ThemeMidnightDark else ThemeMidnightLight
         KeyboardTheme.OCEAN -> if (dark) ThemeOceanDark else ThemeOceanLight
         KeyboardTheme.FOREST -> if (dark) ThemeForestDark else ThemeForestLight

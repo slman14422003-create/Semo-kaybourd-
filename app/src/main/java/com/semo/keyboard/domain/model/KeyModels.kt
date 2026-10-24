@@ -123,7 +123,7 @@ enum class KeyboardStyle { IOS18 }
 
 enum class AppLanguage { SYSTEM, ARABIC, ENGLISH }
 
-enum class KeyboardTheme { IOS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT }
+enum class KeyboardTheme { IOS, GLASS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT }
 
 /** ارتفاع المفاتيح */
 enum class KeyboardSize { SMALL, MEDIUM, LARGE }
@@ -276,6 +276,9 @@ data class SemoSettings(
     /** تصحيح الاختصارات والأخطاء الشائعة (dont → don't) */
     val autoCorrect: Boolean = true,
     val autoSentenceFix: Boolean = true,
+    val autoComplete: Boolean = true,
+    /** Glass theme opacity, 0.15 (very transparent) to 1 (solid) */
+    val glassOpacity: Float = 0.6f,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val layoutVariants: Map<String, String> = emptyMap(),
@@ -365,6 +368,9 @@ data class KeyboardUiState(
     val swipeTyping: Boolean = true,
     val autoCorrect: Boolean = true,
     val autoSentenceFix: Boolean = true,
+    val autoComplete: Boolean = true,
+    /** Glass theme opacity, 0.15 (very transparent) to 1 (solid) */
+    val glassOpacity: Float = 0.6f,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val layoutVariants: Map<String, String> = emptyMap(),
