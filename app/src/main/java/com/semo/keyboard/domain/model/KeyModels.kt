@@ -279,6 +279,8 @@ data class SemoSettings(
     val autoComplete: Boolean = true,
     /** Glass theme opacity, 0.15 (very transparent) to 1 (solid) */
     val glassOpacity: Float = 0.6f,
+    /** Glass theme: let the app extend under the keyboard so it shows through */
+    val glassOverlay: Boolean = true,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val layoutVariants: Map<String, String> = emptyMap(),
@@ -371,6 +373,8 @@ data class KeyboardUiState(
     val autoComplete: Boolean = true,
     /** Glass theme opacity, 0.15 (very transparent) to 1 (solid) */
     val glassOpacity: Float = 0.6f,
+    /** Glass theme: let the app extend under the keyboard so it shows through */
+    val glassOverlay: Boolean = true,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val layoutVariants: Map<String, String> = emptyMap(),

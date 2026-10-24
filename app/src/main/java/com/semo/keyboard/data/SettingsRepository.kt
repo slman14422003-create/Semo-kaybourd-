@@ -192,6 +192,7 @@ class SettingsRepository(context: Context) {
         val AUTO_SENTENCE_FIX = booleanPreferencesKey("auto_sentence_fix")
         val AUTO_COMPLETE = booleanPreferencesKey("auto_complete")
         val GLASS_OPACITY = floatPreferencesKey("glass_opacity")
+        val GLASS_OVERLAY = booleanPreferencesKey("glass_overlay")
         val SMART_WRITING = booleanPreferencesKey("smart_writing")
         val AUTO_PAIRS = booleanPreferencesKey("auto_pairs")
         val LAYOUT_VARIANTS = stringPreferencesKey("layout_variants")
@@ -262,6 +263,7 @@ class SettingsRepository(context: Context) {
                 autoSentenceFix = p[Keys.AUTO_SENTENCE_FIX] ?: true,
                 autoComplete = p[Keys.AUTO_COMPLETE] ?: true,
                 glassOpacity = (p[Keys.GLASS_OPACITY] ?: 0.6f).coerceIn(0.15f, 1f),
+                glassOverlay = p[Keys.GLASS_OVERLAY] ?: true,
                 smartWriting = p[Keys.SMART_WRITING] ?: true,
                 autoPairs = p[Keys.AUTO_PAIRS] ?: false,
                 layoutVariants = decodeVariants(p[Keys.LAYOUT_VARIANTS]),
@@ -344,6 +346,7 @@ class SettingsRepository(context: Context) {
     suspend fun setSwipeTyping(v: Boolean) { store.edit { it[Keys.SWIPE_TYPING] = v } }
     suspend fun setAutoCorrect(v: Boolean) { store.edit { it[Keys.AUTO_CORRECT] = v } }
     suspend fun setAutoSentenceFix(v: Boolean) { store.edit { it[Keys.AUTO_SENTENCE_FIX] = v } }
+    suspend fun setGlassOverlay(v: Boolean) { store.edit { it[Keys.GLASS_OVERLAY] = v } }
     suspend fun setGlassOpacity(v: Float) { store.edit { it[Keys.GLASS_OPACITY] = v.coerceIn(0.15f, 1f) } }
     suspend fun setAutoComplete(v: Boolean) { store.edit { it[Keys.AUTO_COMPLETE] = v } }
     suspend fun setSmartWriting(v: Boolean) { store.edit { it[Keys.SMART_WRITING] = v } }

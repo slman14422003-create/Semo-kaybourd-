@@ -209,7 +209,7 @@ private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
  * [onChrome] تُبلّغ الخدمة بلون اللوحة ليُلوَّن به شريط التنقل ويُضبط تباين أيقوناته.
  */
 @Composable
-fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Unit = { _, _ -> }) {
+fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }) {
     val state by viewModel.uiState.collectAsState()
     val isDark = when (state.themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -221,12 +221,12 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             runCatching { blurContext.getSystemService(android.view.WindowManager::class.java).isCrossWindowBlurEnabled }.getOrDefault(false)
     }
-    val colors = remember(state.style, isDark, state.keyboardTheme, blurAvailable, state.glassOpacity) {
+    val colors = remember(state.style, isDark, state.keyboardTheme, blurAvailable, state.glassOpacity, state.glassOverlay) {
         // Without real background blur the panel gets extra opacity so keys stay readable over busy content
-        val level = if (blurAvailable) state.glassOpacity else (state.glassOpacity + 0.25f).coerceAtMost(1f)
+        val level = if (blurAvailable || !state.glassOverlay) state.glassOpacity else (state.glassOpacity + 0.25f).coerceAtMost(1f)
         semoColors(state.style, isDark, state.keyboardTheme).withGlassOpacity(level)
     }
-    val glassBackdrop by rememberGlassBackdrop(colors.glass, isDark)
+    val glassBackdrop by rememberGlassBackdrop(colors.glass && !state.glassOverlay, isDark)
     val backdropAlpha = (state.glassOpacity + 0.35f).coerceIn(0.4f, 1f)
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
@@ -304,7 +304,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     }
 
     val currentOnChrome by rememberUpdatedState(onChrome)
-    LaunchedEffect(colors.panel, isDark) { currentOnChrome(colors.panel.toArgb(), isDark) }
+    val overlayMode = colors.glass && state.glassOverlay
+    LaunchedEffect(colors.panel, isDark, overlayMode) { currentOnChrome(colors.panel.toArgb(), isDark, overlayMode) }
 
     // لون اللوحة يمتد خلف الشريط؛ لو كان الشريط أطول من صف الأيقونات نكمّل الفرق بحشوة سفلية
     val extraBottom = if (edgeToEdgeIme) {

@@ -808,6 +808,20 @@ class SemoKeyboardService :
         return composeView
     }
 
+    @Volatile private var overlayInsets = false
+
+    /**
+     * Glass overlay mode: tell the app the keyboard covers no content area, so the app is not resized and
+     * extends under the translucent keyboard (touches above the keyboard still go to the app).
+     */
+    override fun onComputeInsets(outInsets: InputMethodService.Insets) {
+        super.onComputeInsets(outInsets)
+        if (overlayInsets && !isFullscreenMode) {
+            val h = window?.window?.decorView?.height ?: return
+            if (h > 0) outInsets.contentTopInsets = h
+        }
+    }
+
     private var chromeColor = 0
     private var chromeDark: Boolean? = null
 
@@ -816,7 +830,11 @@ class SemoKeyboardService :
      * بدون هذا كانت أيقونات النظام تختلط بلون اللوحة خصوصًا بين الثيم الفاتح والداكن.
      */
     @Suppress("DEPRECATION")
-    private fun applyChrome(panelColor: Int, dark: Boolean) {
+    private fun applyChrome(panelColor: Int, dark: Boolean, overlay: Boolean) {
+        if (overlay != overlayInsets) {
+            overlayInsets = overlay
+            window?.window?.decorView?.requestLayout()
+        }
         if (panelColor == chromeColor && dark == chromeDark) return
         val w = window?.window ?: return
         chromeColor = panelColor

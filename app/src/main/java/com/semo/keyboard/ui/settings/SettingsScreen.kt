@@ -634,6 +634,11 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                     onFinish = { scope.launch { repo.setGlassOpacity(glassDraft) } }
                 )
                 Divider()
+                SwitchRow(
+                    "Show app behind keyboard", R.drawable.ic_set_theme, IconBlue, settings.glassOverlay,
+                    subtitle = "The app extends under the keyboard and shows through it, like iPhone. Turn off if a text field gets hidden by the keyboard"
+                ) { scope.launch { repo.setGlassOverlay(it) } }
+                Divider()
             }
             var scaleDraft by remember(settings.keyboardScale) { mutableStateOf(settings.keyboardScale) }
             SliderRow(

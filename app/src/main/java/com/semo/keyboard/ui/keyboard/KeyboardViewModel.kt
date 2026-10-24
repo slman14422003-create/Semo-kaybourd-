@@ -373,6 +373,7 @@ class KeyboardViewModel(
                 autoSentenceFix = s.autoSentenceFix,
                 autoComplete = s.autoComplete,
                 glassOpacity = s.glassOpacity,
+                glassOverlay = s.glassOverlay,
                 smartWriting = s.smartWriting,
                 autoPairs = s.autoPairs,
                 layoutVariants = s.layoutVariants,
