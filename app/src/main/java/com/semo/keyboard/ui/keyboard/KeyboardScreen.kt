@@ -226,6 +226,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         val level = if (blurAvailable) state.glassOpacity else (state.glassOpacity + 0.25f).coerceAtMost(1f)
         semoColors(state.style, isDark, state.keyboardTheme).withGlassOpacity(level)
     }
+    val glassBackdrop by rememberGlassBackdrop(colors.glass, isDark)
+    val backdropAlpha = (state.glassOpacity + 0.35f).coerceIn(0.4f, 1f)
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
@@ -390,7 +392,22 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colors.panel, panelShape)
+                .then(
+                    if (colors.glass) {
+                        Modifier.drawBehind {
+                            val img = glassBackdrop
+                            if (img != null) {
+                                drawImage(
+                                    image = img,
+                                    dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)),
+                                    alpha = backdropAlpha,
+                                    filterQuality = androidx.compose.ui.graphics.FilterQuality.Medium
+                                )
+                            }
+                            drawRect(colors.panel)
+                        }
+                    } else Modifier.background(colors.panel, panelShape)
+                )
                 .padding(bottom = extraBottom)
         ) {
             if (state.oneHand == OneHandMode.RIGHT) {
