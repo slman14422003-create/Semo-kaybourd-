@@ -5,8 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.matchParentSize
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,11 +37,9 @@ fun FrostedGlassKeyboardContainer(
     backdrop: ImageBitmap?,
     backdropAlpha: Float,
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 0.dp,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(cornerRadius)
-    Box(modifier = if (enabled) modifier.clip(shape) else modifier) {
+    Box(modifier = if (enabled) modifier.clip(RectangleShape) else modifier) {
         if (enabled && backdrop != null) {
             Box(
                 modifier = Modifier
@@ -58,14 +55,14 @@ fun FrostedGlassKeyboardContainer(
                     }
             )
         }
-        Box(modifier = Modifier.matchParentSize().background(tint, shape))
+        Box(modifier = Modifier.matchParentSize().background(tint))
         if (enabled) {
             val top = if (dark) Color.White.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.95f)
             val bottom = if (dark) Color.White.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.25f)
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .border(1.dp, Brush.verticalGradient(listOf(top, bottom)), shape)
+                    .border(1.dp, Brush.verticalGradient(listOf(top, bottom)), RectangleShape)
             )
         }
         content()

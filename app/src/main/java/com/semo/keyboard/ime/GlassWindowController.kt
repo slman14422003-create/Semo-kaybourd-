@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * Why window-level: a RenderEffect can only blur what its own view draws. The app under the keyboard lives in
  * another window, and only the system compositor (SurfaceFlinger) can blur another window's pixels. The
- * compositor is driven by two window attributes, set here: the background blur radius and FLAG_BLUR_BEHIND.
+ * compositor is driven by the window background blur radius, set here.
  *
  * Lifecycle: [attach] in onCreate, [update] whenever the theme changes, [detach] in onDestroy.
  */
@@ -26,7 +26,6 @@ class GlassWindowController(private val service: InputMethodService) {
     private var listener: Consumer<Boolean>? = null
     private var wantGlass = false
     private var radiusPx = 0
-    private var behindApplied = false
 
     fun attach() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
@@ -60,29 +59,7 @@ class GlassWindowController(private val service: InputMethodService) {
         val w = service.window?.window ?: return
         val on = wantGlass && _blurEnabled.value
         runCatching {
-            // Blurs what is behind the window background. The window background must stay translucent
-            // (set transparent in onCreateInputView), otherwise there is nothing to see through.
             w.setBackgroundBlurRadius(if (on) radiusPx else 0)
-            if (on != behindApplied) {
-                behindApplied = on
-                val lp = w.attributes
-                if (on && USE_BLUR_BEHIND) {
-                    w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                    lp.blurBehindRadius = radiusPx
-                } else {
-                    w.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                    lp.blurBehindRadius = 0
-                }
-                w.attributes = lp
-            }
         }
-    }
-
-    private companion object {
-        /**
-         * FLAG_BLUR_BEHIND blurs everything behind the whole window rectangle, background blur only the area
-         * behind the window background. Using both doubles the work for the same look, so only one is on.
-         */
-        const val USE_BLUR_BEHIND = false
     }
 }
