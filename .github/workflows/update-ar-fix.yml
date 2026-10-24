@@ -1,0 +1,110 @@
+name: Update Arabic corrections
+
+# يولّد assets/dict/ar_fix_auto.txt من قائمة تردّدات كلمات (FrequencyWords افتراضيًا)
+# ويفتح Pull Request للمراجعة. لا يدمج شيئًا بنفسه: التصحيح الخاطئ يصل للمستخدمين كلهم، فالمراجعة البشرية مقصودة.
+on:
+  schedule:
+    - cron: '0 3 1 * *'   # أول كل شهر
+  workflow_dispatch:
+    inputs:
+      freq_url:
+        description: 'رابط قائمة التردّدات (txt أو gz أو zip). فارغ = FrequencyWords'
+        required: false
+        default: ''
+      min_count:
+        description: 'أقل عدّ للكلمة الصحيحة'
+        required: false
+        default: '200'
+      ratio:
+        description: 'أقصى نسبة لعدّ الصيغة الخاطئة إلى الصحيحة (أصغر = أحذر)'
+        required: false
+        default: '0.05'
+      max_pairs:
+        description: 'سقف عدد الأزواج'
+        required: false
+        default: '6000'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-ar-fix
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Generate ar_fix_auto.txt
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download frequency list
+        env:
+          FREQ_URL: ${{ inputs.freq_url }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/ar_freq"
+          if [ -n "${FREQ_URL:-}" ]; then
+            URLS="$FREQ_URL"
+          else
+            B=https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content
+            URLS="$B/2018/ar/ar_full.txt $B/2018/ar/ar_50k.txt $B/2016/ar/ar_full.txt $B/2016/ar/ar_50k.txt"
+          fi
+          ok=0
+          for u in $URLS; do
+            echo "Trying $u"
+            if curl -fsSL --retry 3 --max-time 180 -o "$OUT" "$u"; then
+              ok=1
+              echo "SOURCE_URL=$u" >> "$GITHUB_ENV"
+              break
+            fi
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::Could not download a frequency list. Run the workflow manually with freq_url."
+            exit 1
+          fi
+          ls -l "$OUT"
+
+      - name: Generate corrections
+        env:
+          MIN_COUNT: ${{ inputs.min_count || '200' }}
+          RATIO: ${{ inputs.ratio || '0.05' }}
+          MAX_PAIRS: ${{ inputs.max_pairs || '6000' }}
+        run: |
+          set -euo pipefail
+          python3 tools/build_ar_fix.py \
+            --freq "$RUNNER_TEMP/ar_freq" \
+            --min-count "$MIN_COUNT" --ratio "$RATIO" --max-pairs "$MAX_PAIRS" \
+            --source "$SOURCE_URL" \
+            --out app/src/main/assets/dict/ar_fix_auto.txt
+          echo "PAIRS=$(grep -vc '^#' app/src/main/assets/dict/ar_fix_auto.txt)" >> "$GITHUB_ENV"
+
+      - name: Validate
+        run: python3 tools/check_ar_fix.py
+
+      - name: Open pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: main
+          branch: auto/ar-fix-update
+          delete-branch: true
+          add-paths: app/src/main/assets/dict/ar_fix_auto.txt
+          commit-message: 'Arabic corrections: regenerate ar_fix_auto.txt'
+          title: 'تحديث التصحيحات العربية التلقائية'
+          body: |
+            تحديث آلي لـ `ar_fix_auto.txt` (**${{ env.PAIRS }}** زوجًا).
+
+            - المصدر: `${{ env.SOURCE_URL }}`
+            - أولوية التصحيحات اليدوية: أي مفتاح موجود في `ar_fix.txt` يتغلّب على المولَّد.
+            - بيانات التردّد من FrequencyWords (CC BY-SA 4.0): انظر قسم الإسناد بالـ README.
+
+            **قبل الدمج راجع الـ diff:**
+            - أسماء أشخاص أو كلمات صحيحة تحوّلت إلى صيغة أخرى (مثل «كتابه» ← «كتابة»).
+            - الكلمات القصيرة (4 أحرف) ذات المعنيين.
+            - هذا الـ PR أُنشئ بـ `GITHUB_TOKEN`، فلا يشغّل workflow البناء تلقائيًا: أغلقه وأعد فتحه (أو شغّل Build يدويًا) قبل الدمج.
