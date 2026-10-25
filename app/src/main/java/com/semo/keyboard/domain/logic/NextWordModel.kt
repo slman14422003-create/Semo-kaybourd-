@@ -135,7 +135,7 @@ object NextWordModel {
         prev2: String = "",
         prev3: String = ""
     ): List<String> {
-        val key = "${language.name}|$prev|$prev2|$prev3|$limit|${ModelVersion.current()}|${System.identityHashCode(learned)}|${learned.size}"
+        val key = "${language.name}|$prev|$prev2|$prev3|$limit|${ModelVersion.current()}|${System.identityHashCode(learned)}|${learned.size}|${NeuralLm.ready}"
         predictCache.get(key)?.let { return it }
         val result = predictUncached(prev, language, learned, limit, prev2, prev3)
         predictCache.put(key, result)
@@ -163,6 +163,13 @@ object NextWordModel {
             if (k2.isNotEmpty()) learned["$k2 $k"]?.forEach { if (out.size < limit) out.add(it) }
         }
         learned[k]?.forEach { if (out.size < limit) out.add(it) }
+        if (out.size < limit && language == KeyboardLanguage.ARABIC && NeuralLm.ready) {
+            val ctx = listOf(prev3, prev2, prev).filter { it.isNotEmpty() }
+            for (w in NeuralLm.nextWords(ctx, limit)) {
+                if (out.size >= limit) break
+                if (out.none { it.equals(w, ignoreCase = true) }) out.add(w)
+            }
+        }
         if (out.size < limit) {
             for (w in NgramModel.next(language, prev2, prev, limit)) {
                 if (out.size >= limit) break

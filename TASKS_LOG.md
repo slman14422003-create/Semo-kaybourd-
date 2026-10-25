@@ -305,3 +305,11 @@
 - NgramModel.next now blends trigram and bigram probabilities instead of listing trigram words first: weight 0.65 trigram / 0.35 bigram when the trigram context was seen at least twice, 0.35 / 0.65 when seen once, bigram only when absent. Words found in both are summed and sorted by score. Affects NextWordModel.predict and the suggestion strip through NgramModel.next.
 - Checked and left as is: personal learning already stores 4-word contexts (prev3 prev2 prev) with a forgetting curve and per-app profiles; the emoji panel is a custom canvas pager with its own section headers, so sticky headers do not apply.
 - Still open: binary mmap dictionary, splitting KeyboardScreen and KeyboardViewModel, uiState split, TFLite model (needs a trained model file), contact-name suggestions (needs READ_CONTACTS flow), large-title collapse in settings.
+
+## 3.26.0 (versionCode 62) - not built here, check CI
+- Added a small local neural language model for Arabic next-word suggestions: ruq-5m.onnx (21.6MB, input_ids [1,seq] int64 -> logits [1,8192], byte-level BPE). The model file is in app/src/main/assets/ai/. Checked with onnxruntime on desktop: loads and runs in about 6ms.
+- NeuralLm.kt (domain/logic): loads model and tokenizer, byte-level BPE encoder written in Kotlin, beam of 5 first tokens with up to 3 greedy continuation tokens, results cached (64 contexts). Runs on the existing suggestion background dispatcher. Loaded at service start next to DictionaryManager.loadAll.
+- NextWordModel.predictUncached: for ARABIC only, after the personal learned words and before NgramModel, up to the free slots are filled from NeuralLm. The cache key includes NeuralLm.ready.
+- build.gradle.kts: added com.microsoft.onnxruntime:onnxruntime-android:1.19.2. proguard-rules.pro: keep ai.onnxruntime.
+- REQUIRED STEP: tokenizer.json from the same Hugging Face repo (Ruqiya/ruqlm) must be placed at app/src/main/assets/ai/tokenizer.json. It was not on disk in the build container, so it is not in this zip. Without it the model stays off and nothing else changes.
+- Not tested: tokenizer encode/decode against a real tokenizer.json, on-device latency, and suggestion quality. The model is Arabic only and generative, so quality needs a check on a real phone. No settings toggle yet (auto on when the files exist).

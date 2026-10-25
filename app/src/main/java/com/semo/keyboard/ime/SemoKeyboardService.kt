@@ -435,6 +435,7 @@ class SemoKeyboardService :
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.EmojiSearch.attach(applicationContext) } }
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.SentenceRules.attach(applicationContext) } }
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
+        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.NeuralLm.load(applicationContext) } }
         ioHandler.post { runCatching { VoskModelManager.cleanLeftovers(applicationContext) } }
         hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
     }

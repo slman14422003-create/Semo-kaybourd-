@@ -32,3 +32,6 @@
     public static void checkParameterIsNotNull(...);
     public static void checkNotNullExpressionValue(...);
 }
+
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**

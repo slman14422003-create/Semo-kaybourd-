@@ -12,8 +12,8 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 61
-        versionName = "3.25.1"
+        versionCode = 62
+        versionName = "3.26.0"
         ndk { debugSymbolLevel = "NONE" }
     }
     val semoKeystore = file("semo-release.p12")
@@ -98,6 +98,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.alphacephei:vosk-android:0.3.75")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
 
     testImplementation("junit:junit:4.13.2")
 }

@@ -147,3 +147,6 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 
 ## 3.25.1 (versionCode 61) - not built here, check CI
 - NgramModel.next uses interpolated trigram and bigram scores. See TASKS_LOG.md 3.25.1 for what was checked and what stays open.
+
+## 3.26.0 (versionCode 62) - not built here, check CI
+- NeuralLm (ONNX Runtime, ruq-5m) feeds Arabic next-word suggestions after personal words. Needs app/src/main/assets/ai/tokenizer.json (add it by hand). Details in TASKS_LOG.md 3.26.0.
