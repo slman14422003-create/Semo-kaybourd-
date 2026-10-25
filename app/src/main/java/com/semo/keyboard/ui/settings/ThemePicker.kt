@@ -58,6 +58,7 @@ internal fun themeNameRes(theme: KeyboardTheme): Int = when (theme) {
     KeyboardTheme.LAVENDER -> R.string.theme_lavender
     KeyboardTheme.GRAPHITE -> R.string.theme_graphite
     KeyboardTheme.MINT -> R.string.theme_mint
+    KeyboardTheme.GLASS -> R.string.theme_glass
 }
 
 @Composable

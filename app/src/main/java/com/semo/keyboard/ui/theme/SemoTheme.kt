@@ -172,6 +172,7 @@ private val ThemeRoseDark = darkTheme(0xFF221619, 0xFF5A3B43, 0xFF3B262C, 0xFFFF
 private val ThemeSunsetDark = darkTheme(0xFF211812, 0xFF5A4332, 0xFF3A2A1D, 0xFFFF9F0A, Color.Black)
 private val ThemeLavenderDark = darkTheme(0xFF1A1724, 0xFF463F63, 0xFF2D2842, 0xFFBF5AF2)
 private val ThemeGraphiteDark = darkTheme(0xFF17181A, 0xFF3A3C40, 0xFF26282B, 0xFF8E8E93)
+private val ThemeGlassDark = darkTheme(0xFF14181F, 0xFF3A4252, 0xFF232A36, 0xFF5AC8FA, Color.Black)
 private val ThemeMintDark = darkTheme(0xFF0F1F1E, 0xFF2E5552, 0xFF1B3533, 0xFF63E6D4, Color.Black)
 
 private val ThemeMidnightLight = lightTheme(0xFFE4E5E9, 0xFFB7BAC2, 0xFF007AFF, 0xFF8D909A)
@@ -181,6 +182,7 @@ private val ThemeRoseLight = lightTheme(0xFFEBD3D8, 0xFFD3A9B2, 0xFFE0245E, 0xFF
 private val ThemeSunsetLight = lightTheme(0xFFEDDCC8, 0xFFD6B48F, 0xFFE07B00, 0xFFA88B6A)
 private val ThemeLavenderLight = lightTheme(0xFFDDD6EC, 0xFFB9AED6, 0xFF8E44C9, 0xFF8F86A8)
 private val ThemeGraphiteLight = lightTheme(0xFFD8D9DC, 0xFFB3B5BA, 0xFF636366, 0xFF8A8C91)
+private val ThemeGlassLight = lightTheme(0xFFE6ECF5, 0xFFC4CFE0, 0xFF0A84FF, 0xFF8E9AB0)
 private val ThemeMintLight = lightTheme(0xFFD0E6E3, 0xFFA8CBC6, 0xFF00A896, 0xFF7FA09B)
 
 fun semoColors(style: KeyboardStyle, dark: Boolean, theme: KeyboardTheme = KeyboardTheme.IOS): SemoKeyboardColors = when (style) {
@@ -194,6 +196,7 @@ fun semoColors(style: KeyboardStyle, dark: Boolean, theme: KeyboardTheme = Keybo
         KeyboardTheme.LAVENDER -> if (dark) ThemeLavenderDark else ThemeLavenderLight
         KeyboardTheme.GRAPHITE -> if (dark) ThemeGraphiteDark else ThemeGraphiteLight
         KeyboardTheme.MINT -> if (dark) ThemeMintDark else ThemeMintLight
+        KeyboardTheme.GLASS -> if (dark) ThemeGlassDark else ThemeGlassLight
     }
 }
 

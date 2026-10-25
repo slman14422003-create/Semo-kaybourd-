@@ -141,3 +141,9 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Not yet verified by a Gradle build; check CI output first if something fails.
 - Perf pass: suggestions, literal and math result moved out of KeyboardUiState into SuggestionUi (KeyboardViewModel.suggestionUi), collected only by SuggestionSlots, so a suggestion update no longer re-emits uiState or recomposes the keyboard root. refreshSuggestions debounce is 30ms, 55ms during fast typing bursts (less cross-process text reads). Page-switch row stagger 22ms/340ms to 14ms/280ms.
 - Not done: local text tracking to skip text reads (needs device testing), generated baseline profile (needs Macrobenchmark on a device).
+
+## 3.25.0 (versionCode 60) - not built here, check CI
+- Added KeyboardTheme.GLASS (SemoTheme.kt, ThemePicker.kt, theme_glass strings). Signing passwords can come from env vars SEMO_KS_PASS, SEMO_KS_ALIAS, SEMO_KS_KEY_PASS. Open items and what already existed are listed in TASKS_LOG.md under 3.25.0.
+
+## 3.25.1 (versionCode 61) - not built here, check CI
+- NgramModel.next uses interpolated trigram and bigram scores. See TASKS_LOG.md 3.25.1 for what was checked and what stays open.

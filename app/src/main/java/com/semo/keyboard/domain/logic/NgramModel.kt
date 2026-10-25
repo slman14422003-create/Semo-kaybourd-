@@ -66,18 +66,38 @@ object NgramModel {
         return model.bi[k]
     }
 
-    /** الكلمات الأرجح بعد [prev] (و[prev2] قبلها)، الثلاثيات أولًا ثم الثنائيات، بلا نهاية الجملة */
+    private const val TRI_WEIGHT_STRONG = 0.65f
+    private const val TRI_WEIGHT_WEAK = 0.35f
+
     fun next(language: KeyboardLanguage, prev2: String, prev: String, limit: Int): List<String> {
         val model = models[language] ?: return emptyList()
-        val out = LinkedHashSet<String>()
         val k = BigDictionary.key(prev)
         if (k.isEmpty()) return emptyList()
-        if (prev2.isNotEmpty()) {
+        val tri = if (prev2.isNotEmpty()) {
             val k2 = BigDictionary.key(prev2)
-            model.tri["$k2 $k"]?.words?.forEach { if (it != EOS && out.size < limit) out.add(display(language, it)) }
+            if (k2.isNotEmpty()) model.tri["$k2 $k"] else null
+        } else null
+        val triWeight = when {
+            tri == null || tri.total <= 0 -> 0f
+            tri.total >= 2 -> TRI_WEIGHT_STRONG
+            else -> TRI_WEIGHT_WEAK
         }
-        model.bi[k]?.words?.forEach { if (it != EOS && out.size < limit) out.add(display(language, it)) }
-        return out.toList()
+        val scores = LinkedHashMap<String, Float>()
+        val bi = model.bi[k]
+        if (bi != null && bi.total > 0) {
+            val w = 1f - triWeight
+            for (i in bi.words.indices) {
+                val word = bi.words[i]
+                if (word != EOS) scores[word] = w * bi.counts[i].toFloat() / bi.total
+            }
+        }
+        if (tri != null && triWeight > 0f) {
+            for (i in tri.words.indices) {
+                val word = tri.words[i]
+                if (word != EOS) scores[word] = (scores[word] ?: 0f) + triWeight * tri.counts[i].toFloat() / tri.total
+            }
+        }
+        return scores.entries.sortedByDescending { it.value }.take(limit).map { display(language, it.key) }
     }
 
     /** مرشّحات مع احتمالاتها لترتيب إكمال الكلمة الجارية حسب السياق (ثلاثي أثقل من ثنائي) */

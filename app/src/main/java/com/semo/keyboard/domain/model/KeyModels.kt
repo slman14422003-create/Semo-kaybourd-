@@ -123,7 +123,7 @@ enum class KeyboardStyle { IOS18 }
 
 enum class AppLanguage { SYSTEM, ARABIC, ENGLISH }
 
-enum class KeyboardTheme { IOS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT }
+enum class KeyboardTheme { IOS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT, GLASS }
 
 /** ارتفاع المفاتيح */
 enum class KeyboardSize { SMALL, MEDIUM, LARGE }

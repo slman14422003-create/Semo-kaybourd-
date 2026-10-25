@@ -12,8 +12,8 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 59
-        versionName = "3.24.0"
+        versionCode = 61
+        versionName = "3.25.1"
         ndk { debugSymbolLevel = "NONE" }
     }
     val semoKeystore = file("semo-release.p12")
@@ -21,9 +21,9 @@ android {
         signingConfigs {
             create("semo") {
                 storeFile = semoKeystore
-                storePassword = "semokeyboard"
-                keyAlias = "semo"
-                keyPassword = "semokeyboard"
+                storePassword = System.getenv("SEMO_KS_PASS") ?: "semokeyboard"
+                keyAlias = System.getenv("SEMO_KS_ALIAS") ?: "semo"
+                keyPassword = System.getenv("SEMO_KS_KEY_PASS") ?: System.getenv("SEMO_KS_PASS") ?: "semokeyboard"
                 storeType = "pkcs12"
             }
         }
