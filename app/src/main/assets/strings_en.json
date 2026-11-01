@@ -84,6 +84,8 @@
 "الشكل": "Style",
 "الوضع (فاتح / داكن)": "Mode (light / dark)",
 "حجم الكيبورد": "Keyboard size",
+"شفافية ألوان الكيبورد": "Keyboard color opacity",
+"إعادة الشفافية إلى 100%": "Reset opacity to 100%",
 "إعادة الحجم إلى 100%": "Reset size to 100%",
 "ارتفاع المفاتيح": "Key height",
 "المسافة بين المفاتيح": "Key spacing",
