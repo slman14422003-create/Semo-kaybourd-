@@ -648,6 +648,20 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 ActionRow(L("إعادة الحجم إلى 100%")) { scope.launch { repo.setKeyboardScale(1f) } }
             }
             Divider()
+            var opacityDraft by remember(settings.glassOpacity) { mutableStateOf(settings.glassOpacity) }
+            SliderRow(
+                title = L("شفافية ألوان الكيبورد"),
+                valueLabel = "${(opacityDraft * 100).roundToInt()}%",
+                value = opacityDraft,
+                range = 0.35f..1f,
+                steps = 12,
+                onChange = { opacityDraft = it },
+                onFinish = { scope.launch { repo.setGlassOpacity(opacityDraft) } }
+            )
+            if (settings.glassOpacity != 1f) {
+                ActionRow(L("إعادة الشفافية إلى 100%")) { scope.launch { repo.setGlassOpacity(1f) } }
+            }
+            Divider()
             Block(L("ارتفاع المفاتيح"), R.drawable.ic_set_height, IconTeal) {
                 Segmented(
                     options = listOf(KeyboardSize.SMALL to L("صغير"), KeyboardSize.MEDIUM to L("متوسط"), KeyboardSize.LARGE to L("كبير")),
