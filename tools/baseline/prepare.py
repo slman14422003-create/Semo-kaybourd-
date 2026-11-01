@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import shutil
 import sys
 
@@ -38,8 +39,10 @@ def main():
     if "androidx.baselineprofile" not in r:
         i = r.index("plugins {")
         j = r.index("\n}", i)
+        m = re.search(r'id\("com\.android\.application"\) version "([^"]+)"', r)
+        agp = m.group(1) if m else "8.10.1"
         add = (
-            '\n    id("com.android.test") version "8.10.1" apply false'
+            '\n    id("com.android.test") version "%s" apply false' % agp +
             '\n    id("androidx.baselineprofile") version "%s" apply false' % PLUGIN_VERSION
         )
         write("build.gradle.kts", r[:j] + add + r[j:])
