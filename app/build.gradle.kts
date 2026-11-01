@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,11 +14,11 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 71
-        versionName = "3.29.3"
+        versionCode = 73
+        versionName = "3.29.5"
         ndk {
             debugSymbolLevel = "NONE"
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            if (!providers.gradleProperty("includeX86").isPresent) abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
     val semoKeystore = file("semo-release.p12")
@@ -39,15 +41,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-Xno-call-assertions",
-            "-Xno-param-assertions",
-            "-Xno-receiver-assertions"
-        )
     }
 
     packaging {
@@ -87,11 +80,22 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+        freeCompilerArgs.addAll(
+            "-Xno-call-assertions",
+            "-Xno-param-assertions",
+            "-Xno-receiver-assertions"
+        )
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.activity:activity-compose:1.10.1")
-    implementation(platform("androidx.compose:compose-bom:2025.05.01"))
+    implementation(platform("androidx.compose:compose-bom:2025.08.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")

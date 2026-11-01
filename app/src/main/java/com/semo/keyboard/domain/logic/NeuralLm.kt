@@ -29,6 +29,7 @@ object NeuralLm {
     private var env: OrtEnvironment? = null
     @Volatile private var session: OrtSession? = null
     private var inputName = "input_ids"
+    @Volatile private var batchable = false
     private var vocab = HashMap<String, Int>()
     private var tokens = arrayOfNulls<String>(0)
     private var ranks = HashMap<String, Int>()
@@ -60,9 +61,11 @@ object NeuralLm {
         try {
             val tokJson = context.assets.open(TOKENIZER_ASSET).bufferedReader().use { it.readText() }
             val modelFile = File(context.filesDir, MODEL_FILE)
-            if (!modelFile.exists() || modelFile.length() == 0L) {
+            val assetLen = runCatching { context.assets.openFd(MODEL_ASSET).use { it.length } }.getOrDefault(-1L)
+            if (!modelFile.exists() || modelFile.length() == 0L || (assetLen > 0L && assetLen != modelFile.length())) {
                 val tmp = File(context.filesDir, "$MODEL_FILE.tmp")
                 context.assets.open(MODEL_ASSET).use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                modelFile.delete()
                 if (!tmp.renameTo(modelFile)) return
             }
             buildByteMaps()
@@ -86,6 +89,9 @@ object NeuralLm {
             }
             env = e
             inputName = s.inputNames.first()
+            batchable = runCatching {
+                (s.inputInfo.values.first().info as ai.onnxruntime.TensorInfo).shape[0] <= 0L
+            }.getOrDefault(false)
             session = s
             synchronized(cache) { cache.clear() }
             ready = true
@@ -132,6 +138,7 @@ object NeuralLm {
         val starts = ArrayList<Int>()
         for (i in first.indices) if (i < wordStart.size && wordStart[i]) starts.add(i)
         starts.sortByDescending { first[it] }
+        if (batchable) return expandBatched(ctx, starts, probs, gen, deadline)
         val out = LinkedHashMap<String, Float>()
         for (id in starts.take(BEAMS)) {
             if (gen != generation.get()) return null
@@ -173,6 +180,68 @@ object NeuralLm {
             if (WORD.matches(w)) out[w] = maxOf(out[w] ?: 0f, p)
         }
         return Computed(out.entries.sortedByDescending { it.value }.map { it.key }, full)
+    }
+
+    private class Beam(val seq: ArrayList<Int>, val piece: ArrayList<Int>, val p: Float)
+
+    private fun expandBatched(ctx: List<Int>, starts: List<Int>, probs: FloatArray, gen: Int, deadline: Long): Computed? {
+        var live = ArrayList<Beam>()
+        for (id in starts.take(BEAMS)) {
+            val p = probs[id]
+            if (p < MIN_PROB) break
+            val seq = ArrayList<Int>(ctx)
+            seq.add(id)
+            live.add(Beam(seq, arrayListOf(id), p))
+        }
+        val out = LinkedHashMap<String, Float>()
+        var full = true
+        for (step in 0..EXTRA_TOKENS) {
+            if (live.isEmpty()) break
+            if (gen != generation.get()) return null
+            if (System.nanoTime() > deadline) {
+                full = false
+                break
+            }
+            val lgs = logitsBatch(live.map { it.seq.toIntArray() }) ?: return null
+            val next = ArrayList<Beam>()
+            for (i in live.indices) {
+                val b = live[i]
+                val lg = lgs[i]
+                var best = -1
+                var bv = Float.NEGATIVE_INFINITY
+                for (j in SPECIAL_COUNT until lg.size) {
+                    if (lg[j] > bv) {
+                        bv = lg[j]
+                        best = j
+                    }
+                }
+                if (best < 0 || best >= plainPiece.size || !plainPiece[best]) {
+                    val w = decode(b.piece).trim()
+                    if (WORD.matches(w)) out[w] = maxOf(out[w] ?: 0f, b.p)
+                } else if (step < EXTRA_TOKENS) {
+                    b.seq.add(best)
+                    b.piece.add(best)
+                    next.add(b)
+                }
+            }
+            live = next
+        }
+        return Computed(out.entries.sortedByDescending { it.value }.map { it.key }, full)
+    }
+
+    private fun logitsBatch(seqs: List<IntArray>): List<FloatArray>? {
+        val s = session ?: return null
+        val e = env ?: return null
+        val n = seqs.size
+        val len = seqs[0].size
+        val arr = LongArray(n * len)
+        for (i in 0 until n) for (j in 0 until len) arr[i * len + j] = seqs[i][j].toLong()
+        OnnxTensor.createTensor(e, LongBuffer.wrap(arr), longArrayOf(n.toLong(), len.toLong())).use { t ->
+            s.run(mapOf(inputName to t)).use { res ->
+                val v = res[0].value as Array<*>
+                return List(n) { v[it] as FloatArray }
+            }
+        }
     }
 
     private fun logits(ids: IntArray): FloatArray? {
