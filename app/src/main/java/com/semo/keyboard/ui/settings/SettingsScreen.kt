@@ -650,7 +650,7 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             Divider()
             var opacityDraft by remember(settings.glassOpacity) { mutableStateOf(settings.glassOpacity) }
             SliderRow(
-                title = L("شفافية ألوان الكيبورد"),
+                title = L("شفافية المفاتيح"),
                 valueLabel = "${(opacityDraft * 100).roundToInt()}%",
                 value = opacityDraft,
                 range = 0.35f..1f,
@@ -658,9 +658,20 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 onChange = { opacityDraft = it },
                 onFinish = { scope.launch { repo.setGlassOpacity(opacityDraft) } }
             )
-            if (settings.glassOpacity != 1f) {
-                ActionRow(L("إعادة الشفافية إلى 100%")) { scope.launch { repo.setGlassOpacity(1f) } }
+            var panelDraft by remember(settings.panelOpacity) { mutableStateOf(settings.panelOpacity) }
+            SliderRow(
+                title = L("شفافية خلفية الكيبورد"),
+                valueLabel = "${(panelDraft * 100).roundToInt()}%",
+                value = panelDraft,
+                range = 0f..1f,
+                steps = 19,
+                onChange = { panelDraft = it },
+                onFinish = { scope.launch { repo.setPanelOpacity(panelDraft) } }
+            )
+            if (settings.glassOpacity != 1f || settings.panelOpacity != 1f) {
+                ActionRow(L("إعادة الشفافية إلى 100%")) { scope.launch { repo.setGlassOpacity(1f); repo.setPanelOpacity(1f) } }
             }
+            ActionRow(L("وضع زجاجي: مفاتيح شبه شفافة وخلفية شفافة")) { scope.launch { repo.setGlassOpacity(0.6f); repo.setPanelOpacity(0.15f) } }
             Divider()
             Block(L("ارتفاع المفاتيح"), R.drawable.ic_set_height, IconTeal) {
                 Segmented(

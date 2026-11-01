@@ -112,13 +112,15 @@ private val Ios18Light = SemoKeyboardColors(
     suggestion = Color(0xFF1C1C1E)
 )
 
-/** يجعل خلفية اللوحة والمفاتيح أكثر شفافية (النصوص والزر الأزرق وفقاعة المعاينة تبقى معتمة لتبقى مقروءة) */
-fun SemoKeyboardColors.withOpacity(opacity: Float): SemoKeyboardColors {
-    if (opacity >= 0.999f) return this
-    fun Color.a() = copy(alpha = alpha * opacity)
+/** يجعل المفاتيح (keys) وخلفية اللوحة (panelOpacity) أكثر شفافية كلٌّ على حدة (النصوص والزر الأزرق وفقاعة المعاينة تبقى معتمة لتبقى مقروءة) */
+fun SemoKeyboardColors.withOpacity(keys: Float, panelOpacity: Float = 1f): SemoKeyboardColors {
+    if (keys >= 0.999f && panelOpacity >= 0.999f) return this
+    fun Color.k() = copy(alpha = alpha * keys)
+    fun Color.p() = copy(alpha = alpha * panelOpacity)
     return copy(
-        panel = panel.a(), key = key.a(), keyPressed = keyPressed.a(), keySpecial = keySpecial.a(),
-        chip = chip.a(), divider = divider.a(), keyShadow = keyShadow.a()
+        panel = panel.p(), divider = divider.p(),
+        key = key.k(), keyPressed = keyPressed.k(), keySpecial = keySpecial.k(),
+        chip = chip.k(), keyShadow = keyShadow.k()
     )
 }
 
