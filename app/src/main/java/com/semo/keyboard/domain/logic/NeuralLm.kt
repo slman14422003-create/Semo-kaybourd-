@@ -21,6 +21,8 @@ object NeuralLm {
     private const val SPECIAL_COUNT = 6
     private const val SPACE_MARK = '\u0120'
     private val PRE = Regex("'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)|\\s+")
+    /** the tokenizer was trained on text without diacritics and tatweel, so they are removed before encoding */
+    private val DIACRITICS = Regex("[\\u064B-\\u0652\\u0670\\u0653-\\u0655\\u0640]")
     private val WORD = Regex("^[\\u0621-\\u064A]{2,}$")
 
     private var env: OrtEnvironment? = null
@@ -41,9 +43,15 @@ object NeuralLm {
     var ready = false
         private set
 
+    /** Why the model is off (null = no problem). Shown by the diagnostics page. */
+    @Volatile
+    var loadError: String? = null
+        private set
+
     @Synchronized
     fun load(context: Context) {
         if (ready) return
+        loadError = null
         try {
             val tokJson = context.assets.open(TOKENIZER_ASSET).bufferedReader().use { it.readText() }
             val modelFile = File(context.filesDir, MODEL_FILE)
@@ -59,12 +67,25 @@ object NeuralLm {
             opts.setIntraOpNumThreads(2)
             opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             val s = e.createSession(modelFile.absolutePath, opts)
+            // the tokenizer must be the one the model was trained with: every token id has to be a valid embedding row,
+            // otherwise ONNX Runtime fails on every query ("indices element out of data bounds") and no suggestion is ever produced
+            val modelVocab = runCatching {
+                (s.outputInfo.values.first().info as ai.onnxruntime.TensorInfo).shape.last().toInt()
+            }.getOrDefault(-1)
+            if (modelVocab > 0 && vocab.size != modelVocab) {
+                loadError = "tokenizer.json has ${vocab.size} tokens but the model has $modelVocab; use the tokenizer.json of the same model (Ruqiya/ruqlm)"
+                runCatching { s.close() }
+                ready = false
+                session = null
+                return
+            }
             env = e
             inputName = s.inputNames.first()
             session = s
             synchronized(cache) { cache.clear() }
             ready = true
         } catch (t: Throwable) {
+            loadError = t.javaClass.simpleName + ": " + (t.message ?: "")
             ready = false
             session = null
         }
@@ -162,7 +183,8 @@ object NeuralLm {
     }
 
     private fun encode(text: String): IntArray {
-        val t = if (text.startsWith(" ")) text else " $text"
+        val clean = DIACRITICS.replace(text, "")
+        val t = if (clean.startsWith(" ")) clean else " $clean"
         val out = ArrayList<Int>()
         for (m in PRE.findAll(t)) {
             val bytes = m.value.toByteArray(Charsets.UTF_8)

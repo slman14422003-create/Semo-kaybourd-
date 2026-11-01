@@ -182,6 +182,8 @@ class KeyboardViewModel(
         val toolbarOpen: Boolean = false,
         /** false بحقول كلمات المرور والبريد والروابط: لا اقتراحات ولا تعلّم كلمات */
         val suggestionsAllowed: Boolean = true,
+        /** false when the app asked for no personalized learning (incognito, secure chats): corrections and suggestions still work, but nothing is learned */
+        val learningAllowed: Boolean = true,
         val recentEmojis: List<String> = emptyList(),
         /** الكلمة الجارية كما كُتبت (تظهر بين علامتي اقتباس) */
         val literal: String = "",
@@ -429,7 +431,8 @@ class KeyboardViewModel(
         enterKind: EnterKind,
         suggestionsAllowed: Boolean,
         fieldKind: FieldKind = FieldKind.TEXT,
-        profile: String = InputProfile.GENERAL
+        profile: String = InputProfile.GENERAL,
+        learningAllowed: Boolean = true
     ) {
         if (profileId.value != profile) {
             flushLearning()
@@ -453,7 +456,8 @@ class KeyboardViewModel(
                 clipEdit = null,
                 translate = null,
                 voice = null,
-                suggestionsAllowed = suggestionsAllowed
+                suggestionsAllowed = suggestionsAllowed,
+                learningAllowed = learningAllowed
             )
         }
         undo = null
@@ -560,7 +564,7 @@ class KeyboardViewModel(
                 // الأرقام ورموز العمليات لا تُنهي كلمة: نتجنّب قراءة النص من التطبيق (استدعاء بين عمليتين) بكل ضغطة رقم
                 if (!ch.isLetter() && !ch.isDigit() && ch != '\'' && ch != '’' && ch !in NON_WORD_END_SYMBOLS) {
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
-                    val before = bridge.textBeforeCursorWithin(40, HOT_READ_MS, true)
+                    val before = bridge.textBeforeCursorWithin(40, WORD_END_READ_MS, false)
                     if (before != null) {
                         if (ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null) {
                             editWatch = null
@@ -582,7 +586,7 @@ class KeyboardViewModel(
                 refreshSuggestions()
             }
             KeyAction.Space -> {
-                val before = bridge.textBeforeCursorWithin(40, HOT_READ_MS, true)
+                val before = bridge.textBeforeCursorWithin(40, WORD_END_READ_MS, false)
                 if (before == null) {
                     handleSpace(state.language, state.doubleSpacePeriod, "")
                 } else {
@@ -607,7 +611,7 @@ class KeyboardViewModel(
                 refreshSuggestions()
             }
             KeyAction.Enter -> {
-                val before = bridge.textBeforeCursorWithin(40, HOT_READ_MS, true)
+                val before = bridge.textBeforeCursorWithin(40, WORD_END_READ_MS, false)
                 if (before != null) {
                     val corrected = applyAutoCorrect(before)
                     val finalWord = corrected?.fixed ?: SuggestionEngine.currentWord(before)
@@ -1604,7 +1608,7 @@ class KeyboardViewModel(
     }
 
     private fun canLearn(): Boolean =
-        uiState.value.suggestionsEnabled && transient.value.suggestionsAllowed && transient.value.fieldKind != FieldKind.URL
+        uiState.value.suggestionsEnabled && transient.value.suggestionsAllowed && transient.value.learningAllowed && transient.value.fieldKind != FieldKind.URL
 
     private fun normalizeForLearning(word: String): String =
         if (word.firstOrNull()?.code?.let { it < 0x0600 } == true) word.lowercase() else word
@@ -1987,6 +1991,8 @@ class KeyboardViewModel(
         const val EMOJI_RESULT_MAX = 48
         const val EMOJI_QUERY_MAX = 24
         const val HOT_READ_MS = 80L
+        /** reading the text before the cursor at the end of a word decides autocorrect, so it waits longer and is never skipped */
+        const val WORD_END_READ_MS = 220L
         const val EDIT_READ_MS = 120L
         const val SUGGEST_READ_MS = 400L
         const val FRESH_CLIP_MS = 180_000L

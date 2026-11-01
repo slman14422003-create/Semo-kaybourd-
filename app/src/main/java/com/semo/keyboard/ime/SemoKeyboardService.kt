@@ -863,8 +863,9 @@ class SemoKeyboardService :
             (isTextClass && (
                 variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
                     variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
-                )) ||
-            ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+                ))
+        // the "no personalized learning" flag (incognito tabs, secure messengers) only forbids learning, not corrections
+        val learningAllowed = ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) == 0
 
         val fieldKind = when {
             isTextClass && (variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
@@ -884,7 +885,8 @@ class SemoKeyboardService :
         val startEnter = enterKindFor(info)
         viewModel.onStartInput(
             page, startCaps == true, startEnter, !noSuggestions, fieldKind,
-            com.semo.keyboard.domain.logic.InputProfile.classify(info?.packageName, startEnter == EnterKind.SEARCH)
+            com.semo.keyboard.domain.logic.InputProfile.classify(info?.packageName, startEnter == EnterKind.SEARCH),
+            learningAllowed
         )
         if (startCaps == null) {
             mainHandler.removeCallbacks(cursorMovedTask)
