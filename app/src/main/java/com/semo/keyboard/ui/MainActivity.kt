@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var shortcutsRepository: ShortcutsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.semo.keyboard.diag.CrashLog.install(applicationContext)
         // أندرويد 16: العرض من حافة لحافة إلزامي، فنتعامل مع الـ insets بأنفسنا
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),

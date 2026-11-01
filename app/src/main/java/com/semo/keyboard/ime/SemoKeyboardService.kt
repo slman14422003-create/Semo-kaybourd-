@@ -410,6 +410,7 @@ class SemoKeyboardService :
     override fun onCreate() {
         savedStateController.performRestore(null)
         super.onCreate()
+        com.semo.keyboard.diag.CrashLog.install(applicationContext)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
         clickPlayer = KeyClickPlayer(applicationContext)
