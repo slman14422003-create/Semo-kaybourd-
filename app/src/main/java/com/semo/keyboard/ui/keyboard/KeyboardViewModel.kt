@@ -409,6 +409,7 @@ class KeyboardViewModel(
                 enabledLanguages = s.enabledLanguages,
                 keyboardScale = s.keyboardScale,
                 glassOpacity = s.glassOpacity,
+                panelOpacity = s.panelOpacity,
                 animationSpeed = s.animationSpeed,
                 freshClip = t.freshClip,
                 clipNotice = t.clipNotice,

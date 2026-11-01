@@ -216,8 +216,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val colors = remember(state.style, isDark, state.keyboardTheme, state.glassOpacity) {
-        semoColors(state.style, isDark, state.keyboardTheme).withOpacity(state.glassOpacity)
+    val colors = remember(state.style, isDark, state.keyboardTheme, state.glassOpacity, state.panelOpacity) {
+        semoColors(state.style, isDark, state.keyboardTheme).withOpacity(state.glassOpacity, state.panelOpacity)
     }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
