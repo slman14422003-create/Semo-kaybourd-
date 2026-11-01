@@ -344,3 +344,8 @@
 - Added the correct ai/tokenizer.json of Ruqiya/ruqlm (BPE, 8192 tokens, 7930 merges, 6 special tokens, ByteLevel pre-tokenizer). Checked with Python: vocab matches the 8192 logits of ruq-5m.onnx. The load guard from 3.27.1 now passes.
 - NeuralLm.encode removes diacritics and tatweel before tokenizing, as the tokenizer was trained on normalised text.
 - Not tested on a device: suggestion quality and latency.
+
+## 3.28.0 (versionCode 67) - not built here, check CI
+- New setting "شفافية ألوان الكيبورد" (Keyboard color opacity), Appearance page under keyboard size: slider 35% to 100%, default 100% (same look as before), with a reset row. Stored as glass_opacity (SettingsRepository), carried by KeyboardSettings and KeyboardUiState.glassOpacity, applied in KeyboardScreen through SemoKeyboardColors.withOpacity (panel, keys, pressed key, special keys, chip, divider, key shadow). Text, accent (blue) key, shift highlight and key preview balloon stay opaque so labels remain readable.
+- The IME window was already transparent (onCreateInputView). What shows through a see-through panel is whatever the app leaves behind the keyboard: apps that resize their content above the keyboard show only their window background, apps that do not resize show their content.
+- Not done: real background blur. Android 12+ has Window.setBackgroundBlurRadius, needs a translucent window and device support for cross-window blur; to be tried as a separate opt-in switch after the opacity slider is checked on the device.
