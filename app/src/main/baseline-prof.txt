@@ -1,6 +1,16 @@
 # ملف Baseline Profile يدوي: يُترجَم مسبقًا (AOT) عند التثبيت فيختفي تقطّع أول فتح للوحات والشاشات
-HSPLcom/semo/keyboard/**;->**(**)**
-Lcom/semo/keyboard/**;
+HSPLcom/semo/keyboard/ime/**;->**(**)**
+Lcom/semo/keyboard/ime/**;
+HSPLcom/semo/keyboard/ui/keyboard/**;->**(**)**
+Lcom/semo/keyboard/ui/keyboard/**;
+HSPLcom/semo/keyboard/ui/anim/**;->**(**)**
+Lcom/semo/keyboard/ui/anim/**;
+HSPLcom/semo/keyboard/ui/theme/**;->**(**)**
+Lcom/semo/keyboard/ui/theme/**;
+HSPLcom/semo/keyboard/domain/**;->**(**)**
+Lcom/semo/keyboard/domain/**;
+HSPLcom/semo/keyboard/data/**;->**(**)**
+Lcom/semo/keyboard/data/**;
 HSPLandroidx/compose/**;->**(**)**
 Landroidx/compose/**;
 HSPLandroidx/lifecycle/**;->**(**)**
