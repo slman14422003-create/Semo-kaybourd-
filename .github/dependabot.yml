@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # AGP 9.x needs Gradle 9.6+ and built-in Kotlin (the kotlin-android plugin is dropped);
+      # upgrade it deliberately in one dedicated change, not through an automatic PR.
+      - dependency-name: "com.android.application"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.android.tools.build:gradle"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

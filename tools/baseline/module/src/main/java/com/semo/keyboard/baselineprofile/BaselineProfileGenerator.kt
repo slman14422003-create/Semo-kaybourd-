@@ -23,8 +23,13 @@ class BaselineProfileGenerator {
             device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
             device.executeShellCommand("ime enable $ime")
             device.executeShellCommand("ime set $ime")
-            val intent = Intent().setClassName(pkg, "com.semo.keyboard.bench.BenchInputActivity")
-            startActivityAndWait(intent)
+            // the launcher alias is disabled by default, so start the app through MainActivity (this also starts the profiled process)
+            startActivityAndWait(Intent().setClassName(pkg, "com.semo.keyboard.ui.MainActivity"))
+            // the text field is hosted by the test APK; the keyboard service still runs in (and is profiled from) the app process
+            val testPkg = InstrumentationRegistry.getInstrumentation().context.packageName
+            val out = device.executeShellCommand("am start -W -n $testPkg/com.semo.keyboard.baselineprofile.BenchInputActivity")
+            check(!out.contains("Error")) { "could not start BenchInputActivity: $out" }
+            device.waitForIdle()
             val w = device.displayWidth
             val h = device.displayHeight
             repeat(5) { round ->

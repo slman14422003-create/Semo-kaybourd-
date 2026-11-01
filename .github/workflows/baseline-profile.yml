@@ -76,8 +76,7 @@ jobs:
         if: inputs.open_pr
         run: |
           git checkout -- settings.gradle.kts build.gradle.kts app/build.gradle.kts
-          rm -rf baselineprofile app/src/nonMinifiedRelease
-          git clean -fdq app/src
+          rm -rf baselineprofile
           cp "$RUNNER_TEMP/profile/baseline-prof.txt" app/src/main/baseline-prof.txt
 
       - name: Open pull request

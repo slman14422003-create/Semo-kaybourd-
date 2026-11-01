@@ -30,12 +30,6 @@ def main():
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
 
-    app_src = os.path.join(ROOT, "tools", "baseline", "app-src", "nonMinifiedRelease")
-    app_dst = os.path.join(ROOT, "app", "src", "nonMinifiedRelease")
-    if os.path.exists(app_dst):
-        shutil.rmtree(app_dst)
-    shutil.copytree(app_src, app_dst)
-
     s = read("settings.gradle.kts")
     if 'include(":baselineprofile")' not in s:
         write("settings.gradle.kts", s.rstrip("\n") + '\ninclude(":baselineprofile")\n')
