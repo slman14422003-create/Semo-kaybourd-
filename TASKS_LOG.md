@@ -324,3 +324,23 @@
 - UI: ui/settings/DiagnosticsPage.kt, SettingsPage.DIAGNOSTICS (also deep link "diagnostics"), icon drawable/ic_set_diag.xml, strings diag_* in values and values-ar.
 - Nothing is uploaded; the only side effects are loading the dictionaries or the neural model if they were not loaded yet, and a temp backup file in cacheDir that is deleted right after.
 - Not yet verified by a Gradle build. Expected-output assertions (calculator, auto-correct samples, suggestions) are WARN, so a wrong assumption in a test shows as a warning, not a failure.
+
+## 3.27.1 (versionCode 64) - not built here, check CI
+- Fixed from the first Full check report (3 FAIL, 4 WARN):
+  - Bundled libraries FAIL was a false alarm: release builds are minified by R8, so Class.forName("androidx.datastore.core.DataStore") could not find the renamed class. The check now uses class literals.
+  - Dictionaries loaded FAIL was a false alarm: the built-in English list is 562 words by design (en_valid.txt is the spell-check list). The minimum is now 500 for built-in only and 1000 once a dictionary is downloaded.
+  - Neural LM FAIL, real bug: assets/ai/tokenizer.json is a 151643-token tokenizer (Qwen style), the model has 8192 tokens, so every query failed with "indices element out of data bounds" and no suggestion came out. NeuralLm.load now compares tokenizer size to the model output size and stays off with NeuralLm.loadError set (shown in the report) instead of erroring on every query. STILL REQUIRED: put the real tokenizer.json of Ruqiya/ruqlm (8192 tokens) in app/src/main/assets/ai/.
+  - Calculator WARN: "(3" is accepted on purpose (unclosed parenthesis closes itself), so it was removed from the must-fail list.
+  - ar_fix.txt: removed 13 pairs whose key is a valid word with another meaning (اكتب، اسمع، اعمل، احزن، اظهر، اغلب، اقدم، ايه، ايش، سلمي، هاد، أمسي، أولي). The remaining known-word keys (hamza and taa marbuta fixes) are deliberate and reported as INFO.
+  - Clipboard DB check now opens the database read-only; the second helper made SQLite try to switch WAL to TRUNCATE on close ("database is locked").
+  - Logcat check ignores OS/vendor noise (ashmem, HWUI, VibratorInfo, libc property, JankMonitor, settings move, GC suspend).
+
+## 3.27.2 (versionCode 65) - not built here, check CI
+- Autocorrect did not work in many fields. Two causes found by reading the code (not verified on a device):
+  1. SemoKeyboardService treated IME_FLAG_NO_PERSONALIZED_LEARNING as "no suggestions", which switched off suggestions AND autocorrect in every field that sets it (incognito tabs, many messengers). Now it only sets learningAllowed=false (new field in the ViewModel transient state, used by canLearn): corrections and suggestions keep working, nothing is learned.
+  2. The text read before the cursor at Space/Enter/punctuation used an 80 ms timeout and was skipped for 600 ms after any slow read, so on slow apps no word was ever corrected. Those three reads now use WORD_END_READ_MS = 220 ms and are never skipped.
+
+## 3.27.3 (versionCode 66) - not built here, check CI
+- Added the correct ai/tokenizer.json of Ruqiya/ruqlm (BPE, 8192 tokens, 7930 merges, 6 special tokens, ByteLevel pre-tokenizer). Checked with Python: vocab matches the 8192 logits of ruq-5m.onnx. The load guard from 3.27.1 now passes.
+- NeuralLm.encode removes diacritics and tatweel before tokenizing, as the tokenizer was trained on normalised text.
+- Not tested on a device: suggestion quality and latency.
