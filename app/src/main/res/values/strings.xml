@@ -120,4 +120,18 @@
     <string name="pack_wiktionary_desc">Dictionary headwords from Arabic Wiktionary. Medium download.</string>
     <string name="pack_wikipedia_title">Arabic Wikipedia titles</string>
     <string name="pack_wikipedia_desc">Names, places and terms from Arabic Wikipedia article titles. Large download.</string>
+    <string name="diag_title">Full check</string>
+    <string name="diag_nav_summary">Features, code, data, resources and logs in one report</string>
+    <string name="diag_running">Checking… %1$d done</string>
+    <string name="diag_summary">%1$d passed · %2$d warnings · %3$d failed</string>
+    <string name="diag_counts">%1$d checks: %2$d passed, %3$d warnings, %4$d failed</string>
+    <string name="diag_none">No issues found</string>
+    <string name="diag_copy">Copy log</string>
+    <string name="diag_copied">Copied</string>
+    <string name="diag_share">Share</string>
+    <string name="diag_rerun">Run again</string>
+    <string name="diag_all">All</string>
+    <string name="diag_issues">Issues only</string>
+    <string name="diag_clear_crash">Clear recorded crashes</string>
+    <string name="diag_hint">Everything runs on this device and nothing is sent anywhere. Copy the log and paste it to get the errors fixed.</string>
 </resources>
