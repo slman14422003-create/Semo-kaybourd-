@@ -1,5 +1,6 @@
--keep class com.semo.keyboard.ime.** { *; }
--keep class com.semo.keyboard.ui.MainActivity { *; }
+-keep class com.semo.keyboard.ime.SemoKeyboardService
+-keep class com.semo.keyboard.ime.VoicePermissionActivity
+-keep class com.semo.keyboard.ui.MainActivity
 -keep class androidx.core.content.FileProvider { *; }
 -keepclassmembers enum com.semo.keyboard.** { *; }
 -keep class org.vosk.** { *; }

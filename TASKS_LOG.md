@@ -355,3 +355,38 @@
 - One-tap preset "وضع زجاجي": keys 60%, background 15%. One reset row sets both back to 100%.
 - Text, blue key, shift highlight and key preview balloon stay opaque.
 - Still not done: real blur (Window.setBackgroundBlurRadius needs a translucent IME window; the manifest theme is ignored by InputMethodService, so it needs a device test first).
+
+## 3.29.1 (versionCode 69) - not built here, check CI
+- Neural model loading (SemoKeyboardService): new HandlerThread semo-ai (THREAD_PRIORITY_BACKGROUND) with aiHandler. NeuralLm.load is no longer posted on ioHandler at startup. A serviceScope collector on viewModel.uiState.map { language }.distinctUntilChanged() calls requestNeuralLm() the first time the language is ARABIC; one attempt per service lifetime (neuralRequested), so a failed load does not retry on every language switch. The thread is stopped in onDestroy. Effect: ioHandler (field reads, replaceFieldText, dictionaries, auto-correct, emoji search) is no longer blocked by the model copy and session creation, and English-only sessions never pay for the model. Until the model is ready NextWordModel simply skips it (it already checks NeuralLm.ready).
+- Diagnostics: DiagEngines still calls NeuralLm.load itself when not ready, so the Full check is unaffected.
+- Recomposition (KeyboardViewModel, KeyModels, KeyboardScreen, Panels):
+  - New NoticeUi (freshClip, clipNotice, learnedNotice, pasteProgress) and KeyboardViewModel.noticeUi (StateFlow, distinctUntilChanged). These four fields were removed from KeyboardUiState: pasteProgress ticks many times during a paste and each tick used to recompose the whole keyboard. SuggestionSlots (KeyboardScreen) and ClipboardPanel (Panels) collect noticeUi directly.
+  - KeyboardViewModel.uiState now combines a private UiLocal projection of the transient state (page, shift, enterKind, fieldKind, alternates, toolbarOpen, removedWord, clipEdit, translate, voice, emojiSearch, navButtons) instead of the whole LocalState, so changes to suggestions, literal, math result, swipe word, learning flags and notices no longer rebuild KeyboardUiState.
+  - Left as is on purpose: collectAsState at the KeyboardScreen root (collectAsStateWithLifecycle could stop collecting if the IME lifecycle owner is not STARTED while visible; needs a device test), and the per-field split of the rest of KeyboardUiState (large refactor, no compiler here).
+- Not measured: expected gains are fewer recompositions during paste/notice and a smoother first Arabic switch; check Full check latency numbers and a Perfetto trace before and after.
+
+## 3.29.2 (versionCode 70) - not built here, check CI
+- Per-field split of KeyboardUiState (KeyModels.kt, KeyboardViewModel.kt). New immutable slices, each a StateFlow with distinctUntilChanged:
+  - OverlayUi (translate, voice, emojiSearch, clipEdit) as overlayUi, plus overlayMode (0 none, 1 clip edit, 2 translate, 3 voice, 4 emoji search) for the strip AnimatedContent selector. Voice text and translate results change many times per second while active; they no longer recompose the keyboard root.
+  - StripUi (alternates, removedWord, toolbarOpen) as stripUi, plus alternatesOpen (Boolean, only flips when the alternates list becomes empty or non-empty; used by KeyboardScreen for swipeEnabled).
+  - PanelDataUi (clipItems, recentEmojis, emojiFavorites, emojiTones, translateTarget, translateRecents) as panelData, built from settings and the clipboard repository only.
+- Removed those 13 fields from KeyboardUiState. uiState is now combine(uiLocal, settings) where UiLocal holds page, shift, enterKind, fieldKind, navButtons; clipboardRepository.items is no longer part of it.
+- Consumers now collect the slice they need: KeyboardScreen root (overlayMode, alternatesOpen), TopStrip and SuggestionsRow (stripUi), TranslateBar and TranslatePanel (overlayUi, panelData), VoiceBar and EmojiSearchBar (overlayUi), EmojiPanel and ClipboardPanel (panelData), ClipEditBar (overlayUi). The bar and panel signatures did not change.
+- View model internal reads of recent emojis, favorites and translate target use panelData.value.
+- EmojiPanel still snapshots recents and favorites once when it opens (remember without keys), as before.
+- Checked by grep that no remaining reader takes these fields from KeyboardUiState; bracket balance matches the previous files. No compiler available here, so a CI build is the first real check.
+- Expected effect: typing, voice dictation, translation, emoji search and clipboard changes recompose only the bars and panels that show them. Not measured; compare with a Perfetto trace or the Full check latency numbers.
+
+## 3.29.3 (versionCode 71) - not built here, check CI
+- NeuralLm (domain/logic/NeuralLm.kt):
+  - BEAMS 5 to 3. EXTRA_TOKENS stays 3 on purpose: the time cap already bounds the cost and a lower value would drop longer words.
+  - New 90 ms budget per query (BUDGET_MS). Beams are expanded in order of likelihood, so the most probable words come first when the budget runs out.
+  - New generation counter: when a newer query starts, an older running one returns null at the next beam or step. compute returns Computed(words, full); only full results enter the LRU cache, so a timed-out or aborted query never leaves a poor entry behind. A null session mid-query (unload) also returns null instead of an empty cached list.
+  - Batching beams was checked and is not possible: ruq-5m.onnx has input_ids shape [1, seq] and output logits [1, 8192]; a batch of 4 is rejected by ONNX Runtime ("Expected: 1"). It would need a re-export with a dynamic batch axis.
+  - tools/quantize_ruq.py: onnxruntime dynamic int8 quantization (usage: python quantize_ruq.py in.onnx out.onnx; needs the onnx package). Not run here. If the quantized file replaces the asset, change MODEL_FILE in NeuralLm (currently ai_ruq-5m_v1.onnx), otherwise existing installs keep the old copy in filesDir. Compare Full check latency and suggestion quality before shipping it.
+- SemoKeyboardService: the language collector now also schedules neuralUnload (NeuralLm.unload, neuralRequested reset) 5 minutes after the language leaves Arabic (NEURAL_IDLE_MS) and cancels it when Arabic returns. Runs on the semo-ai thread, so it is serialized with load.
+- R8 (app/proguard-rules.pro): the blanket keep of ime.** and MainActivity members is replaced by name-only keeps for SemoKeyboardService, VoicePermissionActivity and MainActivity (AGP also keeps manifest components). If a release build breaks on something in ime, add a narrow keep for that class instead of restoring the wildcard.
+- Build (app/build.gradle.kts): abiFilters arm64-v8a and armeabi-v7a (no x86 or x86_64 APK; emulators on x86 need a debug build with the filter removed), noCompress for onnx assets.
+- baseline-prof.txt: the app-wide wildcard now covers ime, ui/keyboard, ui/anim, ui/theme, domain and data only (settings, diag, onboarding, update are cold paths). A real profile still needs a Macrobenchmark run on a device.
+- Checked, no change needed: KeyboardLayoutProvider.rows is memoized with all relevant keys in KeyboardScreen; key background color is read in the draw phase (animBg.value inside drawBehind); swipe typing uses one board-level pointerInput; per-key pointerInput only handles tap and hold.
+- Not done: Compose BOM bump. Newer BOMs (Compose 1.9 and up) are built with newer Kotlin metadata and 1.12 needs compileSdk 37 and AGP 9; with Kotlin 2.0.21 and AGP 8.10.1 this needs a coordinated Kotlin plus BOM upgrade verified by CI.

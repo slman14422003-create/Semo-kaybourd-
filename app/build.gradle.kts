@@ -12,9 +12,12 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 68
-        versionName = "3.29.0"
-        ndk { debugSymbolLevel = "NONE" }
+        versionCode = 71
+        versionName = "3.29.3"
+        ndk {
+            debugSymbolLevel = "NONE"
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
     val semoKeystore = file("semo-release.p12")
     if (semoKeystore.exists()) {
@@ -62,6 +65,7 @@ android {
 
     androidResources {
         localeFilters += setOf("en", "ar")
+        noCompress += "onnx"
     }
 
     buildTypes {

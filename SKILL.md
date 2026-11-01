@@ -150,3 +150,12 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 
 ## 3.26.0 (versionCode 62) - not built here, check CI
 - NeuralLm (ONNX Runtime, ruq-5m) feeds Arabic next-word suggestions after personal words. Needs app/src/main/assets/ai/tokenizer.json (add it by hand). Details in TASKS_LOG.md 3.26.0.
+
+## 3.29.1 (versionCode 69) - not built here, check CI
+- Performance pass, details in TASKS_LOG.md 3.29.1. NeuralLm now loads on its own low-priority thread (semo-ai in SemoKeyboardService) and only once the keyboard language becomes Arabic; ioHandler no longer carries the 21 MB model copy. KeyboardUiState no longer holds freshClip, clipNotice, learnedNotice, pasteProgress: read them from KeyboardViewModel.noticeUi (NoticeUi in KeyModels.kt). uiState is built from a UiLocal projection so suggestion-only changes do not rebuild it.
+
+## 3.29.2 (versionCode 70) - not built here, check CI
+- KeyboardUiState was split into slices, details in TASKS_LOG.md 3.29.2. It now holds only settings plus page, shiftState, enterKind, fieldKind, navButtons. Read the rest from KeyboardViewModel flows: noticeUi (NoticeUi), overlayUi (OverlayUi: translate, voice, emojiSearch, clipEdit), overlayMode (Int 0..4), stripUi (StripUi: alternates, removedWord, toolbarOpen), alternatesOpen (Boolean), panelData (PanelDataUi: clipItems, recentEmojis, emojiFavorites, emojiTones, translateTarget, translateRecents). Non-UI code in the view model reads panelData.value, not uiState.value, for those fields. A composable that needs one of these collects the flow itself instead of reading state.
+
+## 3.29.3 (versionCode 71) - not built here, check CI
+- Performance pass 3, details in TASKS_LOG.md 3.29.3. NeuralLm: BEAMS 3, 90 ms budget per query (BUDGET_MS), a newer query aborts an older one (generation counter), partial or aborted results are never cached. The model has a fixed batch size of 1 (input_ids [1, seq]), so beams cannot be batched without re-exporting it. The service unloads the model after 5 minutes outside Arabic (NEURAL_IDLE_MS) and reloads on the next switch to Arabic. proguard-rules.pro no longer keeps all of ime.**; abiFilters are arm64-v8a and armeabi-v7a (no x86 builds); onnx assets are stored uncompressed; baseline-prof.txt only covers hot packages. tools/quantize_ruq.py makes an int8 model (not run here).
