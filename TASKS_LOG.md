@@ -349,3 +349,9 @@
 - New setting "شفافية ألوان الكيبورد" (Keyboard color opacity), Appearance page under keyboard size: slider 35% to 100%, default 100% (same look as before), with a reset row. Stored as glass_opacity (SettingsRepository), carried by KeyboardSettings and KeyboardUiState.glassOpacity, applied in KeyboardScreen through SemoKeyboardColors.withOpacity (panel, keys, pressed key, special keys, chip, divider, key shadow). Text, accent (blue) key, shift highlight and key preview balloon stay opaque so labels remain readable.
 - The IME window was already transparent (onCreateInputView). What shows through a see-through panel is whatever the app leaves behind the keyboard: apps that resize their content above the keyboard show only their window background, apps that do not resize show their content.
 - Not done: real background blur. Android 12+ has Window.setBackgroundBlurRadius, needs a translucent window and device support for cross-window blur; to be tried as a separate opt-in switch after the opacity slider is checked on the device.
+
+## 3.29.0 (versionCode 68) - not built here, check CI
+- Transparency mode, more control: two independent sliders on the Appearance page. "شفافية المفاتيح" (keys, 35-100%, setting glass_opacity) and "شفافية خلفية الكيبورد" (panel background and dividers, 0-100%, new setting panel_opacity). SemoKeyboardColors.withOpacity(keys, panelOpacity).
+- One-tap preset "وضع زجاجي": keys 60%, background 15%. One reset row sets both back to 100%.
+- Text, blue key, shift highlight and key preview balloon stay opaque.
+- Still not done: real blur (Window.setBackgroundBlurRadius needs a translucent IME window; the manifest theme is ignored by InputMethodService, so it needs a device test first).
