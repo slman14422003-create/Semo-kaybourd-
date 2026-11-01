@@ -144,6 +144,7 @@ import com.semo.keyboard.ui.theme.SemoKeyboardColors
 import com.semo.keyboard.ui.theme.keyMetrics
 import com.semo.keyboard.ui.theme.LocalKeyboardScale
 import com.semo.keyboard.ui.theme.semoColors
+import com.semo.keyboard.ui.theme.withOpacity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -215,8 +216,8 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val colors = remember(state.style, isDark, state.keyboardTheme) {
-        semoColors(state.style, isDark, state.keyboardTheme)
+    val colors = remember(state.style, isDark, state.keyboardTheme, state.glassOpacity) {
+        semoColors(state.style, isDark, state.keyboardTheme).withOpacity(state.glassOpacity)
     }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp

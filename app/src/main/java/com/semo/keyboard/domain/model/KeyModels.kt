@@ -316,6 +316,8 @@ data class SemoSettings(
     val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
     /** حجم اللوحة كله (ارتفاع المفاتيح والخطوط): 0.8 إلى 1.3، والافتراضي 1.0 */
     val keyboardScale: Float = 1f,
+    /** شفافية ألوان اللوحة (الخلفية والمفاتيح): 0.35 إلى 1، والافتراضي 1 = معتمة */
+    val glassOpacity: Float = 1f,
     /** سرعة كل حركات اللوحة (تبديل الصفحات، اللغة، ضغط المفاتيح)؛ OFF يلغيها تمامًا */
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translateTarget: String = "en",
@@ -409,6 +411,7 @@ data class KeyboardUiState(
     val recentEmojis: List<String> = emptyList(),
     val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
     val keyboardScale: Float = 1f,
+    val glassOpacity: Float = 1f,
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
     val translate: TranslateUi? = null,
     val voice: VoiceUi? = null,

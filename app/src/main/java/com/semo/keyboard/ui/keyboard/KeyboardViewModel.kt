@@ -408,6 +408,7 @@ class KeyboardViewModel(
                 recentEmojis = s.recentEmojis,
                 enabledLanguages = s.enabledLanguages,
                 keyboardScale = s.keyboardScale,
+                glassOpacity = s.glassOpacity,
                 animationSpeed = s.animationSpeed,
                 freshClip = t.freshClip,
                 clipNotice = t.clipNotice,
