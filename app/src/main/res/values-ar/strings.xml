@@ -120,4 +120,18 @@
     <string name="pack_wiktionary_desc">مداخل المعجم من ويكاموس العربي. تنزيل متوسط.</string>
     <string name="pack_wikipedia_title">عناوين ويكيبيديا العربية</string>
     <string name="pack_wikipedia_desc">أسماء وأماكن ومصطلحات من عناوين مقالات ويكيبيديا العربية. تنزيل كبير.</string>
+    <string name="diag_title">فحص شامل</string>
+    <string name="diag_nav_summary">الميزات والكود والبيانات والموارد والسجل بتقرير واحد</string>
+    <string name="diag_running">جارٍ الفحص… اكتمل %1$d</string>
+    <string name="diag_summary">%1$d ناجح · %2$d تحذير · %3$d فاشل</string>
+    <string name="diag_counts">%1$d فحصًا: %2$d ناجح، %3$d تحذير، %4$d فاشل</string>
+    <string name="diag_none">لا توجد مشاكل</string>
+    <string name="diag_copy">نسخ السجل</string>
+    <string name="diag_copied">تم النسخ</string>
+    <string name="diag_share">مشاركة</string>
+    <string name="diag_rerun">إعادة الفحص</string>
+    <string name="diag_all">الكل</string>
+    <string name="diag_issues">المشاكل فقط</string>
+    <string name="diag_clear_crash">مسح سجل الانهيارات</string>
+    <string name="diag_hint">كل شيء يعمل على جهازك ولا يُرسل أي شيء. انسخ السجل والصقه لإصلاح الأخطاء.</string>
 </resources>
