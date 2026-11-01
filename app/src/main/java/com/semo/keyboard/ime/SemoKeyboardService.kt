@@ -70,6 +70,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -83,6 +85,7 @@ import kotlinx.coroutines.yield
 
 /** أقصى عدد أحرف بدفعة لصق واحدة (النص الطويل يُلصق على دفعات كي لا يتجاوز حدّ حجم رسالة Binder) */
 private const val COMMIT_CHUNK = 4_000
+private const val NEURAL_IDLE_MS = 300_000L
 private const val COMMIT_CHUNK_BIG = 24_000
 private const val COMMIT_BIG_THRESHOLD = 200_000
 private const val PASTE_TARGET_MS = 45L
@@ -204,6 +207,20 @@ class SemoKeyboardService :
      */
     private val ioThread = HandlerThread("semo-io").also { it.start() }
     private val ioHandler = Handler(ioThread.looper)
+
+    private val aiThread = HandlerThread("semo-ai", android.os.Process.THREAD_PRIORITY_BACKGROUND).also { it.start() }
+    private val aiHandler = Handler(aiThread.looper)
+    @Volatile private var neuralRequested = false
+    private val neuralUnload = Runnable {
+        com.semo.keyboard.domain.logic.NeuralLm.unload()
+        neuralRequested = false
+    }
+
+    private fun requestNeuralLm() {
+        if (neuralRequested) return
+        neuralRequested = true
+        aiHandler.post { runCatching { com.semo.keyboard.domain.logic.NeuralLm.load(applicationContext) } }
+    }
 
     /** هل يوجد نص محدد؟ نحدّثه من onUpdateSelection بدل سؤال التطبيق (getSelectedText) عند كل حذف */
     @Volatile private var hasSelection = false
@@ -436,7 +453,20 @@ class SemoKeyboardService :
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.EmojiSearch.attach(applicationContext) } }
         ioHandler.post { runCatching { com.semo.keyboard.domain.logic.SentenceRules.attach(applicationContext) } }
         ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
-        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.NeuralLm.load(applicationContext) } }
+        serviceScope.launch {
+            viewModel.uiState
+                .map { it.language }
+                .distinctUntilChanged()
+                .collect {
+                    if (it == com.semo.keyboard.domain.model.KeyboardLanguage.ARABIC) {
+                        aiHandler.removeCallbacks(neuralUnload)
+                        requestNeuralLm()
+                    } else if (neuralRequested) {
+                        aiHandler.removeCallbacks(neuralUnload)
+                        aiHandler.postDelayed(neuralUnload, NEURAL_IDLE_MS)
+                    }
+                }
+        }
         ioHandler.post { runCatching { VoskModelManager.cleanLeftovers(applicationContext) } }
         hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
     }
@@ -972,6 +1002,8 @@ class SemoKeyboardService :
         readHandler.removeCallbacksAndMessages(null)
         readThread.quitSafely()
         ioThread.quitSafely()
+        aiHandler.removeCallbacksAndMessages(null)
+        aiThread.quitSafely()
         KeyboardStatusHelper.setImeVisible(this, false)
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED

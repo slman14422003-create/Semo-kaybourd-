@@ -1,5 +1,7 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -31,7 +33,8 @@ internal fun EmojiSearchBar(
     stripHeight: Dp,
     viewModel: KeyboardViewModel
 ) {
-    val ui = state.emojiSearch ?: return
+    val overlay by viewModel.overlayUi.collectAsState()
+    val ui = overlay.emojiSearch ?: return
     val enter = rememberBarEnter()
     val pillHeight = (stripHeight - 8.dp).coerceAtLeast(34.dp)
     val hint = appString(R.string.emoji_search_hint)

@@ -211,6 +211,8 @@ private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
 @Composable
 fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Unit = { _, _ -> }) {
     val state by viewModel.uiState.collectAsState()
+    val overlayMode by viewModel.overlayMode.collectAsState()
+    val alternatesOpen by viewModel.alternatesOpen.collectAsState()
     val isDark = when (state.themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
@@ -314,7 +316,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
     // مسار الإصبع أثناء الكتابة بالسحب
     val trail = remember { mutableStateListOf<Offset>() }
     val swipeEnabled = state.swipeTyping && state.page == KeyboardPage.LETTERS &&
-        state.alternates.isEmpty() && !trackpad
+        !alternatesOpen && !trackpad
 
     // مضاعِف سرعة الحركة من الإعدادات (0 = إيقاف الحركة تمامًا)
     val animScale = state.animationSpeed.multiplier
@@ -397,7 +399,7 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
                 ) {
                     if (state.page != KeyboardPage.CLIPBOARD && state.page != KeyboardPage.CALC) {
                         AnimatedContent(
-                            targetState = if (state.clipEdit != null) 1 else if (state.translate != null) 2 else if (state.voice != null) 3 else if (state.emojiSearch != null) 4 else 0,
+                            targetState = overlayMode,
                             transitionSpec = {
                                 (fadeIn(scaledTween(animScale, 220, delayMillis = 40, easing = IosEaseOut)) +
                                     androidx.compose.animation.slideInVertically(scaledTween(animScale, 300, easing = IosPush)) { it / 3 }) togetherWith
@@ -685,7 +687,8 @@ private fun TopStrip(
     viewModel: KeyboardViewModel
 ) {
     val animScale = LocalAnimScale.current
-    var moreOpen by remember(state.toolbarOpen) { mutableStateOf(false) }
+    val strip by viewModel.stripUi.collectAsState()
+    var moreOpen by remember(strip.toolbarOpen) { mutableStateOf(false) }
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val fullWidth = maxWidth
         val slots = ((fullWidth - 4.dp - 46.dp) / 46.dp).toInt().coerceAtLeast(1)
@@ -705,12 +708,12 @@ private fun TopStrip(
                 StripIconButton(
                     iconRes = R.drawable.ic_tool_chevron,
                     colors = colors,
-                    rotate = if (state.toolbarOpen) 180f else 0f,
+                    rotate = if (strip.toolbarOpen) 180f else 0f,
                     filled = false,
                     onClick = { viewModel.toggleToolbar() }
                 )
                 AnimatedContent(
-                    targetState = state.toolbarOpen,
+                    targetState = strip.toolbarOpen,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
@@ -747,7 +750,7 @@ private fun TopStrip(
                 }
             }
             androidx.compose.animation.AnimatedVisibility(
-                visible = state.toolbarOpen && moreOpen && remaining.isNotEmpty(),
+                visible = strip.toolbarOpen && moreOpen && remaining.isNotEmpty(),
                 enter = androidx.compose.animation.expandVertically(
                     animationSpec = scaledTween(animScale, 320, easing = IosPush),
                     expandFrom = Alignment.Top
@@ -864,12 +867,13 @@ private fun RowScope.SuggestionsRow(
     colors: SemoKeyboardColors,
     viewModel: KeyboardViewModel
 ) {
+    val strip by viewModel.stripUi.collectAsState()
     Box(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
     ) {
-        Crossfade(targetState = state.removedWord, animationSpec = tween(160), label = "removedSwap") { removed ->
+        Crossfade(targetState = strip.removedWord, animationSpec = tween(160), label = "removedSwap") { removed ->
             if (removed != null) {
                 RemovedNotice(removed, colors, state.language.rtl, viewModel)
             } else {
@@ -1067,14 +1071,15 @@ private fun SuggestionSlots(
     viewModel: KeyboardViewModel
 ) {
     val sug by viewModel.suggestionUi.collectAsState()
-    val progress = state.pasteProgress
+    val nu by viewModel.noticeUi.collectAsState()
+    val progress = nu.pasteProgress
     if (progress != null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             PasteProgressStrip(progress, colors, state.language.rtl, viewModel)
         }
         return
     }
-    val notice = state.clipNotice
+    val notice = nu.clipNotice
     if (notice != null && sug.literal.isEmpty() && sug.mathResult == null) {
         Box(
             modifier = Modifier
@@ -1095,7 +1100,7 @@ private fun SuggestionSlots(
         }
         return
     }
-    val learned = state.learnedNotice
+    val learned = nu.learnedNotice
     if (learned != null && learned.isNotEmpty() && sug.literal.isEmpty() && sug.mathResult == null) {
         val label = if (learned.size == 1) keyboardString(state.language.rtl, R.string.learned_one, learned[0])
         else keyboardString(state.language.rtl, R.string.learned_many, learned.size)
@@ -1148,7 +1153,7 @@ private fun SuggestionSlots(
         return
     }
 
-    val latestClip = if (sug.literal.isEmpty() && state.clipboardEnabled) state.freshClip else null
+    val latestClip = if (sug.literal.isEmpty() && state.clipboardEnabled) nu.freshClip else null
     val longPressLabel = keyboardString(state.language.rtl, R.string.suggest_remove_action)
 
     fun wordSlot(text: String, bold: Boolean): SuggestionSlot = SuggestionSlot(

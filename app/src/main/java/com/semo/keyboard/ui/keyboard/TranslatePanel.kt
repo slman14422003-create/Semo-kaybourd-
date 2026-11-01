@@ -1,5 +1,6 @@
 package com.semo.keyboard.ui.keyboard
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
@@ -74,7 +75,9 @@ internal fun TranslateBar(
     stripHeight: Dp,
     viewModel: KeyboardViewModel
 ) {
-    val ui = state.translate ?: return
+    val overlay by viewModel.overlayUi.collectAsState()
+    val panel by viewModel.panelData.collectAsState()
+    val ui = overlay.translate ?: return
     val scale = LocalAnimScale.current
     val hasResult = ui.result.isNotEmpty() && !ui.error
     val pickerOpen = state.page == KeyboardPage.TRANSLATE
@@ -143,7 +146,7 @@ internal fun TranslateBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AnimatedContent(
-                    targetState = TranslateLanguages.shortCode(state.translateTarget),
+                    targetState = TranslateLanguages.shortCode(panel.translateTarget),
                     transitionSpec = {
                         (fadeIn(scaledTween(scale, 200)) + slideInVertically(scaledTween(scale, 240, easing = IosPush)) { it / 2 }) togetherWith
                             (fadeOut(scaledTween(scale, 120)) + slideOutVertically(scaledTween(scale, 200, easing = IosPush)) { -it / 2 })
@@ -270,8 +273,9 @@ internal fun TranslatePanel(
     height: Dp,
     viewModel: KeyboardViewModel
 ) {
+    val panel by viewModel.panelData.collectAsState()
     val all = remember { TranslateLanguages.sorted() }
-    val recents = state.translateRecents.filter { it in all }
+    val recents = panel.translateRecents.filter { it in all }
     val names = remember { HashMap<String, Pair<String, String>>() }
     fun info(code: String): Pair<String, String> =
         names.getOrPut(code) { TranslateLanguages.displayName(code) to TranslateLanguages.nativeName(code) }
@@ -296,7 +300,7 @@ internal fun TranslatePanel(
                 )
             }
             items(recents, key = { "r$it" }) { code ->
-                LanguageCell(code, info(code), code == state.translateTarget, colors, viewModel)
+                LanguageCell(code, info(code), code == panel.translateTarget, colors, viewModel)
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Text(
@@ -309,7 +313,7 @@ internal fun TranslatePanel(
             }
         }
         items(all, key = { "a$it" }) { code ->
-            LanguageCell(code, info(code), code == state.translateTarget, colors, viewModel)
+            LanguageCell(code, info(code), code == panel.translateTarget, colors, viewModel)
         }
     }
 }

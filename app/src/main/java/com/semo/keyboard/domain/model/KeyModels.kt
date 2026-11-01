@@ -339,6 +339,39 @@ data class SuggestionUi(
 )
 
 @Immutable
+data class NoticeUi(
+    val freshClip: String? = null,
+    val clipNotice: ClipNotice? = null,
+    val learnedNotice: List<String>? = null,
+    val pasteProgress: Float? = null
+)
+
+@Immutable
+data class OverlayUi(
+    val translate: TranslateUi? = null,
+    val voice: VoiceUi? = null,
+    val emojiSearch: EmojiSearchUi? = null,
+    val clipEdit: ClipEdit? = null
+)
+
+@Immutable
+data class PanelDataUi(
+    val clipItems: List<ClipItem> = emptyList(),
+    val recentEmojis: List<String> = emptyList(),
+    val emojiFavorites: List<String> = emptyList(),
+    val emojiTones: Map<String, String> = emptyMap(),
+    val translateTarget: String = "en",
+    val translateRecents: List<String> = emptyList()
+)
+
+@Immutable
+data class StripUi(
+    val alternates: List<String> = emptyList(),
+    val removedWord: String? = null,
+    val toolbarOpen: Boolean = false
+)
+
+@Immutable
 data class KeyboardUiState(
     val page: KeyboardPage = KeyboardPage.LETTERS,
     val shiftState: ShiftState = ShiftState.OFF,
@@ -351,8 +384,6 @@ data class KeyboardUiState(
     val numberRow: Boolean = false,
     val enterKind: EnterKind = EnterKind.RETURN,
     val fieldKind: FieldKind = FieldKind.TEXT,
-    /** بدائل الحرف المضغوط مطوّلًا؛ تُعرض بشريط الاقتراحات أعلى اللوحة */
-    val alternates: List<String> = emptyList(),
     val englishLayout: EnglishLayout = EnglishLayout.QWERTY,
     val arabicLayout: ArabicLayout = ArabicLayout.STANDARD,
     val style: KeyboardStyle = KeyboardStyle.IOS18,
@@ -375,8 +406,6 @@ data class KeyboardUiState(
     val autoPairs: Boolean = false,
     val smartPunctuation: Boolean = true,
     val layoutVariants: Map<String, String> = emptyMap(),
-    val emojiFavorites: List<String> = emptyList(),
-    val emojiTones: Map<String, String> = emptyMap(),
     val mathResults: Boolean = true,
     val globeOffsetDp: Float = 0f,
     val hideButtonMode: HideButtonMode = HideButtonMode.ARROW,
@@ -387,15 +416,6 @@ data class KeyboardUiState(
     val globeDy: Float = 0f,
     val hideDx: Float = 0f,
     val hideDy: Float = 0f,
-    /** نص نُسخ للتو: يظهر كشريحة لصق سريعة بشريط الاقتراحات لمدة قصيرة */
-    val freshClip: String? = null,
-    val removedWord: String? = null,
-    val toolbarOpen: Boolean = false,
-    val learnedNotice: List<String>? = null,
-    val clipItems: List<ClipItem> = emptyList(),
-    val clipNotice: ClipNotice? = null,
-    val pasteProgress: Float? = null,
-    val clipEdit: ClipEdit? = null,
     /** توقّع الكلمة التالية (من أنماط كتابتك + قائمة مدمجة) */
     val nextWord: Boolean = true,
     /** تدقيق إملائي: اقتراح التصحيح بالشريط لو الكلمة غير موجودة بالقاموس */
@@ -409,18 +429,12 @@ data class KeyboardUiState(
     val spaceBarAction: SpaceBarAction = SpaceBarAction.CURSOR,
     /** تبقى لوحة الرموز مفتوحة بعد كتابة رمز (لو متوقف ترجع للحروف) */
     val keepSymbolPanel: Boolean = true,
-    val recentEmojis: List<String> = emptyList(),
     val enabledLanguages: List<KeyboardLanguage> = listOf(KeyboardLanguage.ENGLISH, KeyboardLanguage.ARABIC),
     val keyboardScale: Float = 1f,
     val glassOpacity: Float = 1f,
     val panelOpacity: Float = 1f,
     val animationSpeed: AnimationSpeed = AnimationSpeed.NORMAL,
-    val translate: TranslateUi? = null,
-    val voice: VoiceUi? = null,
-    val emojiSearch: EmojiSearchUi? = null,
     val navButtons: Boolean = false,
-    val translateTarget: String = "en",
-    val translateRecents: List<String> = emptyList(),
     val keyboardTheme: KeyboardTheme = KeyboardTheme.IOS,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val autoCacheClear: Boolean = true

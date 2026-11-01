@@ -114,6 +114,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.floor
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 
@@ -504,14 +505,15 @@ internal fun EmojiPanel(
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language.rtl
+    val data by viewModel.panelData.collectAsState()
     val density = LocalDensity.current
     // "المستخدمة مؤخرًا" تُلتقط مرة عند فتح اللوحة كي لا تتحرك الخلايا تحت الإصبع أثناء الاستعمال
-    val recents = remember { state.recentEmojis }
-    val favorites = remember { state.emojiFavorites }
+    val recents = remember { data.recentEmojis }
+    val favorites = remember { data.emojiFavorites }
     val recentTitle = appString(R.string.emoji_recent)
     val favoriteTitle = appString(R.string.emoji_favorites)
-    val sections = remember(arabic, state.emojiTones, recentTitle, favoriteTitle) {
-        buildEmojiSections(supportedEmojiCache, recents, favorites, state.emojiTones, arabic, recentTitle, favoriteTitle)
+    val sections = remember(arabic, data.emojiTones, recentTitle, favoriteTitle) {
+        buildEmojiSections(supportedEmojiCache, recents, favorites, data.emojiTones, arabic, recentTitle, favoriteTitle)
     }
     val scope = rememberCoroutineScope()
 
@@ -645,7 +647,7 @@ internal fun EmojiPanel(
                         .fillMaxSize()
                         .pointerInput(Unit) { detectTapGestures(onTap = { picker = null }) }
                 )
-                val favorite = state.emojiFavorites.any { toneBase(it) == toneBase(pick.emoji) }
+                val favorite = data.emojiFavorites.any { toneBase(it) == toneBase(pick.emoji) }
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -783,20 +785,22 @@ internal fun ClipboardPanel(
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language.rtl
+    val nu by viewModel.noticeUi.collectAsState()
+    val data by viewModel.panelData.collectAsState()
     var pinnedOnly by remember { mutableStateOf(false) }
-    val hasPinned = remember(state.clipItems) { state.clipItems.any { it.pinned } }
-    val hasUnpinned = remember(state.clipItems) { state.clipItems.any { !it.pinned } }
+    val hasPinned = remember(data.clipItems) { data.clipItems.any { it.pinned } }
+    val hasUnpinned = remember(data.clipItems) { data.clipItems.any { !it.pinned } }
     var kindFilter by remember { mutableStateOf<ClipKind?>(null) }
-    val kindsPresent = remember(state.clipItems) { state.clipItems.map { ClipClassifier.kindOf(it.text) }.toSet() }
+    val kindsPresent = remember(data.clipItems) { data.clipItems.map { ClipClassifier.kindOf(it.text) }.toSet() }
     val activeKind = kindFilter?.takeIf { it in kindsPresent }
-    val shownItems = remember(state.clipItems, pinnedOnly, hasPinned, activeKind) {
-        val base = if (pinnedOnly && hasPinned) state.clipItems.filter { it.pinned }
-        else state.clipItems.sortedByDescending { it.pinned }
+    val shownItems = remember(data.clipItems, pinnedOnly, hasPinned, activeKind) {
+        val base = if (pinnedOnly && hasPinned) data.clipItems.filter { it.pinned }
+        else data.clipItems.sortedByDescending { it.pinned }
         if (activeKind == null) base else base.filter { ClipClassifier.kindOf(it.text) == activeKind }
     }
 
     var menuKey by remember { mutableStateOf<String?>(null) }
-    val menuItem = menuKey?.let { k -> state.clipItems.firstOrNull { it.text == k } }
+    val menuItem = menuKey?.let { k -> data.clipItems.firstOrNull { it.text == k } }
 
     Box(
         modifier = Modifier
@@ -830,7 +834,7 @@ internal fun ClipboardPanel(
                     .background(colors.divider)
             )
             Text(
-                text = tr(arabic, "الحافظة", "Clipboard") + if (state.clipItems.isNotEmpty()) "  ·  ${state.clipItems.size}" else "",
+                text = tr(arabic, "الحافظة", "Clipboard") + if (data.clipItems.isNotEmpty()) "  ·  ${data.clipItems.size}" else "",
                 color = colors.text,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
@@ -880,10 +884,10 @@ internal fun ClipboardPanel(
             }
         }
 
-        state.pasteProgress?.let { progress ->
+        nu.pasteProgress?.let { progress ->
             PasteProgressStrip(progress, colors, arabic, viewModel)
         }
-        state.clipNotice?.let { notice ->
+        nu.clipNotice?.let { notice ->
             val noticeText = clipNoticeText(arabic, notice)
             PressBox(modifier = Modifier.fillMaxWidth(), onClick = { viewModel.dismissClipNotice() }) { _ ->
                 Text(
@@ -1307,7 +1311,8 @@ internal fun ClipEditBar(
     viewModel: KeyboardViewModel
 ) {
     val arabic = state.language.rtl
-    val text = state.clipEdit?.text ?: ""
+    val overlay by viewModel.overlayUi.collectAsState()
+    val text = overlay.clipEdit?.text ?: ""
     val preview = remember(text) {
         val t = text.replace("\n", "↵")
         if (t.length > 60) "…" + t.takeLast(59) else t

@@ -62,7 +62,8 @@ internal fun VoiceBar(
     stripHeight: Dp,
     viewModel: KeyboardViewModel
 ) {
-    val ui = state.voice ?: return
+    val overlay by viewModel.overlayUi.collectAsState()
+    val ui = overlay.voice ?: return
     val scale = LocalAnimScale.current
     val level = viewModel.voiceLevel.collectAsState()
     val listening = ui.status == VoiceStatus.LISTENING

@@ -14,8 +14,9 @@ object NeuralLm {
     private const val TOKENIZER_ASSET = "ai/tokenizer.json"
     private const val MODEL_FILE = "ai_ruq-5m_v1.onnx"
     private const val MAX_CONTEXT_TOKENS = 28
-    private const val BEAMS = 5
+    private const val BEAMS = 3
     private const val EXTRA_TOKENS = 3
+    private const val BUDGET_MS = 90L
     private const val MIN_PROB = 0.03f
     private const val BOS = 1
     private const val SPECIAL_COUNT = 6
@@ -38,6 +39,10 @@ object NeuralLm {
     private val cache = object : LinkedHashMap<String, List<String>>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean = size > 64
     }
+
+    private val generation = java.util.concurrent.atomic.AtomicInteger()
+
+    private class Computed(val words: List<String>, val full: Boolean)
 
     @Volatile
     var ready = false
@@ -105,27 +110,35 @@ object NeuralLm {
         if (words.isEmpty()) return emptyList()
         val key = words.joinToString(" ")
         synchronized(cache) { cache[key]?.let { return it.take(limit) } }
-        val result = try {
-            compute(words)
+        val gen = generation.incrementAndGet()
+        val computed = try {
+            compute(words, gen)
         } catch (t: Throwable) {
-            emptyList()
-        }
-        synchronized(cache) { cache[key] = result }
-        return result.take(limit)
+            null
+        } ?: return emptyList()
+        if (computed.full) synchronized(cache) { cache[key] = computed.words }
+        return computed.words.take(limit)
     }
 
-    private fun compute(words: List<String>): List<String> {
+    private fun compute(words: List<String>, gen: Int): Computed? {
+        val deadline = System.nanoTime() + BUDGET_MS * 1_000_000L
+        var full = true
         val base = ArrayList<Int>()
         base.add(BOS)
         for (id in encode(words.joinToString(" "))) base.add(id)
         val ctx: List<Int> = if (base.size > MAX_CONTEXT_TOKENS) listOf(BOS) + base.takeLast(MAX_CONTEXT_TOKENS - 1) else base
-        val first = logits(ctx.toIntArray()) ?: return emptyList()
+        val first = logits(ctx.toIntArray()) ?: return null
         val probs = softmax(first)
         val starts = ArrayList<Int>()
         for (i in first.indices) if (i < wordStart.size && wordStart[i]) starts.add(i)
         starts.sortByDescending { first[it] }
         val out = LinkedHashMap<String, Float>()
         for (id in starts.take(BEAMS)) {
+            if (gen != generation.get()) return null
+            if (System.nanoTime() > deadline) {
+                full = false
+                break
+            }
             val p = probs[id]
             if (p < MIN_PROB) break
             val seq = ArrayList<Int>(ctx)
@@ -133,7 +146,12 @@ object NeuralLm {
             val piece = arrayListOf(id)
             var complete = false
             for (step in 0..EXTRA_TOKENS) {
-                val lg = logits(seq.toIntArray()) ?: break
+                if (gen != generation.get()) return null
+                if (System.nanoTime() > deadline) {
+                    full = false
+                    break
+                }
+                val lg = logits(seq.toIntArray()) ?: return null
                 var best = -1
                 var bv = Float.NEGATIVE_INFINITY
                 for (j in SPECIAL_COUNT until lg.size) {
@@ -154,7 +172,7 @@ object NeuralLm {
             val w = decode(piece).trim()
             if (WORD.matches(w)) out[w] = maxOf(out[w] ?: 0f, p)
         }
-        return out.entries.sortedByDescending { it.value }.map { it.key }
+        return Computed(out.entries.sortedByDescending { it.value }.map { it.key }, full)
     }
 
     private fun logits(ids: IntArray): FloatArray? {

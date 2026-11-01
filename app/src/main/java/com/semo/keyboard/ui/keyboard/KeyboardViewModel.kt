@@ -22,6 +22,10 @@ import com.semo.keyboard.domain.logic.InputProfile
 import com.semo.keyboard.domain.logic.LearnFilter
 import com.semo.keyboard.domain.logic.PersonalRank
 import com.semo.keyboard.domain.model.ClipNotice
+import com.semo.keyboard.domain.model.NoticeUi
+import com.semo.keyboard.domain.model.StripUi
+import com.semo.keyboard.domain.model.PanelDataUi
+import com.semo.keyboard.domain.model.OverlayUi
 import com.semo.keyboard.domain.model.clipFileLabel
 import com.semo.keyboard.domain.model.clipFileMime
 import com.semo.keyboard.domain.model.clipFileName
@@ -65,6 +69,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -340,12 +345,60 @@ class KeyboardViewModel(
             .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.Eagerly, SuggestionUi())
 
+    val noticeUi: StateFlow<NoticeUi> =
+        transient.map { NoticeUi(it.freshClip, it.clipNotice, it.learnedNotice, it.pasteProgress) }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, NoticeUi())
+
+    val overlayUi: StateFlow<OverlayUi> =
+        transient.map { OverlayUi(it.translate, it.voice, it.emojiSearch, it.clipEdit) }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, OverlayUi())
+
+    val overlayMode: StateFlow<Int> =
+        overlayUi.map {
+            if (it.clipEdit != null) 1 else if (it.translate != null) 2 else if (it.voice != null) 3 else if (it.emojiSearch != null) 4 else 0
+        }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    val stripUi: StateFlow<StripUi> =
+        transient.map { StripUi(it.alternates, it.removedWord, it.toolbarOpen) }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, StripUi())
+
+    val alternatesOpen: StateFlow<Boolean> =
+        stripUi.map { it.alternates.isNotEmpty() }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val panelData: StateFlow<PanelDataUi> =
+        combine(settingsRepository.settings.distinctUntilChanged(), clipboardRepository.items) { s: SemoSettings, clips: List<ClipItem> ->
+            PanelDataUi(clips, s.recentEmojis, s.emojiFavorites, s.emojiTones, s.translateTarget, s.translateRecents)
+        }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, PanelDataUi())
+
+    private data class UiLocal(
+        val page: KeyboardPage,
+        val shift: ShiftState,
+        val enterKind: EnterKind,
+        val fieldKind: FieldKind,
+        val navButtons: Boolean
+    )
+
+    private val uiLocal: Flow<UiLocal> =
+        transient.map {
+            UiLocal(
+                page = it.page,
+                shift = it.shift,
+                enterKind = it.enterKind,
+                fieldKind = it.fieldKind,
+                navButtons = it.navSetting || it.navInset
+            )
+        }.distinctUntilChanged()
+
     val uiState: StateFlow<KeyboardUiState> =
         combine(
-            transient,
-            settingsRepository.settings.distinctUntilChanged(),
-            clipboardRepository.items
-        ) { t: LocalState, s: SemoSettings, clips: List<ClipItem> ->
+            uiLocal,
+            settingsRepository.settings.distinctUntilChanged()
+        ) { t: UiLocal, s: SemoSettings ->
             KeyboardUiState(
                 page = t.page,
                 shiftState = if (s.language.cased) t.shift else ShiftState.OFF,
@@ -358,7 +411,6 @@ class KeyboardViewModel(
                 numberRow = s.numberRow,
                 enterKind = t.enterKind,
                 fieldKind = t.fieldKind,
-                alternates = t.alternates,
                 englishLayout = s.englishLayout,
                 arabicLayout = s.arabicLayout,
                 style = s.style,
@@ -381,9 +433,6 @@ class KeyboardViewModel(
                 autoPairs = s.autoPairs,
                 smartPunctuation = s.smartPunctuation,
                 layoutVariants = s.layoutVariants,
-                emojiFavorites = s.emojiFavorites,
-                emojiTones = s.emojiTones,
-                emojiSearch = t.emojiSearch,
                 mathResults = s.mathResults,
                 globeOffsetDp = s.globeOffsetDp,
                 hideButtonMode = s.hideButtonMode,
@@ -394,9 +443,6 @@ class KeyboardViewModel(
                 globeDy = s.globeDy,
                 hideDx = s.hideDx,
                 hideDy = s.hideDy,
-                removedWord = t.removedWord,
-                toolbarOpen = t.toolbarOpen,
-                clipItems = clips,
                 nextWord = s.nextWord,
                 spellCheck = s.spellCheck,
                 suggestEmojis = s.suggestEmojis,
@@ -405,22 +451,12 @@ class KeyboardViewModel(
                 backspaceSpeed = s.backspaceSpeed,
                 spaceBarAction = s.spaceBarAction,
                 keepSymbolPanel = s.keepSymbolPanel,
-                recentEmojis = s.recentEmojis,
                 enabledLanguages = s.enabledLanguages,
                 keyboardScale = s.keyboardScale,
                 glassOpacity = s.glassOpacity,
                 panelOpacity = s.panelOpacity,
                 animationSpeed = s.animationSpeed,
-                freshClip = t.freshClip,
-                clipNotice = t.clipNotice,
-                learnedNotice = t.learnedNotice,
-                pasteProgress = t.pasteProgress,
-                clipEdit = t.clipEdit,
-                translate = t.translate,
-                voice = t.voice,
-                navButtons = t.navSetting || t.navInset,
-                translateTarget = s.translateTarget,
-                translateRecents = s.translateRecents
+                navButtons = t.navButtons
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, KeyboardUiState())
 
@@ -1137,7 +1173,7 @@ class KeyboardViewModel(
     fun openEmojiSearch() {
         closeVoice()
         translateJob?.cancel()
-        val recents = uiState.value.recentEmojis.take(EMOJI_RESULT_MAX)
+        val recents = panelData.value.recentEmojis.take(EMOJI_RESULT_MAX)
         transient.update {
             it.copy(
                 emojiSearch = EmojiSearchUi("", recents),
@@ -1174,7 +1210,7 @@ class KeyboardViewModel(
         }
         if (action is KeyAction.Character) consumeOneShotShift()
         val trimmed = query.take(EMOJI_QUERY_MAX)
-        val results = if (trimmed.isBlank()) uiState.value.recentEmojis.take(EMOJI_RESULT_MAX)
+        val results = if (trimmed.isBlank()) panelData.value.recentEmojis.take(EMOJI_RESULT_MAX)
         else EmojiSearch.search(trimmed, EMOJI_RESULT_MAX)
         transient.update { it.copy(emojiSearch = EmojiSearchUi(trimmed, results)) }
         return true
@@ -1182,7 +1218,7 @@ class KeyboardViewModel(
 
     fun toggleEmojiFavorite(emoji: String) {
         val base = toneBase(emoji)
-        val current = uiState.value.emojiFavorites
+        val current = panelData.value.emojiFavorites
         val updated = if (current.any { toneBase(it) == base }) current.filterNot { toneBase(it) == base }
         else (listOf(emoji) + current).take(MAX_FAVORITE_EMOJIS)
         launchSafe { settingsRepository.setEmojiFavorites(updated) }
@@ -1197,7 +1233,7 @@ class KeyboardViewModel(
         val state = uiState.value
         bridge.keyFeedback(state.soundEnabled, state.hapticEnabled, volume = state.soundVolume)
         bridge.commitText(emoji)
-        val updated = (listOf(emoji) + state.recentEmojis.filter { it != emoji }).take(MAX_RECENT_EMOJIS)
+        val updated = (listOf(emoji) + panelData.value.recentEmojis.filter { it != emoji }).take(MAX_RECENT_EMOJIS)
         launchSafe { settingsRepository.setRecentEmojis(updated) }
     }
 
@@ -1401,7 +1437,7 @@ class KeyboardViewModel(
         translateJob = launchSafe {
             if (!immediate) delay(350)
             if (transient.value.translate == null) return@launchSafe
-            val target = uiState.value.translateTarget
+            val target = panelData.value.translateTarget
             if (!transient.value.suggestionsAllowed) {
                 translateKey = ""
                 transient.update { st -> st.translate?.let { st.copy(translate = TranslateUi()) } ?: st }
