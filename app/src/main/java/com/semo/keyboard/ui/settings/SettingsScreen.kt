@@ -108,7 +108,7 @@ import androidx.compose.runtime.setValue
 
 
 /** صفحات الإعدادات: رئيسية بأقسام مرتبة، وكل قسم صفحة فرعية */
-internal enum class SettingsPage { HOME, LANGUAGES, TYPING, SHORTCUTS, APPEARANCE, TOUCH, DOWNLOADS, DICTIONARY, PRIVACY, ABOUT }
+internal enum class SettingsPage { HOME, LANGUAGES, TYPING, SHORTCUTS, APPEARANCE, TOUCH, DOWNLOADS, DICTIONARY, PRIVACY, ABOUT, DIAGNOSTICS }
 
 internal object SettingsDeepLink {
     val page = androidx.compose.runtime.mutableStateOf<String?>(null)
@@ -131,6 +131,7 @@ internal fun SettingsScreen(
     val deepLink = SettingsDeepLink.page.value
     LaunchedEffect(deepLink) {
         if (deepLink == "voice" || deepLink == "downloads") page = SettingsPage.DOWNLOADS
+        if (deepLink == "diagnostics") page = SettingsPage.DIAGNOSTICS
         if (deepLink != null) SettingsDeepLink.page.value = null
     }
     // زر الرجوع: من «اختصارات النص» لصفحة الكتابة، ومن أي صفحة أخرى للرئيسية
@@ -179,6 +180,7 @@ internal fun SettingsScreen(
             SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.DOWNLOADS }
             SettingsPage.PRIVACY -> PrivacyPage(repo, clipboardRepo, settings, home)
             SettingsPage.ABOUT -> AboutPage(repo, onReplay, home)
+            SettingsPage.DIAGNOSTICS -> DiagnosticsPage(home)
         }
     }
 }
@@ -350,6 +352,12 @@ private fun HomePage(
             NavRow(L("حول وإعادة الضبط"), L("الإصدار والدليل وإعادة الإعدادات للافتراضي"), R.drawable.ic_set_info, IconPink) {
                 onOpen(SettingsPage.ABOUT)
             }
+            Divider()
+            NavRow(
+                com.semo.keyboard.ui.appString(R.string.diag_title),
+                com.semo.keyboard.ui.appString(R.string.diag_nav_summary),
+                R.drawable.ic_set_diag, IconTeal
+            ) { onOpen(SettingsPage.DIAGNOSTICS) }
         }
         Spacer(Modifier.height(8.dp))
     }
