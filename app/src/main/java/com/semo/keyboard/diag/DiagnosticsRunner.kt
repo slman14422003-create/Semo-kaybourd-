@@ -20,7 +20,6 @@ import androidx.core.content.ContextCompat
 import com.semo.keyboard.R
 import com.semo.keyboard.data.BackupManager
 import com.semo.keyboard.data.CacheCleaner
-import com.semo.keyboard.data.ClipDb
 import com.semo.keyboard.data.DictionaryManager
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.KeyboardLanguage
@@ -113,8 +112,14 @@ object DiagnosticsRunner {
         }
 
         c.probe(g, "Bundled libraries") {
-            val names = listOf("ai.onnxruntime.OrtEnvironment", "org.vosk.Model", "com.sun.jna.Native", "androidx.datastore.core.DataStore")
-            val missing = names.filter { runCatching { Class.forName(it, false, app.classLoader) }.isFailure }
+            // class literals (not strings): R8 renames classes in release builds, so Class.forName("...") would wrongly report them missing
+            val checks = listOf<Pair<String, () -> Class<*>>>(
+                "onnxruntime" to { ai.onnxruntime.OrtEnvironment::class.java },
+                "vosk" to { org.vosk.Model::class.java },
+                "jna" to { com.sun.jna.Native::class.java },
+                "datastore" to { androidx.datastore.core.DataStore::class.java }
+            )
+            val missing = checks.filter { (_, load) -> runCatching { load() }.isFailure }.map { it.first }
             if (missing.isEmpty()) pass("onnxruntime, vosk, jna, datastore") else fail("missing classes: ${missing.joinToString()}")
         }
     }
@@ -324,7 +329,7 @@ object DiagnosticsRunner {
             val vocab = model?.optJSONObject("vocab")
             val merges = model?.optJSONArray("merges")?.length() ?: 0
             if (vocab == null) fail("model.vocab missing")
-            else if (vocab.length() != 8192) warn("vocab size ${vocab.length()}, the model outputs 8192 logits; merges=$merges")
+            else if (vocab.length() != 8192) warn("vocab size ${vocab.length()}, the model outputs 8192 logits; merges=$merges. This is not the tokenizer of ruq-5m: replace ai/tokenizer.json with the one from Ruqiya/ruqlm")
             else pass("vocab 8192, merges=$merges")
         }
 
@@ -375,7 +380,8 @@ object DiagnosticsRunner {
             }
             val text = "$total pairs, malformed=$malformed, duplicates=$duplicates, identity=$selfMap, known-word keys=$conflicts" +
                 if (examples.isEmpty()) "" else "; " + examples.joinToString("; ")
-            if (malformed > 0) fail(text) else if (duplicates + selfMap + conflicts > 0) warn(text) else pass(text)
+            // keys that are also dictionary words are deliberate overrides in the hand-written table (hamza and taa marbuta fixes), so they are only informational
+            if (malformed > 0) fail(text) else if (duplicates + selfMap > 0) warn(text) else if (conflicts > 0) info(text) else pass(text)
         }
     }
 
@@ -405,15 +411,23 @@ object DiagnosticsRunner {
         }
 
         c.probe(g, "Clipboard database") {
-            val db = ClipDb(app)
-            try {
-                val verdict = db.readableDatabase.rawQuery("PRAGMA integrity_check", null).use { cur ->
-                    if (cur.moveToFirst()) cur.getString(0) else "no result"
+            // read-only connection: opening/closing a second ClipDb helper tried to switch WAL to TRUNCATE while the service held the DB ("database is locked")
+            val file = app.getDatabasePath("semo_clips.db")
+            if (!file.exists()) {
+                info("no database yet")
+            } else {
+                val db = android.database.sqlite.SQLiteDatabase.openDatabase(file.path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
+                try {
+                    val verdict = db.rawQuery("PRAGMA integrity_check", null).use { cur ->
+                        if (cur.moveToFirst()) cur.getString(0) else "no result"
+                    }
+                    val rows = runCatching {
+                        db.rawQuery("SELECT COUNT(*) FROM clips", null).use { cur -> if (cur.moveToFirst()) cur.getInt(0) else 0 }
+                    }.getOrDefault(0)
+                    if (verdict == "ok") pass("integrity ok, $rows items") else fail("integrity_check: $verdict")
+                } finally {
+                    db.close()
                 }
-                val rows = db.rows().size
-                if (verdict == "ok") pass("integrity ok, $rows items") else fail("integrity_check: $verdict")
-            } finally {
-                db.close()
             }
         }
 
@@ -461,6 +475,12 @@ object DiagnosticsRunner {
             reason == ApplicationExitInfo.REASON_INITIALIZATION_FAILURE ||
             reason == ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE
 
+    /** Platform/vendor log lines that come from the OS or the HAL, not from the app, and cannot be fixed here */
+    private val SYSTEM_NOISE = listOf(
+        "E/ashmem", "W/HWUI", "E/VibratorInfo", "W/libc", "W/InteractionJankMonitor",
+        "Setting accessibility_reduce_transparency", "Suspending all threads took"
+    )
+
     private fun logcatTail(): List<String> {
         val out = ArrayList<String>()
         val process = ProcessBuilder("logcat", "-d", "-t", "600", "-v", "time", "*:W").redirectErrorStream(true).start()
@@ -507,6 +527,7 @@ object DiagnosticsRunner {
 
         c.probe(g, "Recent warnings and errors (logcat of this app)") {
             val lines = runCatching { logcatTail() }.getOrDefault(emptyList()).filter { it.contains(" E/") || it.contains(" W/") || it.contains("FATAL") }
+                .filterNot { line -> SYSTEM_NOISE.any { line.contains(it) } }
             val errors = lines.count { it.contains(" E/") || it.contains("FATAL") }
             val tail = lines.takeLast(40).joinToString("\n")
             if (lines.isEmpty()) pass("clean") else if (errors > 0) warn("$errors errors, ${lines.size - errors} warnings\n$tail") else info("${lines.size} warnings\n$tail")
