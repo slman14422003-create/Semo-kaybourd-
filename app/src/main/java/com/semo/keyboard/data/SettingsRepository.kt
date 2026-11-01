@@ -222,6 +222,7 @@ class SettingsRepository(context: Context) {
         val ENABLED_LANGUAGES = stringPreferencesKey("enabled_languages")
         val KEYBOARD_SCALE = floatPreferencesKey("keyboard_scale")
         val GLASS_OPACITY = floatPreferencesKey("glass_opacity")
+        val PANEL_OPACITY = floatPreferencesKey("panel_opacity")
         val ANIMATION_SPEED = stringPreferencesKey("animation_speed")
         val TRANSLATE_TARGET = stringPreferencesKey("translate_target")
         val TRANSLATE_RECENTS = stringPreferencesKey("translate_recents")
@@ -290,6 +291,7 @@ class SettingsRepository(context: Context) {
                 enabledLanguages = decodeLanguages(p[Keys.ENABLED_LANGUAGES]),
                 keyboardScale = (p[Keys.KEYBOARD_SCALE] ?: 1f).coerceIn(0.8f, 1.3f),
                 glassOpacity = (p[Keys.GLASS_OPACITY] ?: 1f).coerceIn(0.35f, 1f),
+                panelOpacity = (p[Keys.PANEL_OPACITY] ?: 1f).coerceIn(0f, 1f),
                 animationSpeed = p[Keys.ANIMATION_SPEED].toEnumOr(AnimationSpeed.NORMAL),
                 translateTarget = p[Keys.TRANSLATE_TARGET] ?: TranslateLanguages.defaultTarget(),
                 translateRecents = p[Keys.TRANSLATE_RECENTS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList(),
@@ -389,6 +391,7 @@ class SettingsRepository(context: Context) {
     suspend fun setSpaceBarAction(v: SpaceBarAction) { store.edit { it[Keys.SPACE_ACTION] = v.name } }
     suspend fun setKeepSymbolPanel(v: Boolean) { store.edit { it[Keys.KEEP_SYMBOLS] = v } }
     suspend fun setKeyboardScale(v: Float) { store.edit { it[Keys.KEYBOARD_SCALE] = v.coerceIn(0.8f, 1.3f) } }
+    suspend fun setPanelOpacity(v: Float) { store.edit { it[Keys.PANEL_OPACITY] = v.coerceIn(0f, 1f) } }
     suspend fun setGlassOpacity(v: Float) { store.edit { it[Keys.GLASS_OPACITY] = v.coerceIn(0.35f, 1f) } }
     suspend fun setAnimationSpeed(v: AnimationSpeed) { store.edit { it[Keys.ANIMATION_SPEED] = v.name } }
 
