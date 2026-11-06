@@ -21,6 +21,8 @@ import com.semo.keyboard.domain.logic.WordLists
 import com.semo.keyboard.domain.logic.InputProfile
 import com.semo.keyboard.domain.logic.LearnFilter
 import com.semo.keyboard.domain.logic.PersonalRank
+import com.semo.keyboard.domain.model.AutoCorrectLevel
+import com.semo.keyboard.domain.model.LearnSpeed
 import com.semo.keyboard.domain.model.ClipNotice
 import com.semo.keyboard.domain.model.NoticeUi
 import com.semo.keyboard.domain.model.StripUi
@@ -235,6 +237,11 @@ class KeyboardViewModel(
     private val ignoredCorrections: StateFlow<Set<String>> =
         learnedWordsRepository.ignoredCorrections.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
+    private val protectedKeys: StateFlow<Set<String>> =
+        learnedWordsRepository.protectedKeys.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    private val sessionKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     private val learnedFixes: StateFlow<Map<String, String>> =
         learnedWordsRepository.learnedFixes.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
@@ -429,6 +436,25 @@ class KeyboardViewModel(
                 autoCorrect = s.autoCorrect,
                 autoSentenceFix = s.autoSentenceFix,
                 autoComplete = s.autoComplete,
+                protectLearnedWords = s.protectLearnedWords,
+                protectNames = s.protectNames,
+                autoCorrectLevel = s.autoCorrectLevel,
+                autoCorrectArabic = s.autoCorrectArabic,
+                autoCorrectLatin = s.autoCorrectLatin,
+                autoCorrectMinLength = s.autoCorrectMinLength,
+                correctOnPunctuation = s.correctOnPunctuation,
+                learnWordsEnabled = s.learnWordsEnabled,
+                learnSpeed = s.learnSpeed,
+                learnNextWords = s.learnNextWords,
+                blurEnabled = s.blurEnabled,
+                blurPreset = s.blurPreset,
+                blurRadius = s.blurRadius,
+                blurTint = s.blurTint,
+                blurTintMode = s.blurTintMode,
+                blurKeys = s.blurKeys,
+                blurBorder = s.blurBorder,
+                blurSheen = s.blurSheen,
+                blurFallbackSolid = s.blurFallbackSolid,
                 smartWriting = s.smartWriting,
                 autoPairs = s.autoPairs,
                 smartPunctuation = s.smartPunctuation,
@@ -604,7 +630,7 @@ class KeyboardViewModel(
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
                     val before = bridge.textBeforeCursorWithin(40, WORD_END_READ_MS, false)
                     if (before != null) {
-                        if (ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null) {
+                        if (state.correctOnPunctuation && ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null) {
                             editWatch = null
                         } else {
                             val typedWord = SuggestionEngine.currentWord(before)
@@ -848,11 +874,15 @@ class KeyboardViewModel(
         if (state.textShortcuts) {
             fixed = shortcuts.value.firstOrNull { it.abbr.equals(word, ignoreCase = true) }?.expansion?.let { expandTokens(it) }
         }
-        if (fixed == null && state.autoCorrect && word.lowercase() !in ignoredCorrections.value) {
-            fixed = correctWord(word, lastWords(before.dropLast(word.length), 1).lastOrNull().orEmpty())
+        val open = word.lowercase() !in ignoredCorrections.value && !isProtected(word) && languageAllowed(word)
+        val isName = state.protectNames && LearnFilter.looksLikeName(word, before)
+        if (fixed == null && state.autoCorrect && open) {
+            fixed = correctWord(word, lastWords(before.dropLast(word.length), 1).lastOrNull().orEmpty(), isName)
         }
         var completed = false
-        if (fixed == null && state.autoComplete && word.lowercase() !in ignoredCorrections.value) {
+        if (fixed == null && state.autoComplete && open && !isName &&
+            state.autoCorrectLevel != AutoCorrectLevel.LIGHT && word.length >= state.autoCorrectMinLength
+        ) {
             fixed = completeWord(before, word)
             completed = fixed != null
         }
@@ -863,18 +893,56 @@ class KeyboardViewModel(
         return Correction(word, result)
     }
 
-    private fun correctWord(word: String, prev: String = ""): String? {
+    private fun languageAllowed(word: String): Boolean {
+        val state = uiState.value
+        return if (ArabicText.isArabicWord(word)) state.autoCorrectArabic else state.autoCorrectLatin
+    }
+
+    private fun isProtected(word: String): Boolean {
+        if (!uiState.value.protectLearnedWords) return false
+        val k = BigDictionary.key(word)
+        if (k.isEmpty()) return false
+        val keys = protectedKeys.value
+        if (k in keys || k in sessionKeys) return true
+        if (ArabicText.isArabicWord(word)) {
+            val clitic = ArabicText.clitic(word.lowercase())
+            if (clitic.isNotEmpty() && word.length - clitic.length >= 3) {
+                val stem = BigDictionary.key(word.substring(clitic.length))
+                if (stem in keys || stem in sessionKeys) return true
+            }
+        }
+        return false
+    }
+
+    private fun rememberSession(word: String) {
+        val k = BigDictionary.key(word)
+        if (k.isEmpty()) return
+        if (sessionKeys.size > 600) sessionKeys.clear()
+        sessionKeys.add(k)
+    }
+
+    private fun correctWord(word: String, prev: String = "", isName: Boolean = false): String? {
         if (word.length < 2) return null
         val lower = word.lowercase()
         if (lower in ignoredCorrections.value) return null
+        if (isProtected(word) || !languageAllowed(word)) return null
+        val state = uiState.value
         var fixed: String? = learnedFixes.value[lower]?.let { caseLike(word, it) }?.takeIf { allowed(it) }
         if (fixed == null && ArabicText.isArabicWord(word)) fixed = learnedFixWithClitic(lower)
         if (fixed == null) fixed = AutoCorrect.fix(word)?.takeIf { allowed(it) }
-        if (fixed == null) {
-            val language = SuggestionEngine.languageOf(word, uiState.value.language)
-            fixed = SuggestionEngine.smartFix(word, language, learnedKeys.value, prev)?.takeIf { allowed(it) }
+        if (fixed == null && !isName && state.autoCorrectLevel != AutoCorrectLevel.LIGHT && word.length >= state.autoCorrectMinLength) {
+            val language = SuggestionEngine.languageOf(word, state.language)
+            fixed = SuggestionEngine.smartFix(
+                word, language, learnedKeys.value, prev, state.autoCorrectLevel == AutoCorrectLevel.STRONG
+            )?.takeIf { allowed(it) }
         }
         return fixed?.takeIf { it != word }
+    }
+
+    private fun nameInSentence(word: String, prev: String): Boolean {
+        if (!uiState.value.protectNames || prev.isEmpty()) return false
+        val first = word.firstOrNull() ?: return false
+        return first.isUpperCase() && !ArabicText.isArabicWord(word) && word.drop(1).none { it.isUpperCase() }
     }
 
     private fun completeWord(before: String, word: String): String? {
@@ -1038,7 +1106,7 @@ class KeyboardViewModel(
                 val gap = source.substring(last, m.range.first)
                 sb.append(gap)
                 if (gap.isNotBlank()) prev = ""
-                val fixed = if (isGlued(source, m.range)) m.value else correctWord(m.value, prev) ?: m.value
+                val fixed = if (isGlued(source, m.range)) m.value else correctWord(m.value, prev, nameInSentence(m.value, prev)) ?: m.value
                 sb.append(fixed)
                 prev = fixed
                 last = m.range.last + 1
@@ -1148,7 +1216,7 @@ class KeyboardViewModel(
         // تتمة من عدة كلمات: نتعلّم كل كلمة وكل زوج متتالٍ فيها (لا نحفظ العبارة كلها ككلمة واحدة)
         val parts = suggestion.split(' ').filter { it.isNotEmpty() }
         parts.forEach { learnWord(it) }
-        if (parts.size > 1 && canLearn()) {
+        if (parts.size > 1 && canLearn() && uiState.value.learnNextWords) {
             for (i in 1 until parts.size) {
                 if (parts[i].length >= 2) pendingPairs.add(BigDictionary.key(parts[i - 1]) to normalizeForLearning(parts[i]))
             }
@@ -1646,7 +1714,7 @@ class KeyboardViewModel(
     }
 
     private fun canLearn(): Boolean =
-        uiState.value.suggestionsEnabled && transient.value.suggestionsAllowed && transient.value.learningAllowed && transient.value.fieldKind != FieldKind.URL
+        uiState.value.suggestionsEnabled && uiState.value.learnWordsEnabled && transient.value.suggestionsAllowed && transient.value.learningAllowed && transient.value.fieldKind != FieldKind.URL
 
     private fun normalizeForLearning(word: String): String =
         if (word.firstOrNull()?.code?.let { it < 0x0600 } == true) word.lowercase() else word
@@ -1735,6 +1803,7 @@ class KeyboardViewModel(
 
     private fun learnStrong(word: String) {
         if (!canLearn() || !LearnFilter.acceptable(word)) return
+        rememberSession(word)
         pendingStrong.add(word)
         flushLearning()
     }
@@ -1775,17 +1844,31 @@ class KeyboardViewModel(
         if (!LearnFilter.acceptable(word)) return
         pendingProfileWords.add(word)
         if (before != null && LearnFilter.looksLikeName(word, before)) {
+            rememberSession(word)
             pendingStrong.add(word)
             flushLearning()
             return
         }
         val normalized = normalizeForLearning(word)
         val lang = SuggestionEngine.languageOf(word, uiState.value.language)
+        val speed = uiState.value.learnSpeed
         when {
-            !BigDictionary.isLoaded(lang) -> pendingWords.add(normalized)
+            !BigDictionary.isLoaded(lang) -> {
+                if (speed == LearnSpeed.FAST) {
+                    pendingStrong.add(normalized)
+                    rememberSession(word)
+                } else pendingWords.add(normalized)
+            }
             SuggestionEngine.isKnown(word, lang, learnedKeys.value) -> pendingWords.add(normalized)
-            isTypoLike(word, lang) -> pendingSuspects.add(normalized)
-            else -> pendingStrong.add(normalized)
+            speed == LearnSpeed.FAST -> {
+                pendingStrong.add(normalized)
+                rememberSession(word)
+            }
+            isTypoLike(word, lang) || speed == LearnSpeed.CAREFUL -> pendingSuspects.add(normalized)
+            else -> {
+                pendingStrong.add(normalized)
+                rememberSession(word)
+            }
         }
         scheduleLearnFlush()
     }
@@ -1795,7 +1878,7 @@ class KeyboardViewModel(
      * الجارية فيه (قد تكون فارغة عند اختيار توقّع). لا نتعلّم عبر علامات الترقيم أو الأسطر.
      */
     private fun learnPair(before: String, typed: String, word: String) {
-        if (!canLearn() || word.length < 2) return
+        if (!canLearn() || !uiState.value.learnNextWords || word.length < 2) return
         val rest = before.dropLast(typed.length)
         if (!rest.endsWith(' ')) return
         val prev = SuggestionEngine.currentWord(rest.trimEnd(' '))

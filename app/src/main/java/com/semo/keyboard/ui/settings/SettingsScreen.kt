@@ -108,7 +108,7 @@ import androidx.compose.runtime.setValue
 
 
 /** صفحات الإعدادات: رئيسية بأقسام مرتبة، وكل قسم صفحة فرعية */
-internal enum class SettingsPage { HOME, LANGUAGES, TYPING, SHORTCUTS, APPEARANCE, TOUCH, DOWNLOADS, DICTIONARY, PRIVACY, ABOUT, DIAGNOSTICS }
+internal enum class SettingsPage { HOME, LANGUAGES, TYPING, SHORTCUTS, APPEARANCE, TOUCH, DOWNLOADS, DICTIONARY, PRIVACY, ABOUT, DIAGNOSTICS, AUTOCORRECT, BLUR }
 
 internal object SettingsDeepLink {
     val page = androidx.compose.runtime.mutableStateOf<String?>(null)
@@ -175,6 +175,8 @@ internal fun SettingsScreen(
             SettingsPage.TYPING -> TypingPage(repo, settings, shortcuts.size, home) { page = SettingsPage.SHORTCUTS }
             SettingsPage.SHORTCUTS -> ShortcutsPage(repo, shortcutsRepo, settings) { page = SettingsPage.TYPING }
             SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home)
+            SettingsPage.AUTOCORRECT -> AutoCorrectPage(repo, settings, home) { page = SettingsPage.DICTIONARY }
+            SettingsPage.BLUR -> BlurPage(repo, settings, home)
             SettingsPage.TOUCH -> TouchPage(repo, settings, home)
             SettingsPage.DOWNLOADS -> DownloadsPage(repo, settings, home)
             SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.DOWNLOADS }
@@ -318,10 +320,22 @@ private fun HomePage(
             NavRow(L("الكتابة الذكية"), typingSummary, R.drawable.ic_ios_emoji, IconGreen) { onOpen(SettingsPage.TYPING) }
             Divider()
             NavRow(
+                L("Auto-correct and learning"),
+                "${settings.autoCorrectLevel.name.lowercase().replaceFirstChar { it.uppercase() }} · ${if (settings.protectLearnedWords) "Learned words protected" else "Learned words not protected"}",
+                R.drawable.ic_set_spell, IconTeal
+            ) { onOpen(SettingsPage.AUTOCORRECT) }
+            Divider()
+            NavRow(
                 L("المظهر والحجم"),
                 "${com.semo.keyboard.ui.appString(themeNameRes(settings.keyboardTheme))} · ${themeLabel(settings.themeMode)}${L(" · حجم ")}${(settings.keyboardScale * 100).roundToInt()}${L("% · ارتفاع ")}${sizeLabel(settings.size)}",
                 R.drawable.ic_set_theme, IconGray
             ) { onOpen(SettingsPage.APPEARANCE) }
+            Divider()
+            NavRow(
+                L("Blur and glass"),
+                if (settings.blurEnabled) "On · ${settings.blurRadius}" else "Off",
+                R.drawable.ic_set_theme, IconBlue
+            ) { onOpen(SettingsPage.BLUR) }
             Divider()
             NavRow(
                 L("اللمس والصوت والاهتزاز"),

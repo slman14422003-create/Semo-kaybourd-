@@ -145,6 +145,12 @@ import com.semo.keyboard.ui.theme.keyMetrics
 import com.semo.keyboard.ui.theme.LocalKeyboardScale
 import com.semo.keyboard.ui.theme.semoColors
 import com.semo.keyboard.ui.theme.withOpacity
+import com.semo.keyboard.ui.theme.FrostSpec
+import com.semo.keyboard.ui.theme.LocalFrost
+import com.semo.keyboard.ui.theme.drawFrostKey
+import com.semo.keyboard.ui.theme.frostPanel
+import com.semo.keyboard.ui.theme.withBlur
+import com.semo.keyboard.util.BlurSupport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -209,7 +215,11 @@ private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
  * [onChrome] تُبلّغ الخدمة بلون اللوحة ليُلوَّن به شريط التنقل ويُضبط تباين أيقوناته.
  */
 @Composable
-fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Unit = { _, _ -> }) {
+fun KeyboardScreen(
+    viewModel: KeyboardViewModel,
+    onChrome: (Int, Boolean) -> Unit = { _, _ -> },
+    onBlur: (Int) -> Unit = {}
+) {
     val state by viewModel.uiState.collectAsState()
     val overlayMode by viewModel.overlayMode.collectAsState()
     val alternatesOpen by viewModel.alternatesOpen.collectAsState()
@@ -218,9 +228,25 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val colors = remember(state.style, isDark, state.keyboardTheme, state.glassOpacity, state.panelOpacity) {
-        semoColors(state.style, isDark, state.keyboardTheme).withOpacity(state.glassOpacity, state.panelOpacity)
+    val blurSupported = BlurSupport.enabled
+    val frostActive = state.blurEnabled && blurSupported
+    val solidFallback = state.blurEnabled && !blurSupported && state.blurFallbackSolid
+    val colors = remember(
+        state.style, isDark, state.keyboardTheme, state.glassOpacity, state.panelOpacity,
+        frostActive, solidFallback, state.blurTint, state.blurTintMode
+    ) {
+        val base = semoColors(state.style, isDark, state.keyboardTheme)
+        when {
+            frostActive -> base.withBlur(state.glassOpacity, state.blurTint, state.blurTintMode, isDark)
+            solidFallback -> base.withBlur(1f, maxOf(state.blurTint, 0.94f), state.blurTintMode, isDark)
+            else -> base.withOpacity(state.glassOpacity, state.panelOpacity)
+        }
     }
+    val frost = remember(frostActive, state.blurKeys, state.blurBorder, state.blurSheen) {
+        FrostSpec(frostActive, state.blurKeys, state.blurBorder, state.blurSheen, Color.White)
+    }
+    val currentOnBlur by rememberUpdatedState(onBlur)
+    LaunchedEffect(frostActive, state.blurRadius) { currentOnBlur(if (frostActive) state.blurRadius else 0) }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
@@ -380,9 +406,10 @@ fun KeyboardScreen(viewModel: KeyboardViewModel, onChrome: (Int, Boolean) -> Uni
         LocalTouchTuning provides tuning,
         LocalBottomPos provides bottomPos,
         LocalKeyboardScale provides state.keyboardScale,
-        LocalAnimScale provides animScale
+        LocalAnimScale provides animScale,
+        LocalFrost provides frost
     ) {
-        Box(modifier = Modifier.fillMaxWidth().background(colors.panel)) {
+        Box(modifier = Modifier.fillMaxWidth().frostPanel(colors.panel, frost)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1369,6 +1396,7 @@ private fun RowScope.KeyButton(
         else -> colors.text
     }
     val shadowColor = colors.keyShadow
+    val frostSpec = LocalFrost.current
 
     // شريط المسافة: ضغطة = مسافة، وضغطة مطوّلة ثم سحب = لوحة لمس لتحريك المؤشر (مثل آيفون).
     // باقي المفاتيح: ضغط/ضغط مطوّل.
@@ -1514,6 +1542,9 @@ private fun RowScope.KeyButton(
                 }
                 .drawBehind {
                     drawOutline(bgShape.createOutline(size, layoutDirection, this), animBg.value)
+                }
+                .drawBehind {
+                    if (!def.plain) drawFrostKey(frostSpec, metrics.keyRadius.toPx())
                 },
             contentAlignment = Alignment.Center
         ) {
