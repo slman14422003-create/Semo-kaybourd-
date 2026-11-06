@@ -81,7 +81,8 @@ object SpellFix {
         learnedKeys: Set<String>,
         context: String,
         alphabet: String,
-        commonRank: Int
+        commonRank: Int,
+        strong: Boolean = false
     ): String? {
         if (word.any { it.isDigit() }) return null
         val ranked = rank(word, language, learnedKeys, context, alphabet)
@@ -92,7 +93,7 @@ object SpellFix {
             word.length >= 7 -> 1.3f
             else -> 1.05f
         }
-        if (best.cost > limit) return null
+        if (best.cost > limit + (if (strong) 0.25f else 0f)) return null
         val second = ranked.getOrNull(1)
         if (second != null && second.rank >= 0) {
             val close = second.cost <= best.cost + 0.35f && second.rank < best.rank * 3 + 20

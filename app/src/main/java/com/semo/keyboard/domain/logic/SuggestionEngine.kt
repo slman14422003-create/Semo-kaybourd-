@@ -290,16 +290,16 @@ object SuggestionEngine {
      * رموز (أسماء، اختصارات) أو كلمات من أبجدية مختلفة، ولا يعمل لو الاختيار ملتبس (أكثر من مرشّح شائع بنفس القوة).
      * كان مقتصرًا على الإنكليزية فقط؛ صار يعمل بأي لغة حُمِّل قاموسها (عربي، فرنسي، إسباني...).
      */
-    fun smartFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String = ""): String? {
+    fun smartFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String = "", strong: Boolean = false): String? {
         if (word.length < 3 || word.length > 14) return null
-        val key = "${language.name}|$word|$context|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
+        val key = "${language.name}|$word|$context|$strong|${ModelVersion.current()}|${System.identityHashCode(learnedKeys)}|${learnedKeys.size}"
         fixCache.get(key)?.let { return it.ifEmpty { null } }
-        val result = smartFixUncached(word, language, learnedKeys, context)
+        val result = smartFixUncached(word, language, learnedKeys, context, strong)
         fixCache.put(key, result ?: "")
         return result
     }
 
-    private fun smartFixUncached(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String): String? {
+    private fun smartFixUncached(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String, strong: Boolean): String? {
         if (language.script == Script.ARABIC) {
             if (BigDictionary.size(language) < MIN_ARABIC_DICTIONARY) return null
             ArabicText.canonicalHamza(word, language)?.let { return it }
@@ -307,24 +307,25 @@ object SuggestionEngine {
             val clitic = ArabicText.clitic(word)
             if (clitic.isNotEmpty() && !isKnown(word, language, learnedKeys)) {
                 val stem = word.substring(clitic.length)
-                val fixedStem = coreFix(stem, language, learnedKeys, context)
+                val fixedStem = coreFix(stem, language, learnedKeys, context, strong)
                 if (fixedStem != null) return clitic + fixedStem
             }
         }
-        return coreFix(word, language, learnedKeys, context)
+        return coreFix(word, language, learnedKeys, context, strong)
     }
 
     private fun commonRankFor(language: KeyboardLanguage): Int =
         if (BigDictionary.size(language) >= 60_000) LARGE_COMMON_RANK else COMMON_RANK
 
-    private fun coreFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String): String? {
+    private fun coreFix(word: String, language: KeyboardLanguage, learnedKeys: Set<String>, context: String, strong: Boolean = false): String? {
         if (word.length < 3 || word.length > 14) return null
         val alphabet = alphabetOf(language)
         val lower = word.lowercase()
         if (!lower.all { it in alphabet }) return null
         if (word.drop(1).any { it.isUpperCase() }) return null
         if (!BigDictionary.isLoaded(language) || isKnown(word, language, learnedKeys)) return null
-        val fixed = SpellFix.autoFix(lower, language, learnedKeys, context, alphabet, commonRankFor(language)) ?: return null
+        val rankLimit = if (strong) commonRankFor(language) * 2 else commonRankFor(language)
+        val fixed = SpellFix.autoFix(lower, language, learnedKeys, context, alphabet, rankLimit, strong) ?: return null
         return matchCase(word, fixed)
     }
 

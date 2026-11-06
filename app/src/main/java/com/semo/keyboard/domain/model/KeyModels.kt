@@ -123,6 +123,14 @@ enum class KeyboardStyle { IOS18 }
 
 enum class AppLanguage { SYSTEM, ARABIC, ENGLISH }
 
+enum class AutoCorrectLevel { LIGHT, BALANCED, STRONG }
+
+enum class LearnSpeed { CAREFUL, NORMAL, FAST }
+
+enum class BlurPreset { CUSTOM, CLEAR, THIN, REGULAR, THICK }
+
+enum class BlurTintMode { AUTO, ACCENT, LIGHTEN, DARKEN }
+
 enum class KeyboardTheme { IOS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT, GLASS }
 
 /** ارتفاع المفاتيح */
@@ -277,6 +285,25 @@ data class SemoSettings(
     val autoCorrect: Boolean = true,
     val autoSentenceFix: Boolean = true,
     val autoComplete: Boolean = true,
+    val protectLearnedWords: Boolean = true,
+    val protectNames: Boolean = true,
+    val autoCorrectLevel: AutoCorrectLevel = AutoCorrectLevel.BALANCED,
+    val autoCorrectArabic: Boolean = true,
+    val autoCorrectLatin: Boolean = true,
+    val autoCorrectMinLength: Int = 3,
+    val correctOnPunctuation: Boolean = true,
+    val learnWordsEnabled: Boolean = true,
+    val learnSpeed: LearnSpeed = LearnSpeed.NORMAL,
+    val learnNextWords: Boolean = true,
+    val blurEnabled: Boolean = false,
+    val blurPreset: BlurPreset = BlurPreset.REGULAR,
+    val blurRadius: Int = 40,
+    val blurTint: Float = 0.55f,
+    val blurTintMode: BlurTintMode = BlurTintMode.AUTO,
+    val blurKeys: Boolean = true,
+    val blurBorder: Float = 0.5f,
+    val blurSheen: Float = 0.3f,
+    val blurFallbackSolid: Boolean = true,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val smartPunctuation: Boolean = true,
@@ -402,6 +429,25 @@ data class KeyboardUiState(
     val autoCorrect: Boolean = true,
     val autoSentenceFix: Boolean = true,
     val autoComplete: Boolean = true,
+    val protectLearnedWords: Boolean = true,
+    val protectNames: Boolean = true,
+    val autoCorrectLevel: AutoCorrectLevel = AutoCorrectLevel.BALANCED,
+    val autoCorrectArabic: Boolean = true,
+    val autoCorrectLatin: Boolean = true,
+    val autoCorrectMinLength: Int = 3,
+    val correctOnPunctuation: Boolean = true,
+    val learnWordsEnabled: Boolean = true,
+    val learnSpeed: LearnSpeed = LearnSpeed.NORMAL,
+    val learnNextWords: Boolean = true,
+    val blurEnabled: Boolean = false,
+    val blurPreset: BlurPreset = BlurPreset.REGULAR,
+    val blurRadius: Int = 40,
+    val blurTint: Float = 0.55f,
+    val blurTintMode: BlurTintMode = BlurTintMode.AUTO,
+    val blurKeys: Boolean = true,
+    val blurBorder: Float = 0.5f,
+    val blurSheen: Float = 0.3f,
+    val blurFallbackSolid: Boolean = true,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val smartPunctuation: Boolean = true,

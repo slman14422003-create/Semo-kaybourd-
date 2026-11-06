@@ -56,6 +56,7 @@ import com.semo.keyboard.domain.model.FieldKind
 import com.semo.keyboard.domain.model.KeyboardPage
 import com.semo.keyboard.ui.keyboard.InputBridge
 import com.semo.keyboard.ui.keyboard.KeyFeedback
+import com.semo.keyboard.util.BlurSupport
 import com.semo.keyboard.util.KeyboardStatusHelper
 import com.semo.keyboard.ui.keyboard.KeyboardScreen
 import com.semo.keyboard.ui.keyboard.KeyboardViewModel
@@ -428,6 +429,7 @@ class SemoKeyboardService :
         savedStateController.performRestore(null)
         super.onCreate()
         com.semo.keyboard.diag.CrashLog.install(applicationContext)
+        BlurSupport.attach(this)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
         clickPlayer = KeyClickPlayer(applicationContext)
@@ -830,14 +832,26 @@ class SemoKeyboardService :
     override fun onCreateInputView(): View {
         val composeView = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnLifecycleDestroyed(lifecycle))
-            setContent { KeyboardScreen(viewModel = viewModel, onChrome = ::applyChrome) }
+            setContent { KeyboardScreen(viewModel = viewModel, onChrome = ::applyChrome, onBlur = ::applyBlur) }
         }
+        blurApplied = -1
         installViewTreeOwners(composeView)
         window?.window?.decorView?.let { installViewTreeOwners(it) }
         // نافذة شفافة كي تظهر زوايا اللوحة المدورة بنمط iOS 26
         window?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         return composeView
+    }
+
+    private var blurApplied = -1
+
+    private fun applyBlur(radiusDp: Int) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val w = window?.window ?: return
+        val px = (radiusDp * resources.displayMetrics.density).toInt().coerceAtLeast(0)
+        if (px == blurApplied) return
+        blurApplied = px
+        runCatching { w.setBackgroundBlurRadius(px) }
     }
 
     private var chromeColor = 0
@@ -981,6 +995,7 @@ class SemoKeyboardService :
     }
 
     override fun onDestroy() {
+        BlurSupport.detach()
         runCatching {
             (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.removePrimaryClipChangedListener(clipListener)
         }
