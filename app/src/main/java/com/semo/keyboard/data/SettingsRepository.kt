@@ -10,11 +10,16 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.semo.keyboard.domain.model.AnimationSpeed
+import com.semo.keyboard.domain.model.AutoCorrectLevel
+import com.semo.keyboard.domain.model.BlurPreset
+import com.semo.keyboard.domain.model.BlurTintMode
+import com.semo.keyboard.domain.model.LearnSpeed
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.BackspaceSpeed
@@ -189,6 +194,25 @@ class SettingsRepository(context: Context) {
         val ARABIC_DIGITS = booleanPreferencesKey("arabic_digits")
         val SWIPE_TYPING = booleanPreferencesKey("swipe_typing")
         val AUTO_CORRECT = booleanPreferencesKey("auto_correct")
+        val PROTECT_LEARNED = booleanPreferencesKey("protect_learned_words")
+        val PROTECT_NAMES = booleanPreferencesKey("protect_names")
+        val AC_LEVEL = stringPreferencesKey("auto_correct_level")
+        val AC_ARABIC = booleanPreferencesKey("auto_correct_arabic")
+        val AC_LATIN = booleanPreferencesKey("auto_correct_latin")
+        val AC_MIN_LEN = intPreferencesKey("auto_correct_min_len")
+        val AC_PUNCT = booleanPreferencesKey("auto_correct_punct")
+        val LEARN_WORDS = booleanPreferencesKey("learn_words_enabled")
+        val LEARN_SPEED = stringPreferencesKey("learn_speed")
+        val LEARN_NEXT = booleanPreferencesKey("learn_next_words")
+        val BLUR_ENABLED = booleanPreferencesKey("blur_enabled")
+        val BLUR_PRESET = stringPreferencesKey("blur_preset")
+        val BLUR_RADIUS = intPreferencesKey("blur_radius")
+        val BLUR_TINT = floatPreferencesKey("blur_tint")
+        val BLUR_TINT_MODE = stringPreferencesKey("blur_tint_mode")
+        val BLUR_KEYS = booleanPreferencesKey("blur_keys")
+        val BLUR_BORDER = floatPreferencesKey("blur_border")
+        val BLUR_SHEEN = floatPreferencesKey("blur_sheen")
+        val BLUR_FALLBACK = booleanPreferencesKey("blur_fallback_solid")
         val AUTO_SENTENCE_FIX = booleanPreferencesKey("auto_sentence_fix")
         val AUTO_COMPLETE = booleanPreferencesKey("auto_complete")
         val SMART_WRITING = booleanPreferencesKey("smart_writing")
@@ -261,6 +285,25 @@ class SettingsRepository(context: Context) {
                 arabicDigits = p[Keys.ARABIC_DIGITS] ?: false,
                 swipeTyping = p[Keys.SWIPE_TYPING] ?: true,
                 autoCorrect = p[Keys.AUTO_CORRECT] ?: true,
+                protectLearnedWords = p[Keys.PROTECT_LEARNED] ?: true,
+                protectNames = p[Keys.PROTECT_NAMES] ?: true,
+                autoCorrectLevel = p[Keys.AC_LEVEL].toEnumOr(AutoCorrectLevel.BALANCED),
+                autoCorrectArabic = p[Keys.AC_ARABIC] ?: true,
+                autoCorrectLatin = p[Keys.AC_LATIN] ?: true,
+                autoCorrectMinLength = (p[Keys.AC_MIN_LEN] ?: 3).coerceIn(2, 6),
+                correctOnPunctuation = p[Keys.AC_PUNCT] ?: true,
+                learnWordsEnabled = p[Keys.LEARN_WORDS] ?: true,
+                learnSpeed = p[Keys.LEARN_SPEED].toEnumOr(LearnSpeed.NORMAL),
+                learnNextWords = p[Keys.LEARN_NEXT] ?: true,
+                blurEnabled = p[Keys.BLUR_ENABLED] ?: false,
+                blurPreset = p[Keys.BLUR_PRESET].toEnumOr(BlurPreset.REGULAR),
+                blurRadius = (p[Keys.BLUR_RADIUS] ?: 40).coerceIn(0, 150),
+                blurTint = (p[Keys.BLUR_TINT] ?: 0.55f).coerceIn(0f, 1f),
+                blurTintMode = p[Keys.BLUR_TINT_MODE].toEnumOr(BlurTintMode.AUTO),
+                blurKeys = p[Keys.BLUR_KEYS] ?: true,
+                blurBorder = (p[Keys.BLUR_BORDER] ?: 0.5f).coerceIn(0f, 1f),
+                blurSheen = (p[Keys.BLUR_SHEEN] ?: 0.3f).coerceIn(0f, 1f),
+                blurFallbackSolid = p[Keys.BLUR_FALLBACK] ?: true,
                 autoSentenceFix = p[Keys.AUTO_SENTENCE_FIX] ?: true,
                 autoComplete = p[Keys.AUTO_COMPLETE] ?: true,
                 smartWriting = p[Keys.SMART_WRITING] ?: true,
@@ -347,6 +390,37 @@ class SettingsRepository(context: Context) {
     suspend fun setArabicDigits(v: Boolean) { store.edit { it[Keys.ARABIC_DIGITS] = v } }
     suspend fun setSwipeTyping(v: Boolean) { store.edit { it[Keys.SWIPE_TYPING] = v } }
     suspend fun setAutoCorrect(v: Boolean) { store.edit { it[Keys.AUTO_CORRECT] = v } }
+    suspend fun setProtectLearned(v: Boolean) { store.edit { it[Keys.PROTECT_LEARNED] = v } }
+    suspend fun setProtectNames(v: Boolean) { store.edit { it[Keys.PROTECT_NAMES] = v } }
+    suspend fun setAutoCorrectLevel(v: AutoCorrectLevel) { store.edit { it[Keys.AC_LEVEL] = v.name } }
+    suspend fun setAutoCorrectArabic(v: Boolean) { store.edit { it[Keys.AC_ARABIC] = v } }
+    suspend fun setAutoCorrectLatin(v: Boolean) { store.edit { it[Keys.AC_LATIN] = v } }
+    suspend fun setAutoCorrectMinLength(v: Int) { store.edit { it[Keys.AC_MIN_LEN] = v.coerceIn(2, 6) } }
+    suspend fun setCorrectOnPunctuation(v: Boolean) { store.edit { it[Keys.AC_PUNCT] = v } }
+    suspend fun setLearnWords(v: Boolean) { store.edit { it[Keys.LEARN_WORDS] = v } }
+    suspend fun setLearnSpeed(v: LearnSpeed) { store.edit { it[Keys.LEARN_SPEED] = v.name } }
+    suspend fun setLearnNextWords(v: Boolean) { store.edit { it[Keys.LEARN_NEXT] = v } }
+    suspend fun setBlurEnabled(v: Boolean) { store.edit { it[Keys.BLUR_ENABLED] = v } }
+    suspend fun setBlurRadius(v: Int) { store.edit { it[Keys.BLUR_RADIUS] = v.coerceIn(0, 150); it[Keys.BLUR_PRESET] = BlurPreset.CUSTOM.name } }
+    suspend fun setBlurTint(v: Float) { store.edit { it[Keys.BLUR_TINT] = v.coerceIn(0f, 1f); it[Keys.BLUR_PRESET] = BlurPreset.CUSTOM.name } }
+    suspend fun setBlurTintMode(v: BlurTintMode) { store.edit { it[Keys.BLUR_TINT_MODE] = v.name } }
+    suspend fun setBlurKeys(v: Boolean) { store.edit { it[Keys.BLUR_KEYS] = v } }
+    suspend fun setBlurBorder(v: Float) { store.edit { it[Keys.BLUR_BORDER] = v.coerceIn(0f, 1f); it[Keys.BLUR_PRESET] = BlurPreset.CUSTOM.name } }
+    suspend fun setBlurSheen(v: Float) { store.edit { it[Keys.BLUR_SHEEN] = v.coerceIn(0f, 1f); it[Keys.BLUR_PRESET] = BlurPreset.CUSTOM.name } }
+    suspend fun setBlurFallbackSolid(v: Boolean) { store.edit { it[Keys.BLUR_FALLBACK] = v } }
+    suspend fun applyBlurPreset(v: BlurPreset) {
+        store.edit {
+            it[Keys.BLUR_PRESET] = v.name
+            it[Keys.BLUR_ENABLED] = v != BlurPreset.CUSTOM || it[Keys.BLUR_ENABLED] == true
+            when (v) {
+                BlurPreset.CLEAR -> { it[Keys.BLUR_RADIUS] = 14; it[Keys.BLUR_TINT] = 0.18f; it[Keys.BLUR_BORDER] = 0.35f; it[Keys.BLUR_SHEEN] = 0.15f; it[Keys.GLASS_OPACITY] = 0.55f; it[Keys.PANEL_OPACITY] = 0.2f }
+                BlurPreset.THIN -> { it[Keys.BLUR_RADIUS] = 28; it[Keys.BLUR_TINT] = 0.38f; it[Keys.BLUR_BORDER] = 0.45f; it[Keys.BLUR_SHEEN] = 0.22f; it[Keys.GLASS_OPACITY] = 0.7f; it[Keys.PANEL_OPACITY] = 0.4f }
+                BlurPreset.REGULAR -> { it[Keys.BLUR_RADIUS] = 40; it[Keys.BLUR_TINT] = 0.55f; it[Keys.BLUR_BORDER] = 0.5f; it[Keys.BLUR_SHEEN] = 0.3f; it[Keys.GLASS_OPACITY] = 0.8f; it[Keys.PANEL_OPACITY] = 0.6f }
+                BlurPreset.THICK -> { it[Keys.BLUR_RADIUS] = 80; it[Keys.BLUR_TINT] = 0.72f; it[Keys.BLUR_BORDER] = 0.55f; it[Keys.BLUR_SHEEN] = 0.35f; it[Keys.GLASS_OPACITY] = 0.9f; it[Keys.PANEL_OPACITY] = 0.8f }
+                BlurPreset.CUSTOM -> Unit
+            }
+        }
+    }
     suspend fun setAutoSentenceFix(v: Boolean) { store.edit { it[Keys.AUTO_SENTENCE_FIX] = v } }
     suspend fun setAutoComplete(v: Boolean) { store.edit { it[Keys.AUTO_COMPLETE] = v } }
     suspend fun setSmartWriting(v: Boolean) { store.edit { it[Keys.SMART_WRITING] = v } }

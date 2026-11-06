@@ -37,7 +37,9 @@ private const val FIELD = "\u001F"
 internal class LearnedEntry(val first: String, val second: String, val permille: Int, val last: Long, val uses: Int = 1)
 
 private object ForgettingCurve {
-    const val HALF_LIFE_HOURS = 48.0
+    const val HALF_LIFE_HOURS = 120.0
+    const val ESTABLISHED_USES = 3
+    const val ESTABLISHED_TRUST = 0.25
     const val GAIN = 0.4
     const val WORD_TRUST = 0.7
     const val FIX_TRUST = 0.6
@@ -58,6 +60,13 @@ private object ForgettingCurve {
         val hours = (now - e.last).coerceAtLeast(0L) / 60.0
         return e.permille / 1000.0 * 0.5.pow(hours / halfLifeHours(e.uses))
     }
+
+    fun trusted(e: LearnedEntry, now: Long): Boolean {
+        val v = effective(e, now)
+        return v >= WORD_TRUST || (e.uses >= ESTABLISHED_USES && v >= ESTABLISHED_TRUST)
+    }
+
+    fun protects(e: LearnedEntry, now: Long): Boolean = effective(e, now) >= FLOOR && (e.uses >= 2 || trusted(e, now))
 
     fun reinforce(current: Double, times: Int): Int {
         var c = current.coerceIn(0.0, 1.0)
@@ -84,20 +93,26 @@ private object ForgettingCurve {
     }
 }
 
-private class DecayingKeySet(private val entries: Map<String, LearnedEntry>) : AbstractSet<String>() {
+private class DecayingKeySet(
+    private val entries: Map<String, LearnedEntry>,
+    private val mode: Int = MODE_TRUSTED
+) : AbstractSet<String>() {
     private var sizeMinute = -1L
     private var sizeValue = 0
 
+    private fun accepts(e: LearnedEntry, now: Long): Boolean =
+        if (mode == MODE_PROTECTED) ForgettingCurve.protects(e, now) else ForgettingCurve.trusted(e, now)
+
     override fun contains(element: String): Boolean {
         val e = entries[element] ?: return false
-        return ForgettingCurve.effective(e, ForgettingCurve.nowMinutes()) >= ForgettingCurve.WORD_TRUST
+        return accepts(e, ForgettingCurve.nowMinutes())
     }
 
     override val size: Int
         get() {
             val now = ForgettingCurve.nowMinutes()
             if (now != sizeMinute) {
-                sizeValue = entries.values.count { ForgettingCurve.effective(it, now) >= ForgettingCurve.WORD_TRUST }
+                sizeValue = entries.values.count { accepts(it, now) }
                 sizeMinute = now
             }
             return sizeValue
@@ -105,7 +120,12 @@ private class DecayingKeySet(private val entries: Map<String, LearnedEntry>) : A
 
     override fun iterator(): Iterator<String> {
         val now = ForgettingCurve.nowMinutes()
-        return entries.filterValues { ForgettingCurve.effective(it, now) >= ForgettingCurve.WORD_TRUST }.keys.iterator()
+        return entries.filterValues { accepts(it, now) }.keys.iterator()
+    }
+
+    companion object {
+        const val MODE_TRUSTED = 0
+        const val MODE_PROTECTED = 1
     }
 }
 
@@ -502,13 +522,18 @@ class LearnedWordsRepository(context: Context) {
         .distinctUntilChanged()
         .map { raw ->
             val now = ForgettingCurve.nowMinutes()
-            decodeWords(raw).filter { ForgettingCurve.effective(it, now) >= ForgettingCurve.WORD_TRUST }.map { it.first }
+            decodeWords(raw).filter { ForgettingCurve.trusted(it, now) }.map { it.first }
         }
 
     val trustedKeys: Flow<Set<String>> = appContext.credentialPrefsFlow()
         .map { p: Preferences -> p[key] }
         .distinctUntilChanged()
         .map { raw -> DecayingKeySet(decodeWords(raw).associateBy { BigDictionary.key(it.first) }) }
+
+    val protectedKeys: Flow<Set<String>> = appContext.credentialPrefsFlow()
+        .map { p: Preferences -> p[key] }
+        .distinctUntilChanged()
+        .map { raw -> DecayingKeySet(decodeWords(raw).associateBy { BigDictionary.key(it.first) }, DecayingKeySet.MODE_PROTECTED) }
 
     val learnedFixes: Flow<Map<String, String>> = appContext.credentialPrefsFlow()
         .map { p: Preferences -> p[fixesKey] }

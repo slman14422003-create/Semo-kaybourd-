@@ -8,14 +8,14 @@ plugins {
 
 android {
     namespace = "com.semo.keyboard"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.semo.keyboard"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 73
-        versionName = "3.29.5"
+        targetSdk = 37
+        versionCode = 74
+        versionName = "3.30.0"
         ndk {
             debugSymbolLevel = "NONE"
             if (!providers.gradleProperty("includeX86").isPresent) abiFilters += listOf("arm64-v8a", "armeabi-v7a")
