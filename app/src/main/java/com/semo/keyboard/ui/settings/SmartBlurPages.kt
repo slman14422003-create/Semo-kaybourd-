@@ -1,5 +1,8 @@
 package com.semo.keyboard.ui.settings
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -31,7 +35,9 @@ import androidx.compose.ui.unit.dp
 import com.semo.keyboard.R
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.model.AutoCorrectLevel
+import com.semo.keyboard.domain.model.BlurHighlight
 import com.semo.keyboard.domain.model.BlurPreset
+import com.semo.keyboard.domain.model.BlurSource
 import com.semo.keyboard.domain.model.BlurTintMode
 import com.semo.keyboard.domain.model.LearnSpeed
 import com.semo.keyboard.domain.model.SemoSettings
@@ -43,6 +49,9 @@ import com.semo.keyboard.ui.theme.frostPanel
 import com.semo.keyboard.ui.theme.semoColors
 import com.semo.keyboard.ui.theme.withBlur
 import com.semo.keyboard.util.BlurSupport
+import com.semo.keyboard.util.FrostImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -54,19 +63,19 @@ internal fun AutoCorrectPage(
     onOpenDictionary: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    SubPage(L("Auto-correct and learning"), onBack) {
-        Section(L("Auto-correct")) {
+    SubPage(L("التصحيح التلقائي والتعلّم"), onBack) {
+        Section(L("التصحيح التلقائي")) {
             SwitchRow(
-                L("Auto-correct"), R.drawable.ic_set_spell, IconTeal, settings.autoCorrect,
-                subtitle = L("Replaces common mistakes and obvious typos when you finish a word")
+                L("التصحيح التلقائي"), R.drawable.ic_set_spell, IconTeal, settings.autoCorrect,
+                subtitle = L("يستبدل الأخطاء الشائعة والواضحة عند الانتهاء من الكلمة")
             ) { scope.launch { repo.setAutoCorrect(it) } }
             Divider()
-            Block(L("Strength"), R.drawable.ic_set_spell, IconTeal) {
+            Block(L("القوة"), R.drawable.ic_set_spell, IconTeal) {
                 Segmented(
                     options = listOf(
-                        AutoCorrectLevel.LIGHT to L("Light"),
-                        AutoCorrectLevel.BALANCED to L("Balanced"),
-                        AutoCorrectLevel.STRONG to L("Strong")
+                        AutoCorrectLevel.LIGHT to L("خفيف"),
+                        AutoCorrectLevel.BALANCED to L("متوازن"),
+                        AutoCorrectLevel.STRONG to L("قوي")
                     ),
                     selected = settings.autoCorrectLevel,
                     onSelect = { scope.launch { repo.setAutoCorrectLevel(it) } }
@@ -74,23 +83,23 @@ internal fun AutoCorrectPage(
             }
             Hint(
                 when (settings.autoCorrectLevel) {
-                    AutoCorrectLevel.LIGHT -> L("Only fixed shortcuts and fixes you taught the keyboard. No spelling guesses")
-                    AutoCorrectLevel.BALANCED -> L("Shortcuts, taught fixes and clear single-letter typos of common words")
-                    AutoCorrectLevel.STRONG -> L("Also fixes rarer words and slightly bigger typos. Use with care")
+                    AutoCorrectLevel.LIGHT -> L("الاختصارات الثابتة وما علّمته للكيبورد فقط. بدون تخمين إملائي")
+                    AutoCorrectLevel.BALANCED -> L("الاختصارات وما علّمته وأخطاء الحرف الواحد الواضحة في الكلمات الشائعة")
+                    AutoCorrectLevel.STRONG -> L("يصحّح أيضًا الكلمات الأقل شيوعًا والأخطاء الأكبر قليلًا. استخدمه بحذر")
                 }
             )
             Divider()
             SwitchRow(
-                L("Correct Arabic words"), R.drawable.ic_set_text, IconBlue, settings.autoCorrectArabic
+                L("تصحيح الكلمات العربية"), R.drawable.ic_set_text, IconBlue, settings.autoCorrectArabic
             ) { scope.launch { repo.setAutoCorrectArabic(it) } }
             Divider()
             SwitchRow(
-                L("Correct Latin-script words"), R.drawable.ic_set_text, IconBlue, settings.autoCorrectLatin
+                L("تصحيح الكلمات بالحروف اللاتينية"), R.drawable.ic_set_text, IconBlue, settings.autoCorrectLatin
             ) { scope.launch { repo.setAutoCorrectLatin(it) } }
             Divider()
             var minDraft by remember(settings.autoCorrectMinLength) { mutableStateOf(settings.autoCorrectMinLength.toFloat()) }
             SliderRow(
-                title = L("Minimum word length for spelling guesses"),
+                title = L("أقل طول للكلمة لتخمين الإملاء"),
                 valueLabel = "${minDraft.roundToInt()}",
                 value = minDraft,
                 range = 2f..6f,
@@ -100,34 +109,34 @@ internal fun AutoCorrectPage(
             )
             Divider()
             SwitchRow(
-                L("Correct when typing punctuation"), R.drawable.ic_set_text, IconPurple, settings.correctOnPunctuation,
-                subtitle = L("Also applies the fix when you type a period, comma or similar mark")
+                L("التصحيح عند كتابة علامات الترقيم"), R.drawable.ic_set_text, IconPurple, settings.correctOnPunctuation,
+                subtitle = L("يطبّق التصحيح أيضًا عند كتابة نقطة أو فاصلة أو علامة مشابهة")
             ) { scope.launch { repo.setCorrectOnPunctuation(it) } }
         }
-        Section(L("Protection")) {
+        Section(L("الحماية")) {
             SwitchRow(
-                L("Never replace learned words"), R.drawable.ic_set_lock, IconGreen, settings.protectLearnedWords,
-                subtitle = L("Words you have typed and kept are never changed by auto-correct or auto-complete")
+                L("عدم استبدال الكلمات المحفوظة"), R.drawable.ic_set_lock, IconGreen, settings.protectLearnedWords,
+                subtitle = L("الكلمات التي كتبتها وأبقيتها لا يغيّرها التصحيح ولا الإكمال التلقائي")
             ) { scope.launch { repo.setProtectLearned(it) } }
             Divider()
             SwitchRow(
-                L("Keep names untouched"), R.drawable.ic_set_lock, IconGreen, settings.protectNames,
-                subtitle = L("Capitalized words in the middle of a sentence are left as typed")
+                L("عدم تغيير الأسماء"), R.drawable.ic_set_lock, IconGreen, settings.protectNames,
+                subtitle = L("الكلمات التي تبدأ بحرف كبير في منتصف الجملة تبقى كما كتبتها")
             ) { scope.launch { repo.setProtectNames(it) } }
-            Hint(L("Tip: press backspace right after a correction to restore your word. It will not be corrected again"))
+            Hint(L("نصيحة: اضغط حذف بعد التصحيح مباشرة لاسترجاع كلمتك ولن تُصحَّح مرة أخرى"))
         }
-        Section(L("Learning")) {
+        Section(L("التعلّم")) {
             SwitchRow(
-                L("Learn new words"), R.drawable.ic_set_dictionary, IconOrange, settings.learnWordsEnabled,
-                subtitle = L("Remembers words you type so they are suggested and never corrected")
+                L("تعلّم كلمات جديدة"), R.drawable.ic_set_dictionary, IconOrange, settings.learnWordsEnabled,
+                subtitle = L("يتذكر الكلمات التي تكتبها فتُقترح ولا تُصحَّح أبدًا")
             ) { scope.launch { repo.setLearnWords(it) } }
             Divider()
-            Block(L("Learning speed"), R.drawable.ic_set_dictionary, IconOrange) {
+            Block(L("سرعة التعلّم"), R.drawable.ic_set_dictionary, IconOrange) {
                 Segmented(
                     options = listOf(
-                        LearnSpeed.CAREFUL to L("Careful"),
-                        LearnSpeed.NORMAL to L("Normal"),
-                        LearnSpeed.FAST to L("Fast")
+                        LearnSpeed.CAREFUL to L("حذر"),
+                        LearnSpeed.NORMAL to L("عادي"),
+                        LearnSpeed.FAST to L("سريع")
                     ),
                     selected = settings.learnSpeed,
                     onSelect = { scope.launch { repo.setLearnSpeed(it) } }
@@ -135,18 +144,18 @@ internal fun AutoCorrectPage(
             }
             Hint(
                 when (settings.learnSpeed) {
-                    LearnSpeed.CAREFUL -> L("A new word is learned after you type it twice")
-                    LearnSpeed.NORMAL -> L("Clear new words are learned at once, likely typos after two uses")
-                    LearnSpeed.FAST -> L("Every new word is learned immediately")
+                    LearnSpeed.CAREFUL -> L("تُحفظ الكلمة الجديدة بعد ما تكتبها مرتين")
+                    LearnSpeed.NORMAL -> L("الكلمات الجديدة الواضحة تُحفظ فورًا، والأخطاء المحتملة بعد مرتين")
+                    LearnSpeed.FAST -> L("كل كلمة جديدة تُحفظ فورًا")
                 }
             )
             Divider()
             SwitchRow(
-                L("Learn word pairs"), R.drawable.ic_set_text, IconBlue, settings.learnNextWords,
-                subtitle = L("Improves next-word suggestions from your writing")
+                L("تعلّم أزواج الكلمات"), R.drawable.ic_set_text, IconBlue, settings.learnNextWords,
+                subtitle = L("يحسّن اقتراحات الكلمة التالية من كتابتك")
             ) { scope.launch { repo.setLearnNextWords(it) } }
             Divider()
-            ActionRow(L("Manage learned words"), onClick = onOpenDictionary)
+            ActionRow(L("إدارة الكلمات المحفوظة"), onClick = onOpenDictionary)
         }
     }
 }
@@ -157,40 +166,119 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
     val context = LocalContext.current
     LaunchedEffect(Unit) { BlurSupport.attach(context.applicationContext) }
     val supported = BlurSupport.enabled
-    SubPage(L("Blur and glass"), onBack) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) { FrostImage.importFrom(context, uri) }
+                if (ok) {
+                    repo.setBlurImageStamp(System.currentTimeMillis())
+                    repo.setBlurSource(BlurSource.IMAGE)
+                    repo.setBlurEnabled(true)
+                } else {
+                    Toast.makeText(context, L("تعذّر فتح الصورة"), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    SubPage(L("التمويه والزجاج"), onBack) {
         Section(null) {
             Box(Modifier.padding(10.dp)) { BlurPreview(settings) }
         }
-        Section(L("Blur")) {
+        Section(L("التمويه")) {
             SwitchRow(
-                L("Background blur"), R.drawable.ic_set_theme, IconBlue, settings.blurEnabled,
-                subtitle = L("Blurs the app behind the keyboard like frosted glass")
+                L("تمويه الخلفية"), R.drawable.ic_set_theme, IconBlue, settings.blurEnabled,
+                subtitle = L("يموّه التطبيق خلف الكيبورد مثل الزجاج المصنفر")
             ) { scope.launch { repo.setBlurEnabled(it) } }
             Hint(
                 when {
-                    !BlurSupport.available() -> L("Real blur needs Android 12 or newer. A tinted panel is used instead")
-                    supported -> L("Window blur is available on this device")
-                    else -> L("Window blur is turned off by the system (battery saver or developer setting). A tinted panel is used instead")
+                    !BlurSupport.available() -> L("التمويه الحقيقي يحتاج أندرويد 12 أو أحدث. سيُستخدم لوح ملوّن بدلًا منه")
+                    supported -> L("تمويه النافذة متاح على هذا الجهاز")
+                    else -> L("تمويه النافذة مُعطَّل من النظام (توفير البطارية أو خيارات المطوّر). سيُستخدم لوح ملوّن بدلًا منه")
                 }
             )
             Divider()
-            Block(L("Style"), R.drawable.ic_set_theme, IconBlue) {
+            Block(L("النمط"), R.drawable.ic_set_theme, IconBlue) {
                 Segmented(
                     options = listOf(
-                        BlurPreset.CLEAR to L("Clear"),
-                        BlurPreset.THIN to L("Thin"),
-                        BlurPreset.REGULAR to L("Regular"),
-                        BlurPreset.THICK to L("Thick")
+                        BlurPreset.CLEAR to L("شفاف"),
+                        BlurPreset.THIN to L("رقيق"),
+                        BlurPreset.REGULAR to L("عادي"),
+                        BlurPreset.THICK to L("سميك")
                     ),
                     selected = settings.blurPreset,
                     onSelect = { scope.launch { repo.applyBlurPreset(it) } }
                 )
             }
         }
-        Section(L("Fine tuning")) {
+        Section(L("مصدر الخلفية")) {
+            Block(L("ماذا يُموَّه خلف المفاتيح؟"), R.drawable.ic_set_theme, IconBlue) {
+                Segmented(
+                    options = listOf(
+                        BlurSource.WINDOW to L("التطبيق خلف الكيبورد"),
+                        BlurSource.IMAGE to L("صورة مخصصة")
+                    ),
+                    selected = settings.blurSource,
+                    onSelect = { scope.launch { repo.setBlurSource(it) } }
+                )
+            }
+            if (settings.blurSource == BlurSource.IMAGE) {
+                Divider()
+                ActionRow(if (settings.blurImageStamp == 0L) L("اختيار صورة من المعرض") else L("تغيير الصورة")) {
+                    picker.launch(arrayOf("image/*"))
+                }
+                if (settings.blurImageStamp != 0L) {
+                    Divider()
+                    ActionRow(L("حذف الصورة"), color = DangerRed) {
+                        scope.launch {
+                            withContext(Dispatchers.IO) { FrostImage.clear(context) }
+                            repo.setBlurImageStamp(0L)
+                            repo.setBlurSource(BlurSource.WINDOW)
+                        }
+                    }
+                    Divider()
+                    var imgRadiusDraft by remember(settings.blurImageRadius) { mutableStateOf(settings.blurImageRadius.toFloat()) }
+                    SliderRow(
+                        title = L("تمويه الصورة"),
+                        valueLabel = "${imgRadiusDraft.roundToInt()}",
+                        value = imgRadiusDraft,
+                        range = 0f..50f,
+                        steps = 24,
+                        onChange = { imgRadiusDraft = it },
+                        onFinish = { scope.launch { repo.setBlurImageRadius(imgRadiusDraft.roundToInt()) } }
+                    )
+                    var imgDimDraft by remember(settings.blurImageDim) { mutableStateOf(settings.blurImageDim) }
+                    SliderRow(
+                        title = L("تعتيم الصورة"),
+                        valueLabel = "${(imgDimDraft * 100).roundToInt()}%",
+                        value = imgDimDraft,
+                        range = 0f..0.7f,
+                        steps = 13,
+                        onChange = { imgDimDraft = it },
+                        onFinish = { scope.launch { repo.setBlurImageDim(imgDimDraft) } }
+                    )
+                    var imgSatDraft by remember(settings.blurImageSaturation) { mutableStateOf(settings.blurImageSaturation) }
+                    SliderRow(
+                        title = L("تشبّع الألوان"),
+                        valueLabel = "${(imgSatDraft * 100).roundToInt()}%",
+                        value = imgSatDraft,
+                        range = 0.5f..2f,
+                        steps = 14,
+                        onChange = { imgSatDraft = it },
+                        onFinish = { scope.launch { repo.setBlurImageSaturation(imgSatDraft) } }
+                    )
+                }
+            }
+            Hint(
+                if (settings.blurSource == BlurSource.IMAGE)
+                    L("الصورة تُموَّه داخل التطبيق، فتعمل على كل إصدارات أندرويد حتى بدون تمويه النظام")
+                else
+                    L("تمويه النافذة الحقيقي: يموّه ما خلف الكيبورد ويحتاج أندرويد 12 أو أحدث")
+            )
+        }
+        Section(L("ضبط دقيق")) {
             var radiusDraft by remember(settings.blurRadius) { mutableStateOf(settings.blurRadius.toFloat()) }
             SliderRow(
-                title = L("Blur radius"),
+                title = L("قوة التمويه"),
                 valueLabel = "${radiusDraft.roundToInt()}",
                 value = radiusDraft,
                 range = 0f..150f,
@@ -201,7 +289,7 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             )
             var tintDraft by remember(settings.blurTint) { mutableStateOf(settings.blurTint) }
             SliderRow(
-                title = L("Tint strength"),
+                title = L("قوة الصبغة"),
                 valueLabel = "${(tintDraft * 100).roundToInt()}%",
                 value = tintDraft,
                 range = 0f..1f,
@@ -212,7 +300,7 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             )
             var keyDraft by remember(settings.glassOpacity) { mutableStateOf(settings.glassOpacity) }
             SliderRow(
-                title = L("Key opacity"),
+                title = L("شفافية المفاتيح"),
                 valueLabel = "${(keyDraft * 100).roundToInt()}%",
                 value = keyDraft,
                 range = 0.35f..1f,
@@ -222,7 +310,7 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             )
             var sheenDraft by remember(settings.blurSheen) { mutableStateOf(settings.blurSheen) }
             SliderRow(
-                title = L("Top sheen"),
+                title = L("لمعة الأعلى"),
                 valueLabel = "${(sheenDraft * 100).roundToInt()}%",
                 value = sheenDraft,
                 range = 0f..1f,
@@ -233,7 +321,7 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             )
             var borderDraft by remember(settings.blurBorder) { mutableStateOf(settings.blurBorder) }
             SliderRow(
-                title = L("Edge highlight"),
+                title = L("لمعة الحواف"),
                 valueLabel = "${(borderDraft * 100).roundToInt()}%",
                 value = borderDraft,
                 range = 0f..1f,
@@ -242,32 +330,55 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 onChange = { borderDraft = it },
                 onFinish = { scope.launch { repo.setBlurBorder(borderDraft) } }
             )
+            var edgeWidthDraft by remember(settings.blurEdgeWidth) { mutableStateOf(settings.blurEdgeWidth) }
+            SliderRow(
+                title = L("سماكة الحواف"),
+                valueLabel = "${"%.1f".format(edgeWidthDraft)}",
+                value = edgeWidthDraft,
+                range = 0.5f..3f,
+                steps = 4,
+                enabled = settings.blurEnabled,
+                onChange = { edgeWidthDraft = it },
+                onFinish = { scope.launch { repo.setBlurEdgeWidth(edgeWidthDraft) } }
+            )
             Divider()
-            Block(L("Tint color"), R.drawable.ic_set_theme, IconPurple) {
+            Block(L("لون اللمعة والحواف"), R.drawable.ic_set_theme, IconTeal) {
                 Segmented(
                     options = listOf(
-                        BlurTintMode.AUTO to L("Theme"),
-                        BlurTintMode.ACCENT to L("Accent"),
-                        BlurTintMode.LIGHTEN to L("Lighter"),
-                        BlurTintMode.DARKEN to L("Darker")
+                        BlurHighlight.WHITE to L("أبيض"),
+                        BlurHighlight.ACCENT to L("لون التمييز"),
+                        BlurHighlight.AUTO to L("تلقائي")
+                    ),
+                    selected = settings.blurHighlight,
+                    onSelect = { scope.launch { repo.setBlurHighlight(it) } }
+                )
+            }
+            Divider()
+            Block(L("لون الصبغة"), R.drawable.ic_set_theme, IconPurple) {
+                Segmented(
+                    options = listOf(
+                        BlurTintMode.AUTO to L("السمة"),
+                        BlurTintMode.ACCENT to L("لون التمييز"),
+                        BlurTintMode.LIGHTEN to L("أفتح"),
+                        BlurTintMode.DARKEN to L("أغمق")
                     ),
                     selected = settings.blurTintMode,
                     onSelect = { scope.launch { repo.setBlurTintMode(it) } }
                 )
             }
         }
-        Section(L("Options")) {
+        Section(L("خيارات")) {
             SwitchRow(
-                L("Frosted keys"), R.drawable.ic_set_theme, IconTeal, settings.blurKeys,
-                subtitle = L("Adds a glass edge and sheen to each key")
+                L("مفاتيح مصنفرة"), R.drawable.ic_set_theme, IconTeal, settings.blurKeys,
+                subtitle = L("يضيف حافة زجاجية ولمعة على كل مفتاح")
             ) { scope.launch { repo.setBlurKeys(it) } }
             Divider()
             SwitchRow(
-                L("Solid fallback"), R.drawable.ic_set_lock, IconGray, settings.blurFallbackSolid,
-                subtitle = L("When blur is unavailable, use a nearly solid panel so text stays readable")
+                L("لوح معتم بديل"), R.drawable.ic_set_lock, IconGray, settings.blurFallbackSolid,
+                subtitle = L("عند عدم توفر التمويه، استخدم لوحًا شبه معتم ليبقى النص مقروءًا")
             ) { scope.launch { repo.setBlurFallbackSolid(it) } }
             Divider()
-            ActionRow(L("Reset blur settings")) {
+            ActionRow(L("إعادة ضبط التمويه")) {
                 scope.launch {
                     repo.applyBlurPreset(BlurPreset.REGULAR)
                     repo.setBlurEnabled(false)
@@ -276,6 +387,12 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                     repo.setBlurFallbackSolid(true)
                     repo.setGlassOpacity(1f)
                     repo.setPanelOpacity(1f)
+                    repo.setBlurSource(BlurSource.WINDOW)
+                    repo.setBlurImageRadius(20)
+                    repo.setBlurImageDim(0.1f)
+                    repo.setBlurImageSaturation(1.2f)
+                    repo.setBlurHighlight(BlurHighlight.WHITE)
+                    repo.setBlurEdgeWidth(1f)
                 }
             }
         }
@@ -294,8 +411,24 @@ private fun BlurPreview(settings: SemoSettings) {
     val colors = remember(base, active, settings.glassOpacity, settings.blurTint, settings.blurTintMode, dark) {
         if (active) base.withBlur(settings.glassOpacity, settings.blurTint, settings.blurTintMode, dark) else base
     }
-    val frost = remember(active, settings.blurKeys, settings.blurBorder, settings.blurSheen) {
-        FrostSpec(active, settings.blurKeys, settings.blurBorder, settings.blurSheen, Color.White)
+    val context = LocalContext.current
+    val useImage = active && settings.blurSource == BlurSource.IMAGE && settings.blurImageStamp != 0L
+    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null, useImage, settings.blurImageStamp, settings.blurImageRadius, settings.blurImageSaturation
+    ) {
+        value = if (useImage) {
+            withContext(Dispatchers.Default) {
+                FrostImage.render(context.applicationContext, settings.blurImageStamp, settings.blurImageRadius, settings.blurImageSaturation)
+            }
+        } else null
+    }
+    val highlight = when (settings.blurHighlight) {
+        BlurHighlight.WHITE -> Color.White
+        BlurHighlight.ACCENT -> colors.keyAccent
+        BlurHighlight.AUTO -> if (dark) Color.White else Color(0xFF5B6B85)
+    }
+    val frost = remember(active, settings.blurKeys, settings.blurBorder, settings.blurSheen, highlight, settings.blurEdgeWidth, image, settings.blurImageDim) {
+        FrostSpec(active, settings.blurKeys, settings.blurBorder, settings.blurSheen, highlight, settings.blurEdgeWidth, image, settings.blurImageDim)
     }
     val blurDp = if (active) (settings.blurRadius / 4f).coerceAtLeast(0f).dp else 0.dp
     Box(

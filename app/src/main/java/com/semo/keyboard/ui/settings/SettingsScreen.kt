@@ -81,6 +81,7 @@ import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.AnimationSpeed
+import com.semo.keyboard.domain.model.AutoCorrectLevel
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
 import com.semo.keyboard.domain.model.HideButtonMode
@@ -320,8 +321,8 @@ private fun HomePage(
             NavRow(L("الكتابة الذكية"), typingSummary, R.drawable.ic_ios_emoji, IconGreen) { onOpen(SettingsPage.TYPING) }
             Divider()
             NavRow(
-                L("Auto-correct and learning"),
-                "${settings.autoCorrectLevel.name.lowercase().replaceFirstChar { it.uppercase() }} · ${if (settings.protectLearnedWords) "Learned words protected" else "Learned words not protected"}",
+                L("التصحيح التلقائي والتعلّم"),
+                "${when (settings.autoCorrectLevel) { AutoCorrectLevel.LIGHT -> L("خفيف"); AutoCorrectLevel.BALANCED -> L("متوازن"); AutoCorrectLevel.STRONG -> L("قوي") }} · ${if (settings.protectLearnedWords) L("الكلمات المحفوظة محميّة") else L("الكلمات المحفوظة غير محميّة")}",
                 R.drawable.ic_set_spell, IconTeal
             ) { onOpen(SettingsPage.AUTOCORRECT) }
             Divider()
@@ -332,8 +333,8 @@ private fun HomePage(
             ) { onOpen(SettingsPage.APPEARANCE) }
             Divider()
             NavRow(
-                L("Blur and glass"),
-                if (settings.blurEnabled) "On · ${settings.blurRadius}" else "Off",
+                L("التمويه والزجاج"),
+                if (settings.blurEnabled) "${L("مفعّل")} · ${settings.blurRadius}" else L("متوقف"),
                 R.drawable.ic_set_theme, IconBlue
             ) { onOpen(SettingsPage.BLUR) }
             Divider()
@@ -471,8 +472,8 @@ private fun TypingPage(
             ) { scope.launch { repo.setAutoCorrect(it) } }
             Divider()
             SwitchRow(
-                L("Auto-complete words"), R.drawable.ic_set_text, IconBlue, settings.autoComplete,
-                subtitle = L("Completes a half-typed word from your learned words and the dictionary when you press space. Backspace right after undoes it")
+                L("إكمال الكلمات تلقائيًا"), R.drawable.ic_set_text, IconBlue, settings.autoComplete,
+                subtitle = L("يكمل الكلمة نصف المكتوبة من كلماتك المحفوظة والقاموس عند الضغط على المسافة. زر الحذف مباشرة بعدها يتراجع عنه")
             ) { scope.launch { repo.setAutoComplete(it) } }
             Divider()
             SwitchRow(
@@ -662,31 +663,6 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
                 ActionRow(L("إعادة الحجم إلى 100%")) { scope.launch { repo.setKeyboardScale(1f) } }
             }
             Divider()
-            var opacityDraft by remember(settings.glassOpacity) { mutableStateOf(settings.glassOpacity) }
-            SliderRow(
-                title = L("شفافية المفاتيح"),
-                valueLabel = "${(opacityDraft * 100).roundToInt()}%",
-                value = opacityDraft,
-                range = 0.35f..1f,
-                steps = 12,
-                onChange = { opacityDraft = it },
-                onFinish = { scope.launch { repo.setGlassOpacity(opacityDraft) } }
-            )
-            var panelDraft by remember(settings.panelOpacity) { mutableStateOf(settings.panelOpacity) }
-            SliderRow(
-                title = L("شفافية خلفية الكيبورد"),
-                valueLabel = "${(panelDraft * 100).roundToInt()}%",
-                value = panelDraft,
-                range = 0f..1f,
-                steps = 19,
-                onChange = { panelDraft = it },
-                onFinish = { scope.launch { repo.setPanelOpacity(panelDraft) } }
-            )
-            if (settings.glassOpacity != 1f || settings.panelOpacity != 1f) {
-                ActionRow(L("إعادة الشفافية إلى 100%")) { scope.launch { repo.setGlassOpacity(1f); repo.setPanelOpacity(1f) } }
-            }
-            ActionRow(L("وضع زجاجي: مفاتيح شبه شفافة وخلفية شفافة")) { scope.launch { repo.setGlassOpacity(0.6f); repo.setPanelOpacity(0.15f) } }
-            Divider()
             Block(L("ارتفاع المفاتيح"), R.drawable.ic_set_height, IconTeal) {
                 Segmented(
                     options = listOf(KeyboardSize.SMALL to L("صغير"), KeyboardSize.MEDIUM to L("متوسط"), KeyboardSize.LARGE to L("كبير")),
@@ -793,8 +769,8 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             }
             Divider()
             SwitchRow(
-                L("Manual button positions"), R.drawable.ic_tool_onehand, IconTeal, settings.manualBottomPos,
-                subtitle = L("Drag the globe and hide buttons in the preview to place them. Saved automatically.")
+                L("مواضع الأزرار يدويًا"), R.drawable.ic_tool_onehand, IconTeal, settings.manualBottomPos,
+                subtitle = L("اسحب زر الكرة الأرضية وزر الإخفاء في المعاينة لوضعهما. يُحفظ تلقائيًا.")
             ) { scope.launch { repo.setManualBottomPos(it) } }
             if (settings.manualBottomPos) {
                 BottomPositionPreview(settings, repo)
@@ -1550,7 +1526,7 @@ private fun BottomPositionPreview(settings: SemoSettings, repo: SettingsReposito
             fontSize = 12.sp
         )
         Text(
-            L("Reset to default"),
+            L("إعادة للوضع الافتراضي"),
             color = SemoPalette.AccentText,
             fontSize = 13.sp,
             modifier = Modifier

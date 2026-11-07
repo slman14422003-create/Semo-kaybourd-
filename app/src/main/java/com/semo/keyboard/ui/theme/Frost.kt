@@ -8,6 +8,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -19,7 +23,10 @@ data class FrostSpec(
     val keys: Boolean = false,
     val border: Float = 0f,
     val sheen: Float = 0f,
-    val highlight: Color = Color.White
+    val highlight: Color = Color.White,
+    val edgeWidth: Float = 1f,
+    val image: ImageBitmap? = null,
+    val imageDim: Float = 0f
 )
 
 val LocalFrost = staticCompositionLocalOf { FrostSpec() }
@@ -49,7 +56,26 @@ fun SemoKeyboardColors.withBlur(
     )
 }
 
+private fun DrawScope.drawCoverImage(img: ImageBitmap) {
+    val s = maxOf(size.width / img.width, size.height / img.height)
+    if (s <= 0f) return
+    val cropW = (size.width / s).toInt().coerceIn(1, img.width)
+    val cropH = (size.height / s).toInt().coerceIn(1, img.height)
+    drawImage(
+        image = img,
+        srcOffset = IntOffset((img.width - cropW) / 2, (img.height - cropH) / 2),
+        srcSize = IntSize(cropW, cropH),
+        dstSize = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)),
+        filterQuality = FilterQuality.Medium
+    )
+}
+
 fun Modifier.frostPanel(color: Color, spec: FrostSpec): Modifier = drawBehind {
+    val img = spec.image
+    if (spec.active && img != null) {
+        drawCoverImage(img)
+        if (spec.imageDim > 0f) drawRect(Color.Black.copy(alpha = spec.imageDim))
+    }
     drawRect(color)
     if (!spec.active) return@drawBehind
     if (spec.sheen > 0f) {
@@ -62,7 +88,7 @@ fun Modifier.frostPanel(color: Color, spec: FrostSpec): Modifier = drawBehind {
         )
     }
     if (spec.border > 0f) {
-        val w = 1f * density
+        val w = spec.edgeWidth * density
         drawLine(
             color = spec.highlight.copy(alpha = 0.55f * spec.border),
             start = Offset(0f, w / 2f),
@@ -86,7 +112,7 @@ fun DrawScope.drawFrostKey(spec: FrostSpec, radiusPx: Float) {
         )
     }
     if (spec.border > 0f) {
-        val stroke = 1f * density
+        val stroke = spec.edgeWidth * density
         drawRoundRect(
             brush = Brush.verticalGradient(
                 colors = listOf(
