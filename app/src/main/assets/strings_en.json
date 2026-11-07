@@ -342,5 +342,15 @@
  "سماكة الحواف": "Edge thickness",
  "لون اللمعة والحواف": "Highlight and edge color",
  "أبيض": "White",
- "تعذّر فتح الصورة": "Could not open the image"
+ "تعذّر فتح الصورة": "Could not open the image",
+ "تمويه ما خلف الكيبورد": "Blur behind the keyboard",
+ "التمويه يظهر فقط عندما تكون خلفية الكيبورد شفافة. إذا لم يتغيّر شيء فقد يمنعه نظام جهازك، وبديله «صورة مخصصة» ضمن خيارات الزجاج المتقدمة": "Blur only shows when the keyboard background is transparent. If nothing changes your device may block it; use “Custom image” in advanced glass options instead",
+ "نمط الزجاج الجاهز": "Glass presets",
+ "إعادة الشفافية والتمويه إلى الوضع الافتراضي": "Reset transparency and blur to default",
+ "خيارات الزجاج المتقدمة: صورة مخصصة، لمعة، حواف": "Advanced glass options: custom image, sheen, edges",
+ "خيارات الزجاج المتقدمة": "Advanced glass options",
+ "تمويه النافذة الحقيقي يحتاج أندرويد 12 أو أحدث. الصورة المخصصة تعمل على كل الإصدارات": "Real window blur needs Android 12 or newer. The custom image works on every version",
+ "النظام يعطّل تمويه النوافذ حاليًا (توفير البطارية أو خيارات المطوّر). الصورة المخصصة تعمل بدونه": "The system currently disables window blur (battery saver or developer option). The custom image works without it",
+ "لمعة الزجاج": "Glass sheen",
+ "إعادة ضبط خيارات الزجاج": "Reset glass options"
 }
