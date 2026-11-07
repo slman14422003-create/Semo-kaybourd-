@@ -740,7 +740,7 @@ private fun TopStrip(
         val fullWidth = maxWidth
         val slots = ((fullWidth - 4.dp - 46.dp) / 46.dp).toInt().coerceAtLeast(1)
         val enabled = state.toolbarItems
-        val disabled = ToolbarItem.values().filter { it !in enabled }
+        val disabled = remember(enabled) { ToolbarItem.values().filter { it !in enabled } }
         val needMore = enabled.size > slots || disabled.isNotEmpty()
         val visible = if (needMore) enabled.take((slots - 1).coerceAtLeast(0)) else enabled
         val remaining = if (needMore) enabled.drop(visible.size) + disabled else emptyList()

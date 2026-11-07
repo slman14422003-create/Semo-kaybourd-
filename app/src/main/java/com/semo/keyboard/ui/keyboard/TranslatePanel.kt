@@ -275,7 +275,8 @@ internal fun TranslatePanel(
 ) {
     val panel by viewModel.panelData.collectAsState()
     val all = remember { TranslateLanguages.sorted() }
-    val recents = panel.translateRecents.filter { it in all }
+    val allSet = remember(all) { all.toHashSet() }
+    val recents = remember(panel.translateRecents, allSet) { panel.translateRecents.filter { it in allSet } }
     val names = remember { HashMap<String, Pair<String, String>>() }
     fun info(code: String): Pair<String, String> =
         names.getOrPut(code) { TranslateLanguages.displayName(code) to TranslateLanguages.nativeName(code) }

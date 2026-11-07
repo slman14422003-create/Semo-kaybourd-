@@ -101,6 +101,9 @@ private const val FIELD_READ_MAX = 4500
 private const val START_READ_MS = 100L
 private const val DELETE_FEEDBACK_GAP_MS = 35L
 private const val POLL_IDLE_MS = 1200L
+private const val POLL_BASE_MS = 2500L
+private const val POLL_STEP_MS = 1500L
+private const val POLL_MAX_MS = 6000L
 private const val SHOT_WINDOW_S = 300L
 private val SHOT_POLL_DELAYS = longArrayOf(0L)
 private val SHOT_SHOW_DELAYS = longArrayOf(0L, 700L)
@@ -208,6 +211,9 @@ class SemoKeyboardService :
      */
     private val ioThread = HandlerThread("semo-io").also { it.start() }
     private val ioHandler = Handler(ioThread.looper)
+
+    private val loadThread = HandlerThread("semo-load", android.os.Process.THREAD_PRIORITY_BACKGROUND).also { it.start() }
+    private val loadHandler = Handler(loadThread.looper)
 
     private val aiThread = HandlerThread("semo-ai", android.os.Process.THREAD_PRIORITY_BACKGROUND).also { it.start() }
     private val aiHandler = Handler(aiThread.looper)
@@ -335,6 +341,12 @@ class SemoKeyboardService :
 
     /** استطلاع دوري أثناء ظهور اللوحة: بعض الأنظمة (HyperOS/One UI) لا ترسل إشعار تغيّر الحافظة بشكل موثوق */
     private var pollTick = 0
+    @Volatile private var pollInterval = POLL_BASE_MS
+    private var pollSignature = 0L
+    private var pollTypeAt = 0L
+
+    private fun pollState(): Long = lastClipTs * 31L + lastShotId * 17L + (lastCapturedClip?.hashCode() ?: 0)
+
     private val pollTask = object : Runnable {
         override fun run() {
             if (::viewModel.isInitialized && SystemClock.uptimeMillis() - lastTypeAt > POLL_IDLE_MS) {
@@ -344,7 +356,13 @@ class SemoKeyboardService :
                 pollTick++
                 if (pollTick % 2 == 0) captureScreenshot(SHOT_POLL_DELAYS)
             }
-            mainHandler.postDelayed(this, 2500)
+            val signature = pollState()
+            val typedAt = lastTypeAt
+            pollInterval = if (signature != pollSignature || typedAt != pollTypeAt) POLL_BASE_MS
+            else (pollInterval + POLL_STEP_MS).coerceAtMost(POLL_MAX_MS)
+            pollSignature = signature
+            pollTypeAt = typedAt
+            mainHandler.postDelayed(this, pollInterval)
         }
     }
 
@@ -396,6 +414,7 @@ class SemoKeyboardService :
 
     private val shotObserver = object : android.database.ContentObserver(mainHandler) {
         override fun onChange(selfChange: Boolean) {
+            pollInterval = POLL_BASE_MS
             mainHandler.removeCallbacks(shotTask)
             mainHandler.postDelayed(shotTask, 200)
         }
@@ -421,6 +440,7 @@ class SemoKeyboardService :
     }
 
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener {
+        pollInterval = POLL_BASE_MS
         val early = runCatching { (getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip }.getOrNull()
         captureClipboard(force = true, early = early)
     }
@@ -436,7 +456,7 @@ class SemoKeyboardService :
         startCacheCycle()
         prewarmAssets()
         val settingsRepository = SettingsRepository(applicationContext)
-        ioHandler.post { runCatching { kotlinx.coroutines.runBlocking { settingsRepository.syncAppIcon() } } }
+        loadHandler.post { runCatching { kotlinx.coroutines.runBlocking { settingsRepository.syncAppIcon() } } }
         clipboardRepository = ClipboardRepository(applicationContext)
         val learnedRepository = LearnedWordsRepository(applicationContext)
         val shortcutsRepository = ShortcutsRepository(applicationContext)
@@ -451,10 +471,10 @@ class SemoKeyboardService :
         }
 
         // القاموس الكبير (لو نُزِّل) يُحمَّل بخيط خلفي كي لا يؤخّر ظهور اللوحة
-        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.AutoCorrect.attach(applicationContext) } }
-        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.EmojiSearch.attach(applicationContext) } }
-        ioHandler.post { runCatching { com.semo.keyboard.domain.logic.SentenceRules.attach(applicationContext) } }
-        ioHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
+        loadHandler.post { runCatching { com.semo.keyboard.domain.logic.AutoCorrect.attach(applicationContext) } }
+        loadHandler.post { runCatching { com.semo.keyboard.domain.logic.EmojiSearch.attach(applicationContext) } }
+        loadHandler.post { runCatching { com.semo.keyboard.domain.logic.SentenceRules.attach(applicationContext) } }
+        loadHandler.post { runCatching { DictionaryManager.loadAll(applicationContext) } }
         serviceScope.launch {
             viewModel.uiState
                 .map { it.language }
@@ -469,7 +489,7 @@ class SemoKeyboardService :
                     }
                 }
         }
-        ioHandler.post { runCatching { VoskModelManager.cleanLeftovers(applicationContext) } }
+        loadHandler.post { runCatching { VoskModelManager.cleanLeftovers(applicationContext) } }
         hapticHandler.post { runCatching { if (hasVibrator) hapticEffects.size } }
     }
 
@@ -824,7 +844,7 @@ class SemoKeyboardService :
     }
 
     private fun prewarmAssets() {
-        ioHandler.post {
+        loadHandler.post {
             runCatching { com.semo.keyboard.ui.keyboard.supportedEmojiCache.size }
         }
     }
@@ -966,6 +986,7 @@ class SemoKeyboardService :
         if (::viewModel.isInitialized) viewModel.setNavSetting(detectNavButtons())
         captureClipboard()
         captureScreenshot(SHOT_SHOW_DELAYS)
+        pollInterval = POLL_BASE_MS
         mainHandler.removeCallbacks(pollTask)
         mainHandler.postDelayed(pollTask, 600)
         if (pendingVoice) mainHandler.postDelayed({ if (pendingVoice && isInputViewShown) startPendingVoice() }, 250)
@@ -1024,7 +1045,10 @@ class SemoKeyboardService :
         hapticThread.quitSafely()
         readHandler.removeCallbacksAndMessages(null)
         readThread.quitSafely()
+        ioHandler.removeCallbacksAndMessages(null)
         ioThread.quitSafely()
+        loadHandler.removeCallbacksAndMessages(null)
+        loadThread.quitSafely()
         aiHandler.removeCallbacksAndMessages(null)
         aiThread.quitSafely()
         KeyboardStatusHelper.setImeVisible(this, false)

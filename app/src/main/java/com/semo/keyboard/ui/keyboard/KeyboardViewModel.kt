@@ -287,6 +287,15 @@ class KeyboardViewModel(
 
     @Volatile
     private var optimisticBlocked: Set<String> = emptySet()
+    private val optimisticLock = Any()
+
+    private fun optimisticAdd(key: String) {
+        synchronized(optimisticLock) { optimisticBlocked = optimisticBlocked + key }
+    }
+
+    private fun optimisticRemove(key: String) {
+        synchronized(optimisticLock) { optimisticBlocked = optimisticBlocked - key }
+    }
 
     private var removedSnapshot: LearnedWordsRepository.BlockSnapshot? = null
     private var removedJob: Job? = null
@@ -306,13 +315,13 @@ class KeyboardViewModel(
         val state = uiState.value
         if (state.hapticEnabled) bridge.keyFeedback(false, true, KeyFeedback.LONG_PRESS)
         val key = BigDictionary.key(word)
-        optimisticBlocked = optimisticBlocked + key
+        optimisticAdd(key)
         pendingWords.removeAll { BigDictionary.key(it) == key }
         refreshSuggestions()
         viewModelScope.launch(Dispatchers.Default + safeHandler) {
             val snapshot = learnedWordsRepository.blockWord(word)
             if (snapshot == null) {
-                optimisticBlocked = optimisticBlocked - key
+                optimisticRemove(key)
                 return@launch
             }
             removedSnapshot = snapshot
@@ -333,7 +342,7 @@ class KeyboardViewModel(
         transient.update { it.copy(removedWord = null) }
         viewModelScope.launch(Dispatchers.Default + safeHandler) {
             learnedWordsRepository.restore(snapshot)
-            optimisticBlocked = optimisticBlocked - key
+            optimisticRemove(key)
             refreshSuggestions()
         }
     }
@@ -1763,8 +1772,7 @@ class KeyboardViewModel(
         pendingChoices.clear()
         pendingProfileWords.clear()
         viewModelScope.launch(Dispatchers.Default + safeHandler) {
-            val fresh = learnedWordsRepository.learnBatch(words, pairs, strong, suspects)
-            learnedWordsRepository.applyRank(choices, profile, profileWords)
+            val fresh = learnedWordsRepository.learnAndRank(words, pairs, strong, suspects, choices, profile, profileWords)
             if (fresh.isNotEmpty()) showLearned(fresh)
         }
     }
