@@ -9,8 +9,4 @@
         <item name="android:windowAnimationStyle">@null</item>
         <item name="android:windowBackground">@android:color/transparent</item>
     </style>
-    <style name="Theme.Semo.Keyboard" parent="android:Theme.DeviceDefault.InputMethod">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-    </style>
 </resources>
