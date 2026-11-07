@@ -427,6 +427,8 @@ class SemoKeyboardService :
 
     override fun onCreate() {
         savedStateController.performRestore(null)
+        // نافذة شفافة (translucent) شرط لعمل setBackgroundBlurRadius على نافذة الكيبورد
+        setTheme(com.semo.keyboard.R.style.Theme_Semo_Keyboard)
         super.onCreate()
         com.semo.keyboard.diag.CrashLog.install(applicationContext)
         BlurSupport.attach(this)
@@ -844,8 +846,15 @@ class SemoKeyboardService :
     }
 
     private var blurApplied = -1
+    private var blurWantedDp = 0
+
+    private fun reapplyBlur() {
+        blurApplied = -1
+        applyBlur(blurWantedDp)
+    }
 
     private fun applyBlur(radiusDp: Int) {
+        blurWantedDp = radiusDp
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         val w = window?.window ?: return
         val px = (radiusDp * resources.displayMetrics.density).toInt().coerceAtLeast(0)
@@ -953,6 +962,7 @@ class SemoKeyboardService :
 
     override fun onWindowShown() {
         super.onWindowShown()
+        window?.window?.decorView?.post { reapplyBlur() }
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         KeyboardStatusHelper.setImeVisible(this, true)
         if (::viewModel.isInitialized) viewModel.setNavSetting(detectNavButtons())
