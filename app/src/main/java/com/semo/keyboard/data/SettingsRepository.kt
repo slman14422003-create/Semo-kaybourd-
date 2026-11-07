@@ -11,13 +11,16 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.semo.keyboard.domain.model.AnimationSpeed
 import com.semo.keyboard.domain.model.AutoCorrectLevel
+import com.semo.keyboard.domain.model.BlurHighlight
 import com.semo.keyboard.domain.model.BlurPreset
+import com.semo.keyboard.domain.model.BlurSource
 import com.semo.keyboard.domain.model.BlurTintMode
 import com.semo.keyboard.domain.model.LearnSpeed
 import com.semo.keyboard.domain.model.ArabicLayout
@@ -213,6 +216,13 @@ class SettingsRepository(context: Context) {
         val BLUR_BORDER = floatPreferencesKey("blur_border")
         val BLUR_SHEEN = floatPreferencesKey("blur_sheen")
         val BLUR_FALLBACK = booleanPreferencesKey("blur_fallback_solid")
+        val BLUR_SOURCE = stringPreferencesKey("blur_source")
+        val BLUR_IMAGE_STAMP = longPreferencesKey("blur_image_stamp")
+        val BLUR_IMAGE_RADIUS = intPreferencesKey("blur_image_radius")
+        val BLUR_IMAGE_DIM = floatPreferencesKey("blur_image_dim")
+        val BLUR_IMAGE_SAT = floatPreferencesKey("blur_image_saturation")
+        val BLUR_HIGHLIGHT = stringPreferencesKey("blur_highlight")
+        val BLUR_EDGE_WIDTH = floatPreferencesKey("blur_edge_width")
         val AUTO_SENTENCE_FIX = booleanPreferencesKey("auto_sentence_fix")
         val AUTO_COMPLETE = booleanPreferencesKey("auto_complete")
         val SMART_WRITING = booleanPreferencesKey("smart_writing")
@@ -304,6 +314,13 @@ class SettingsRepository(context: Context) {
                 blurBorder = (p[Keys.BLUR_BORDER] ?: 0.5f).coerceIn(0f, 1f),
                 blurSheen = (p[Keys.BLUR_SHEEN] ?: 0.3f).coerceIn(0f, 1f),
                 blurFallbackSolid = p[Keys.BLUR_FALLBACK] ?: true,
+                blurSource = p[Keys.BLUR_SOURCE].toEnumOr(BlurSource.WINDOW),
+                blurImageStamp = p[Keys.BLUR_IMAGE_STAMP] ?: 0L,
+                blurImageRadius = (p[Keys.BLUR_IMAGE_RADIUS] ?: 20).coerceIn(0, 50),
+                blurImageDim = (p[Keys.BLUR_IMAGE_DIM] ?: 0.1f).coerceIn(0f, 0.7f),
+                blurImageSaturation = (p[Keys.BLUR_IMAGE_SAT] ?: 1.2f).coerceIn(0.5f, 2f),
+                blurHighlight = p[Keys.BLUR_HIGHLIGHT].toEnumOr(BlurHighlight.WHITE),
+                blurEdgeWidth = (p[Keys.BLUR_EDGE_WIDTH] ?: 1f).coerceIn(0.5f, 3f),
                 autoSentenceFix = p[Keys.AUTO_SENTENCE_FIX] ?: true,
                 autoComplete = p[Keys.AUTO_COMPLETE] ?: true,
                 smartWriting = p[Keys.SMART_WRITING] ?: true,
@@ -408,6 +425,13 @@ class SettingsRepository(context: Context) {
     suspend fun setBlurBorder(v: Float) { store.edit { it[Keys.BLUR_BORDER] = v.coerceIn(0f, 1f); it[Keys.BLUR_PRESET] = BlurPreset.CUSTOM.name } }
     suspend fun setBlurSheen(v: Float) { store.edit { it[Keys.BLUR_SHEEN] = v.coerceIn(0f, 1f); it[Keys.BLUR_PRESET] = BlurPreset.CUSTOM.name } }
     suspend fun setBlurFallbackSolid(v: Boolean) { store.edit { it[Keys.BLUR_FALLBACK] = v } }
+    suspend fun setBlurSource(v: BlurSource) { store.edit { it[Keys.BLUR_SOURCE] = v.name } }
+    suspend fun setBlurImageStamp(v: Long) { store.edit { it[Keys.BLUR_IMAGE_STAMP] = v } }
+    suspend fun setBlurImageRadius(v: Int) { store.edit { it[Keys.BLUR_IMAGE_RADIUS] = v.coerceIn(0, 50) } }
+    suspend fun setBlurImageDim(v: Float) { store.edit { it[Keys.BLUR_IMAGE_DIM] = v.coerceIn(0f, 0.7f) } }
+    suspend fun setBlurImageSaturation(v: Float) { store.edit { it[Keys.BLUR_IMAGE_SAT] = v.coerceIn(0.5f, 2f) } }
+    suspend fun setBlurHighlight(v: BlurHighlight) { store.edit { it[Keys.BLUR_HIGHLIGHT] = v.name } }
+    suspend fun setBlurEdgeWidth(v: Float) { store.edit { it[Keys.BLUR_EDGE_WIDTH] = v.coerceIn(0.5f, 3f) } }
     suspend fun applyBlurPreset(v: BlurPreset) {
         store.edit {
             it[Keys.BLUR_PRESET] = v.name
