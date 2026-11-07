@@ -427,8 +427,6 @@ class SemoKeyboardService :
 
     override fun onCreate() {
         savedStateController.performRestore(null)
-        // نافذة شفافة (translucent) شرط لعمل setBackgroundBlurRadius على نافذة الكيبورد
-        setTheme(com.semo.keyboard.R.style.Theme_Semo_Keyboard)
         super.onCreate()
         com.semo.keyboard.diag.CrashLog.install(applicationContext)
         BlurSupport.attach(this)

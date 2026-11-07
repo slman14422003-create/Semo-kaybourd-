@@ -153,6 +153,7 @@ import com.semo.keyboard.ui.theme.LocalFrost
 import com.semo.keyboard.ui.theme.drawFrostKey
 import com.semo.keyboard.ui.theme.frostPanel
 import com.semo.keyboard.ui.theme.withBlur
+import com.semo.keyboard.ui.theme.withOpacity
 import com.semo.keyboard.util.BlurSupport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -231,9 +232,8 @@ fun KeyboardScreen(
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val blurSupported = BlurSupport.enabled
     val appCtx = LocalContext.current.applicationContext
-    val useImage = state.blurEnabled && state.blurSource == BlurSource.IMAGE && state.blurImageStamp != 0L
+    val useImage = state.blurSource == BlurSource.IMAGE && state.blurImageStamp != 0L
     val frostImage by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
         initialValue = null, useImage, state.blurImageStamp, state.blurImageRadius, state.blurImageSaturation
     ) {
@@ -244,18 +244,10 @@ fun KeyboardScreen(
         } else null
     }
     val imageReady = useImage && frostImage != null
-    val frostActive = state.blurEnabled && (blurSupported || imageReady)
-    val solidFallback = state.blurEnabled && !frostActive && state.blurFallbackSolid
-    val colors = remember(
-        state.style, isDark, state.keyboardTheme, state.glassOpacity, state.panelOpacity,
-        frostActive, solidFallback, state.blurTint, state.blurTintMode
-    ) {
-        val base = semoColors(state.style, isDark, state.keyboardTheme)
-        when {
-            frostActive -> base.withBlur(state.glassOpacity, state.blurTint, state.blurTintMode, isDark)
-            solidFallback -> base.withBlur(1f, maxOf(state.blurTint, 0.94f), state.blurTintMode, isDark)
-            else -> base
-        }
+    // خيارات الشفافية (المفاتيح/الخلفية) هي الأساس، والتمويه والصورة والزجاج تُضاف فوقها
+    val glassActive = state.blurEnabled || useImage || state.glassOpacity < 0.999f || state.panelOpacity < 0.999f
+    val colors = remember(state.style, isDark, state.keyboardTheme, state.glassOpacity, state.panelOpacity) {
+        semoColors(state.style, isDark, state.keyboardTheme).withOpacity(state.glassOpacity, state.panelOpacity)
     }
     val highlightColor = when (state.blurHighlight) {
         BlurHighlight.WHITE -> Color.White
@@ -263,17 +255,17 @@ fun KeyboardScreen(
         BlurHighlight.AUTO -> if (isDark) Color.White else Color(0xFF5B6B85)
     }
     val frost = remember(
-        frostActive, state.blurKeys, state.blurBorder, state.blurSheen, highlightColor,
+        glassActive, state.blurKeys, state.blurBorder, state.blurSheen, highlightColor,
         state.blurEdgeWidth, frostImage, state.blurImageDim
     ) {
         FrostSpec(
-            frostActive, state.blurKeys, state.blurBorder, state.blurSheen, highlightColor,
+            glassActive, state.blurKeys, state.blurBorder, state.blurSheen, highlightColor,
             state.blurEdgeWidth, if (imageReady) frostImage else null, state.blurImageDim
         )
     }
     val currentOnBlur by rememberUpdatedState(onBlur)
-    LaunchedEffect(frostActive, imageReady, state.blurRadius) {
-        currentOnBlur(if (frostActive && !imageReady) state.blurRadius else 0)
+    LaunchedEffect(state.blurEnabled, imageReady, state.blurRadius) {
+        currentOnBlur(if (state.blurEnabled && !imageReady) state.blurRadius else 0)
     }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
