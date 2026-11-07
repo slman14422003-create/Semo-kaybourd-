@@ -47,7 +47,7 @@ import com.semo.keyboard.ui.theme.FrostSpec
 import com.semo.keyboard.ui.theme.drawFrostKey
 import com.semo.keyboard.ui.theme.frostPanel
 import com.semo.keyboard.ui.theme.semoColors
-import com.semo.keyboard.ui.theme.withBlur
+import com.semo.keyboard.ui.theme.withOpacity
 import com.semo.keyboard.util.BlurSupport
 import com.semo.keyboard.util.FrostImage
 import kotlinx.coroutines.Dispatchers
@@ -180,36 +180,17 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
             }
         }
     }
-    SubPage(L("التمويه والزجاج"), onBack) {
+    SubPage(L("خيارات الزجاج المتقدمة"), onBack) {
         Section(null) {
             Box(Modifier.padding(10.dp)) { BlurPreview(settings) }
         }
-        Section(L("التمويه")) {
-            SwitchRow(
-                L("تمويه الخلفية"), R.drawable.ic_set_theme, IconBlue, settings.blurEnabled,
-                subtitle = L("يموّه التطبيق خلف الكيبورد مثل الزجاج المصنفر")
-            ) { scope.launch { repo.setBlurEnabled(it) } }
-            Hint(
-                when {
-                    !BlurSupport.available() -> L("التمويه الحقيقي يحتاج أندرويد 12 أو أحدث. سيُستخدم لوح ملوّن بدلًا منه")
-                    supported -> L("تمويه النافذة متاح على هذا الجهاز")
-                    else -> L("تمويه النافذة مُعطَّل من النظام (توفير البطارية أو خيارات المطوّر). سيُستخدم لوح ملوّن بدلًا منه")
-                }
-            )
-            Divider()
-            Block(L("النمط"), R.drawable.ic_set_theme, IconBlue) {
-                Segmented(
-                    options = listOf(
-                        BlurPreset.CLEAR to L("شفاف"),
-                        BlurPreset.THIN to L("رقيق"),
-                        BlurPreset.REGULAR to L("عادي"),
-                        BlurPreset.THICK to L("سميك")
-                    ),
-                    selected = settings.blurPreset,
-                    onSelect = { scope.launch { repo.applyBlurPreset(it) } }
-                )
+        Hint(
+            when {
+                !BlurSupport.available() -> L("تمويه النافذة الحقيقي يحتاج أندرويد 12 أو أحدث. الصورة المخصصة تعمل على كل الإصدارات")
+                supported -> L("تمويه النافذة متاح على هذا الجهاز")
+                else -> L("النظام يعطّل تمويه النوافذ حاليًا (توفير البطارية أو خيارات المطوّر). الصورة المخصصة تعمل بدونه")
             }
-        }
+        )
         Section(L("مصدر الخلفية")) {
             Block(L("ماذا يُموَّه خلف المفاتيح؟"), R.drawable.ic_set_theme, IconBlue) {
                 Segmented(
@@ -275,39 +256,7 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                     L("تمويه النافذة الحقيقي: يموّه ما خلف الكيبورد ويحتاج أندرويد 12 أو أحدث")
             )
         }
-        Section(L("ضبط دقيق")) {
-            var radiusDraft by remember(settings.blurRadius) { mutableStateOf(settings.blurRadius.toFloat()) }
-            SliderRow(
-                title = L("قوة التمويه"),
-                valueLabel = "${radiusDraft.roundToInt()}",
-                value = radiusDraft,
-                range = 0f..150f,
-                steps = 29,
-                enabled = settings.blurEnabled,
-                onChange = { radiusDraft = it },
-                onFinish = { scope.launch { repo.setBlurRadius(radiusDraft.roundToInt()) } }
-            )
-            var tintDraft by remember(settings.blurTint) { mutableStateOf(settings.blurTint) }
-            SliderRow(
-                title = L("قوة الصبغة"),
-                valueLabel = "${(tintDraft * 100).roundToInt()}%",
-                value = tintDraft,
-                range = 0f..1f,
-                steps = 19,
-                enabled = settings.blurEnabled,
-                onChange = { tintDraft = it },
-                onFinish = { scope.launch { repo.setBlurTint(tintDraft) } }
-            )
-            var keyDraft by remember(settings.glassOpacity) { mutableStateOf(settings.glassOpacity) }
-            SliderRow(
-                title = L("شفافية المفاتيح"),
-                valueLabel = "${(keyDraft * 100).roundToInt()}%",
-                value = keyDraft,
-                range = 0.35f..1f,
-                steps = 12,
-                onChange = { keyDraft = it },
-                onFinish = { scope.launch { repo.setGlassOpacity(keyDraft) } }
-            )
+        Section(L("لمعة الزجاج")) {
             var sheenDraft by remember(settings.blurSheen) { mutableStateOf(settings.blurSheen) }
             SliderRow(
                 title = L("لمعة الأعلى"),
@@ -315,7 +264,6 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 value = sheenDraft,
                 range = 0f..1f,
                 steps = 19,
-                enabled = settings.blurEnabled,
                 onChange = { sheenDraft = it },
                 onFinish = { scope.launch { repo.setBlurSheen(sheenDraft) } }
             )
@@ -326,7 +274,6 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 value = borderDraft,
                 range = 0f..1f,
                 steps = 19,
-                enabled = settings.blurEnabled,
                 onChange = { borderDraft = it },
                 onFinish = { scope.launch { repo.setBlurBorder(borderDraft) } }
             )
@@ -337,7 +284,6 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 value = edgeWidthDraft,
                 range = 0.5f..3f,
                 steps = 4,
-                enabled = settings.blurEnabled,
                 onChange = { edgeWidthDraft = it },
                 onFinish = { scope.launch { repo.setBlurEdgeWidth(edgeWidthDraft) } }
             )
@@ -354,39 +300,16 @@ internal fun BlurPage(repo: SettingsRepository, settings: SemoSettings, onBack: 
                 )
             }
             Divider()
-            Block(L("لون الصبغة"), R.drawable.ic_set_theme, IconPurple) {
-                Segmented(
-                    options = listOf(
-                        BlurTintMode.AUTO to L("السمة"),
-                        BlurTintMode.ACCENT to L("لون التمييز"),
-                        BlurTintMode.LIGHTEN to L("أفتح"),
-                        BlurTintMode.DARKEN to L("أغمق")
-                    ),
-                    selected = settings.blurTintMode,
-                    onSelect = { scope.launch { repo.setBlurTintMode(it) } }
-                )
-            }
-        }
-        Section(L("خيارات")) {
             SwitchRow(
                 L("مفاتيح مصنفرة"), R.drawable.ic_set_theme, IconTeal, settings.blurKeys,
                 subtitle = L("يضيف حافة زجاجية ولمعة على كل مفتاح")
             ) { scope.launch { repo.setBlurKeys(it) } }
             Divider()
-            SwitchRow(
-                L("لوح معتم بديل"), R.drawable.ic_set_lock, IconGray, settings.blurFallbackSolid,
-                subtitle = L("عند عدم توفر التمويه، استخدم لوحًا شبه معتم ليبقى النص مقروءًا")
-            ) { scope.launch { repo.setBlurFallbackSolid(it) } }
-            Divider()
-            ActionRow(L("إعادة ضبط التمويه")) {
+            ActionRow(L("إعادة ضبط خيارات الزجاج")) {
                 scope.launch {
-                    repo.applyBlurPreset(BlurPreset.REGULAR)
-                    repo.setBlurEnabled(false)
-                    repo.setBlurTintMode(BlurTintMode.AUTO)
                     repo.setBlurKeys(true)
-                    repo.setBlurFallbackSolid(true)
-                    repo.setGlassOpacity(1f)
-                    repo.setPanelOpacity(1f)
+                    repo.setBlurSheen(0.3f)
+                    repo.setBlurBorder(0.5f)
                     repo.setBlurSource(BlurSource.WINDOW)
                     repo.setBlurImageRadius(20)
                     repo.setBlurImageDim(0.1f)
@@ -407,12 +330,12 @@ private fun BlurPreview(settings: SemoSettings) {
         ThemeMode.DARK -> true
     }
     val base = remember(settings.style, dark, settings.keyboardTheme) { semoColors(settings.style, dark, settings.keyboardTheme) }
-    val active = settings.blurEnabled
-    val colors = remember(base, active, settings.glassOpacity, settings.blurTint, settings.blurTintMode, dark) {
-        if (active) base.withBlur(settings.glassOpacity, settings.blurTint, settings.blurTintMode, dark) else base
+    val active = settings.blurEnabled || settings.blurSource == BlurSource.IMAGE || settings.glassOpacity < 1f || settings.panelOpacity < 1f
+    val colors = remember(base, settings.glassOpacity, settings.panelOpacity) {
+        base.withOpacity(settings.glassOpacity, settings.panelOpacity)
     }
     val context = LocalContext.current
-    val useImage = active && settings.blurSource == BlurSource.IMAGE && settings.blurImageStamp != 0L
+    val useImage = settings.blurSource == BlurSource.IMAGE && settings.blurImageStamp != 0L
     val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
         initialValue = null, useImage, settings.blurImageStamp, settings.blurImageRadius, settings.blurImageSaturation
     ) {
@@ -430,7 +353,7 @@ private fun BlurPreview(settings: SemoSettings) {
     val frost = remember(active, settings.blurKeys, settings.blurBorder, settings.blurSheen, highlight, settings.blurEdgeWidth, image, settings.blurImageDim) {
         FrostSpec(active, settings.blurKeys, settings.blurBorder, settings.blurSheen, highlight, settings.blurEdgeWidth, image, settings.blurImageDim)
     }
-    val blurDp = if (active) (settings.blurRadius / 4f).coerceAtLeast(0f).dp else 0.dp
+    val blurDp = if (settings.blurEnabled) (settings.blurRadius / 4f).coerceAtLeast(0f).dp else 0.dp
     Box(
         modifier = Modifier
             .fillMaxWidth()

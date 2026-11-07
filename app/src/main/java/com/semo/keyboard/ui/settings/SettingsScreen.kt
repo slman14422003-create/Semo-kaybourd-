@@ -81,6 +81,7 @@ import com.semo.keyboard.data.LearnedWordsRepository
 import com.semo.keyboard.data.SettingsRepository
 import com.semo.keyboard.domain.logic.KeyboardLayoutProvider
 import com.semo.keyboard.domain.model.AnimationSpeed
+import com.semo.keyboard.domain.model.BlurPreset
 import com.semo.keyboard.domain.model.AutoCorrectLevel
 import com.semo.keyboard.domain.model.ArabicLayout
 import com.semo.keyboard.domain.model.EnglishLayout
@@ -175,9 +176,9 @@ internal fun SettingsScreen(
             SettingsPage.LANGUAGES -> LanguagesPage(repo, settings, home)
             SettingsPage.TYPING -> TypingPage(repo, settings, shortcuts.size, home) { page = SettingsPage.SHORTCUTS }
             SettingsPage.SHORTCUTS -> ShortcutsPage(repo, shortcutsRepo, settings) { page = SettingsPage.TYPING }
-            SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home)
+            SettingsPage.APPEARANCE -> AppearancePage(repo, settings, home) { page = SettingsPage.BLUR }
             SettingsPage.AUTOCORRECT -> AutoCorrectPage(repo, settings, home) { page = SettingsPage.DICTIONARY }
-            SettingsPage.BLUR -> BlurPage(repo, settings, home)
+            SettingsPage.BLUR -> BlurPage(repo, settings) { page = SettingsPage.APPEARANCE }
             SettingsPage.TOUCH -> TouchPage(repo, settings, home)
             SettingsPage.DOWNLOADS -> DownloadsPage(repo, settings, home)
             SettingsPage.DICTIONARY -> DictionaryPage(learnedRepo, learned, home) { page = SettingsPage.DOWNLOADS }
@@ -331,12 +332,6 @@ private fun HomePage(
                 "${com.semo.keyboard.ui.appString(themeNameRes(settings.keyboardTheme))} · ${themeLabel(settings.themeMode)}${L(" · حجم ")}${(settings.keyboardScale * 100).roundToInt()}${L("% · ارتفاع ")}${sizeLabel(settings.size)}",
                 R.drawable.ic_set_theme, IconGray
             ) { onOpen(SettingsPage.APPEARANCE) }
-            Divider()
-            NavRow(
-                L("التمويه والزجاج"),
-                if (settings.blurEnabled) "${L("مفعّل")} · ${settings.blurRadius}" else L("متوقف"),
-                R.drawable.ic_set_theme, IconBlue
-            ) { onOpen(SettingsPage.BLUR) }
             Divider()
             NavRow(
                 L("اللمس والصوت والاهتزاز"),
@@ -629,7 +624,7 @@ private fun ShortcutsPage(
 // ---------------- المظهر والحجم ----------------
 
 @Composable
-private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onBack: () -> Unit) {
+private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onBack: () -> Unit, onOpenGlass: () -> Unit) {
     val scope = rememberCoroutineScope()
     SubPage(L("المظهر والحجم"), onBack) {
         Section(com.semo.keyboard.ui.appString(R.string.themes_title)) {
@@ -662,6 +657,68 @@ private fun AppearancePage(repo: SettingsRepository, settings: SemoSettings, onB
             if (settings.keyboardScale != 1f) {
                 ActionRow(L("إعادة الحجم إلى 100%")) { scope.launch { repo.setKeyboardScale(1f) } }
             }
+            Divider()
+            var opacityDraft by remember(settings.glassOpacity) { mutableStateOf(settings.glassOpacity) }
+            SliderRow(
+                title = L("شفافية المفاتيح"),
+                valueLabel = "${(opacityDraft * 100).roundToInt()}%",
+                value = opacityDraft,
+                range = 0.35f..1f,
+                steps = 12,
+                onChange = { opacityDraft = it },
+                onFinish = { scope.launch { repo.setGlassOpacity(opacityDraft) } }
+            )
+            var panelDraft by remember(settings.panelOpacity) { mutableStateOf(settings.panelOpacity) }
+            SliderRow(
+                title = L("شفافية خلفية الكيبورد"),
+                valueLabel = "${(panelDraft * 100).roundToInt()}%",
+                value = panelDraft,
+                range = 0f..1f,
+                steps = 19,
+                onChange = { panelDraft = it },
+                onFinish = { scope.launch { repo.setPanelOpacity(panelDraft) } }
+            )
+            Divider()
+            var blurDraft by remember(settings.blurRadius, settings.blurEnabled) {
+                mutableStateOf(if (settings.blurEnabled) settings.blurRadius.toFloat() else 0f)
+            }
+            SliderRow(
+                title = L("تمويه ما خلف الكيبورد"),
+                valueLabel = if (blurDraft.roundToInt() == 0) L("متوقف") else "${blurDraft.roundToInt()}",
+                value = blurDraft,
+                range = 0f..150f,
+                steps = 29,
+                onChange = { blurDraft = it },
+                onFinish = {
+                    scope.launch {
+                        val v = blurDraft.roundToInt()
+                        repo.setBlurEnabled(v > 0)
+                        if (v > 0) repo.setBlurRadius(v)
+                    }
+                }
+            )
+            Hint(L("التمويه يظهر فقط عندما تكون خلفية الكيبورد شفافة. إذا لم يتغيّر شيء فقد يمنعه نظام جهازك، وبديله «صورة مخصصة» ضمن خيارات الزجاج المتقدمة"))
+            Block(L("نمط الزجاج الجاهز"), R.drawable.ic_set_theme, IconBlue) {
+                Segmented(
+                    options = listOf(
+                        BlurPreset.CLEAR to L("شفاف"),
+                        BlurPreset.THIN to L("رقيق"),
+                        BlurPreset.REGULAR to L("عادي"),
+                        BlurPreset.THICK to L("سميك")
+                    ),
+                    selected = if (settings.blurEnabled) settings.blurPreset else BlurPreset.CUSTOM,
+                    onSelect = { scope.launch { repo.applyBlurPreset(it) } }
+                )
+            }
+            if (settings.glassOpacity != 1f || settings.panelOpacity != 1f || settings.blurEnabled) {
+                ActionRow(L("إعادة الشفافية والتمويه إلى الوضع الافتراضي")) {
+                    scope.launch { repo.setGlassOpacity(1f); repo.setPanelOpacity(1f); repo.setBlurEnabled(false) }
+                }
+            }
+            ActionRow(L("وضع زجاجي: مفاتيح شبه شفافة وخلفية شفافة")) {
+                scope.launch { repo.setGlassOpacity(0.6f); repo.setPanelOpacity(0.15f) }
+            }
+            ActionRow(L("خيارات الزجاج المتقدمة: صورة مخصصة، لمعة، حواف"), onClick = onOpenGlass)
             Divider()
             Block(L("ارتفاع المفاتيح"), R.drawable.ic_set_height, IconTeal) {
                 Segmented(
