@@ -131,6 +131,10 @@ enum class BlurPreset { CUSTOM, CLEAR, THIN, REGULAR, THICK }
 
 enum class BlurTintMode { AUTO, ACCENT, LIGHTEN, DARKEN }
 
+enum class BlurSource { WINDOW, IMAGE }
+
+enum class BlurHighlight { WHITE, ACCENT, AUTO }
+
 enum class KeyboardTheme { IOS, MIDNIGHT, OCEAN, FOREST, ROSE, SUNSET, LAVENDER, GRAPHITE, MINT, GLASS }
 
 /** ارتفاع المفاتيح */
@@ -304,6 +308,13 @@ data class SemoSettings(
     val blurBorder: Float = 0.5f,
     val blurSheen: Float = 0.3f,
     val blurFallbackSolid: Boolean = true,
+    val blurSource: BlurSource = BlurSource.WINDOW,
+    val blurImageStamp: Long = 0L,
+    val blurImageRadius: Int = 20,
+    val blurImageDim: Float = 0.1f,
+    val blurImageSaturation: Float = 1.2f,
+    val blurHighlight: BlurHighlight = BlurHighlight.WHITE,
+    val blurEdgeWidth: Float = 1f,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val smartPunctuation: Boolean = true,
@@ -448,6 +459,13 @@ data class KeyboardUiState(
     val blurBorder: Float = 0.5f,
     val blurSheen: Float = 0.3f,
     val blurFallbackSolid: Boolean = true,
+    val blurSource: BlurSource = BlurSource.WINDOW,
+    val blurImageStamp: Long = 0L,
+    val blurImageRadius: Int = 20,
+    val blurImageDim: Float = 0.1f,
+    val blurImageSaturation: Float = 1.2f,
+    val blurHighlight: BlurHighlight = BlurHighlight.WHITE,
+    val blurEdgeWidth: Float = 1f,
     val smartWriting: Boolean = true,
     val autoPairs: Boolean = false,
     val smartPunctuation: Boolean = true,

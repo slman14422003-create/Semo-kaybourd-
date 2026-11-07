@@ -68,7 +68,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
+import com.semo.keyboard.domain.model.BlurHighlight
+import com.semo.keyboard.domain.model.BlurSource
+import com.semo.keyboard.util.FrostImage
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -144,7 +148,6 @@ import com.semo.keyboard.ui.theme.SemoKeyboardColors
 import com.semo.keyboard.ui.theme.keyMetrics
 import com.semo.keyboard.ui.theme.LocalKeyboardScale
 import com.semo.keyboard.ui.theme.semoColors
-import com.semo.keyboard.ui.theme.withOpacity
 import com.semo.keyboard.ui.theme.FrostSpec
 import com.semo.keyboard.ui.theme.LocalFrost
 import com.semo.keyboard.ui.theme.drawFrostKey
@@ -229,8 +232,20 @@ fun KeyboardScreen(
         ThemeMode.DARK -> true
     }
     val blurSupported = BlurSupport.enabled
-    val frostActive = state.blurEnabled && blurSupported
-    val solidFallback = state.blurEnabled && !blurSupported && state.blurFallbackSolid
+    val appCtx = LocalContext.current.applicationContext
+    val useImage = state.blurEnabled && state.blurSource == BlurSource.IMAGE && state.blurImageStamp != 0L
+    val frostImage by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null, useImage, state.blurImageStamp, state.blurImageRadius, state.blurImageSaturation
+    ) {
+        value = if (useImage) {
+            withContext(Dispatchers.Default) {
+                FrostImage.render(appCtx, state.blurImageStamp, state.blurImageRadius, state.blurImageSaturation)
+            }
+        } else null
+    }
+    val imageReady = useImage && frostImage != null
+    val frostActive = state.blurEnabled && (blurSupported || imageReady)
+    val solidFallback = state.blurEnabled && !frostActive && state.blurFallbackSolid
     val colors = remember(
         state.style, isDark, state.keyboardTheme, state.glassOpacity, state.panelOpacity,
         frostActive, solidFallback, state.blurTint, state.blurTintMode
@@ -239,14 +254,27 @@ fun KeyboardScreen(
         when {
             frostActive -> base.withBlur(state.glassOpacity, state.blurTint, state.blurTintMode, isDark)
             solidFallback -> base.withBlur(1f, maxOf(state.blurTint, 0.94f), state.blurTintMode, isDark)
-            else -> base.withOpacity(state.glassOpacity, state.panelOpacity)
+            else -> base
         }
     }
-    val frost = remember(frostActive, state.blurKeys, state.blurBorder, state.blurSheen) {
-        FrostSpec(frostActive, state.blurKeys, state.blurBorder, state.blurSheen, Color.White)
+    val highlightColor = when (state.blurHighlight) {
+        BlurHighlight.WHITE -> Color.White
+        BlurHighlight.ACCENT -> colors.keyAccent
+        BlurHighlight.AUTO -> if (isDark) Color.White else Color(0xFF5B6B85)
+    }
+    val frost = remember(
+        frostActive, state.blurKeys, state.blurBorder, state.blurSheen, highlightColor,
+        state.blurEdgeWidth, frostImage, state.blurImageDim
+    ) {
+        FrostSpec(
+            frostActive, state.blurKeys, state.blurBorder, state.blurSheen, highlightColor,
+            state.blurEdgeWidth, if (imageReady) frostImage else null, state.blurImageDim
+        )
     }
     val currentOnBlur by rememberUpdatedState(onBlur)
-    LaunchedEffect(frostActive, state.blurRadius) { currentOnBlur(if (frostActive) state.blurRadius else 0) }
+    LaunchedEffect(frostActive, imageReady, state.blurRadius) {
+        currentOnBlur(if (frostActive && !imageReady) state.blurRadius else 0)
+    }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
