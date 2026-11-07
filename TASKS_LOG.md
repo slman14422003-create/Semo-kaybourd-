@@ -436,3 +436,7 @@
 - learnBatch and applyRank bodies moved into learnInto and rankInto; new learnAndRank does both in a single edit and flushLearning uses it (one write per flush instead of two).
 - SemoKeyboardService poll: interval starts at 2500ms and grows by 1500ms per quiet cycle up to 6000ms; it resets to 2500ms when the clipboard timestamp, captured item or screenshot id changes, when the user types, on clipboard or screenshot change events, and on window shown.
 - Static review only, no Gradle build or device run available here.
+
+## Baseline profile workflow fix (tooling only, no app change) - not run here, check CI
+- tools/baseline/module/build.gradle.kts: testOptions.managedDevices.devices no longer exists in AGP 9.5 (CI error: Unresolved reference 'devices' and the dependent device, apiLevel, systemImageSource lines). Replaced with testOptions.managedDevices.allDevices, same create<ManagedVirtualDevice> block.
+- The legacy android {} extension for the test module only produces a deprecation warning under android.newDsl=false; left as is.
