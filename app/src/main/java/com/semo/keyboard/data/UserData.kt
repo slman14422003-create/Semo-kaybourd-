@@ -412,7 +412,7 @@ class ClipboardRepository(context: Context) {
 class LearnedWordsRepository(context: Context) {
 
     private val appContext = context.applicationContext
-    private val store = appContext.semoDataStore
+    private val store = LearnedStore.get(appContext)
     private val key = stringPreferencesKey("learned_words")
     private val pairKey = stringPreferencesKey("learned_bigrams")
     private val ignoredKey = stringPreferencesKey("ignored_corrections")
@@ -424,8 +424,8 @@ class LearnedWordsRepository(context: Context) {
 
     class BlockSnapshot internal constructor(val word: String, internal val entry: LearnedEntry?, internal val pairs: List<LearnedEntry>)
 
-    val blocked: Flow<List<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[blockedKey] }
+    val blocked: Flow<List<String>> = store.prefs
+        .map { p: LearnedPrefs -> p[blockedKey] }
         .distinctUntilChanged()
         .map { raw -> raw.orEmpty().split(SEP).filter { it.isNotEmpty() } }
 
@@ -505,8 +505,8 @@ class LearnedWordsRepository(context: Context) {
         store.edit { p -> p.remove(blockedKey) }
     }
 
-    val words: Flow<List<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[key] }
+    val words: Flow<List<String>> = store.prefs
+        .map { p: LearnedPrefs -> p[key] }
         .distinctUntilChanged()
         .map { raw ->
             val now = ForgettingCurve.nowMinutes()
@@ -517,26 +517,26 @@ class LearnedWordsRepository(context: Context) {
                 .map { it.first.first }
         }
 
-    val trustedWords: Flow<List<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[key] }
+    val trustedWords: Flow<List<String>> = store.prefs
+        .map { p: LearnedPrefs -> p[key] }
         .distinctUntilChanged()
         .map { raw ->
             val now = ForgettingCurve.nowMinutes()
             decodeWords(raw).filter { ForgettingCurve.trusted(it, now) }.map { it.first }
         }
 
-    val trustedKeys: Flow<Set<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[key] }
+    val trustedKeys: Flow<Set<String>> = store.prefs
+        .map { p: LearnedPrefs -> p[key] }
         .distinctUntilChanged()
         .map { raw -> DecayingKeySet(decodeWords(raw).associateBy { BigDictionary.key(it.first) }) }
 
-    val protectedKeys: Flow<Set<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[key] }
+    val protectedKeys: Flow<Set<String>> = store.prefs
+        .map { p: LearnedPrefs -> p[key] }
         .distinctUntilChanged()
         .map { raw -> DecayingKeySet(decodeWords(raw).associateBy { BigDictionary.key(it.first) }, DecayingKeySet.MODE_PROTECTED) }
 
-    val learnedFixes: Flow<Map<String, String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[fixesKey] }
+    val learnedFixes: Flow<Map<String, String>> = store.prefs
+        .map { p: LearnedPrefs -> p[fixesKey] }
         .distinctUntilChanged()
         .map { raw -> DecayingFixMap(decodeFixes(raw).associateBy { it.first }) }
 
@@ -547,7 +547,7 @@ class LearnedWordsRepository(context: Context) {
     private suspend fun effectiveTrust(word: String): Double {
         val k = BigDictionary.key(clean(word).lowercase())
         if (k.isEmpty()) return 0.0
-        val raw = appContext.credentialPrefsFlow().first()[key]
+        val raw = store.prefs.first()[key]
         val now = ForgettingCurve.nowMinutes()
         return decodeWords(raw).filter { BigDictionary.key(it.first) == k }.maxOfOrNull { ForgettingCurve.effective(it, now) } ?: 0.0
     }
@@ -588,8 +588,8 @@ class LearnedWordsRepository(context: Context) {
         decodePairEntries(raw, now).filter { it.first.isNotEmpty() && it.second.isNotEmpty() }
 
     /** كلمة (بصيغة مفتاح البحث) ← الكلمات التي تلتها مرتبة بالأكثر تكرارًا */
-    val bigrams: Flow<Map<String, List<String>>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[pairKey] }
+    val bigrams: Flow<Map<String, List<String>>> = store.prefs
+        .map { p: LearnedPrefs -> p[pairKey] }
         .distinctUntilChanged()
         .map { raw -> decodePairs(raw) }
 
@@ -597,8 +597,8 @@ class LearnedWordsRepository(context: Context) {
      * الكلمات التي رفض المستخدم تصحيحها التلقائي صراحةً (بالرجوع عنه مباشرة بالحذف): اللوحة تتعلّم
      * من هذا الرفض فلا تعيد "تصحيح" نفس الكلمة ثانيةً. مفاتيح بحث (lowercase) لمطابقة بلا حساسية لحالة الأحرف.
      */
-    val ignoredCorrections: Flow<Set<String>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[ignoredKey] }
+    val ignoredCorrections: Flow<Set<String>> = store.prefs
+        .map { p: LearnedPrefs -> p[ignoredKey] }
         .distinctUntilChanged()
         .map { raw -> raw.orEmpty().split(SEP).filter { it.isNotEmpty() }.toSet() }
 
@@ -634,74 +634,105 @@ class LearnedWordsRepository(context: Context) {
         if (newWords.isEmpty() && newPairs.isEmpty() && strongWords.isEmpty() && suspectWords.isEmpty()) return emptyList()
         if (!appContext.isUserStorageUnlocked()) return emptyList()
         val fresh = ArrayList<String>()
-        store.edit { p ->
-            val blockedKeys = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList())
-                .mapTo(HashSet<String>()) { BigDictionary.key(it) }
-            if (newWords.isNotEmpty() || strongWords.isNotEmpty() || suspectWords.isNotEmpty()) {
-                val now = ForgettingCurve.nowMinutes()
-                val list = decodeWords(p[key], now).toMutableList()
-                val promoted = ArrayList<String>()
-                if (suspectWords.isNotEmpty() || p[candidatesKey] != null) {
-                    val candidates = decodeWords(p[candidatesKey], now).toMutableList()
-                    for (raw in suspectWords) {
-                        val w = clean(raw)
-                        if (w.length < 3 || w.length > 30) continue
-                        val ck = BigDictionary.key(w.lowercase())
-                        val idx = candidates.indexOfFirst { BigDictionary.key(it.first.lowercase()) == ck }
-                        if (idx >= 0) {
-                            candidates.removeAt(idx)
-                            promoted.add(w)
-                        } else {
-                            candidates.add(0, LearnedEntry(w, "", 0, now))
-                        }
-                    }
-                    candidates.removeAll { now - it.last > CANDIDATE_TTL_MIN }
-                    while (candidates.size > MAX_CANDIDATES) candidates.removeAt(candidates.size - 1)
-                    p[candidatesKey] = encodeWords(candidates)
-                }
-                fun learn(raw: String, weight: Int, report: Boolean) {
+        store.edit { p -> learnInto(p, newWords, newPairs, strongWords, suspectWords, fresh) }
+        return fresh
+    }
+
+    private fun learnInto(
+        p: LearnedEditor,
+        newWords: List<String>,
+        newPairs: List<Pair<String, String>>,
+        strongWords: List<String>,
+        suspectWords: List<String>,
+        fresh: MutableList<String>
+    ) {
+        val blockedKeys = (p[blockedKey]?.split(SEP)?.filter { it.isNotEmpty() } ?: emptyList())
+            .mapTo(HashSet<String>()) { BigDictionary.key(it) }
+        if (newWords.isNotEmpty() || strongWords.isNotEmpty() || suspectWords.isNotEmpty()) {
+            val now = ForgettingCurve.nowMinutes()
+            val list = decodeWords(p[key], now).toMutableList()
+            val promoted = ArrayList<String>()
+            if (suspectWords.isNotEmpty() || p[candidatesKey] != null) {
+                val candidates = decodeWords(p[candidatesKey], now).toMutableList()
+                for (raw in suspectWords) {
                     val w = clean(raw)
-                    if (w.length < 3 || w.length > 30) return
-                    if (blockedKeys.isNotEmpty() && BigDictionary.key(w.lowercase()) in blockedKeys) return
-                    val old = list.indexOfFirst { it.first == w }
-                    var before = 0.0
-                    var uses = 0
-                    if (old >= 0) {
-                        val prev = list.removeAt(old)
-                        before = ForgettingCurve.effective(prev, now)
-                        uses = prev.uses
+                    if (w.length < 3 || w.length > 30) continue
+                    val ck = BigDictionary.key(w.lowercase())
+                    val idx = candidates.indexOfFirst { BigDictionary.key(it.first.lowercase()) == ck }
+                    if (idx >= 0) {
+                        candidates.removeAt(idx)
+                        promoted.add(w)
+                    } else {
+                        candidates.add(0, LearnedEntry(w, "", 0, now))
                     }
-                    val permille = ForgettingCurve.reinforce(before, weight)
-                    list.add(0, LearnedEntry(w, "", permille, now, uses + weight))
-                    if (report && before < ForgettingCurve.WORD_TRUST && permille / 1000.0 >= ForgettingCurve.WORD_TRUST) fresh.add(w)
                 }
-                for (w in newWords) learn(w, 1, false)
-                for (w in strongWords) learn(w, 3, true)
-                for (w in promoted) learn(w, 3, true)
-                ForgettingCurve.prune(list, now, MAX_WORDS)
-                p[key] = encodeWords(list)
+                candidates.removeAll { now - it.last > CANDIDATE_TTL_MIN }
+                while (candidates.size > MAX_CANDIDATES) candidates.removeAt(candidates.size - 1)
+                p[candidatesKey] = encodeWords(candidates)
             }
-            if (newPairs.isNotEmpty()) {
-                val now = ForgettingCurve.nowMinutes()
-                val list = decodeRawPairs(p[pairKey], now).toMutableList()
-                for ((prev, next) in newPairs) {
-                    val a = clean(if (prev.contains(' ')) prev else BigDictionary.key(prev))
-                    val b = clean(next)
-                    if (a.isEmpty() || a.length > 95 || b.length < 2 || b.length > 30) continue
-                    if (blockedKeys.isNotEmpty() && (BigDictionary.key(b.lowercase()) in blockedKeys || a.split(' ').any { BigDictionary.key(it) in blockedKeys })) continue
-                    val old = list.indexOfFirst { it.first == a && it.second == b }
-                    var base = 0.0
-                    var uses = 0
-                    if (old >= 0) {
-                        val prevEntry = list.removeAt(old)
-                        base = ForgettingCurve.effective(prevEntry, now)
-                        uses = prevEntry.uses
-                    }
-                    list.add(0, LearnedEntry(a, b, ForgettingCurve.reinforce(base, 1), now, uses + 1))
+            fun learn(raw: String, weight: Int, report: Boolean) {
+                val w = clean(raw)
+                if (w.length < 3 || w.length > 30) return
+                if (blockedKeys.isNotEmpty() && BigDictionary.key(w.lowercase()) in blockedKeys) return
+                val old = list.indexOfFirst { it.first == w }
+                var before = 0.0
+                var uses = 0
+                if (old >= 0) {
+                    val prev = list.removeAt(old)
+                    before = ForgettingCurve.effective(prev, now)
+                    uses = prev.uses
                 }
-                ForgettingCurve.prune(list, now, MAX_PAIRS)
-                p[pairKey] = encodePairs(list)
+                val permille = ForgettingCurve.reinforce(before, weight)
+                list.add(0, LearnedEntry(w, "", permille, now, uses + weight))
+                if (report && before < ForgettingCurve.WORD_TRUST && permille / 1000.0 >= ForgettingCurve.WORD_TRUST) fresh.add(w)
             }
+            for (w in newWords) learn(w, 1, false)
+            for (w in strongWords) learn(w, 3, true)
+            for (w in promoted) learn(w, 3, true)
+            ForgettingCurve.prune(list, now, MAX_WORDS)
+            p[key] = encodeWords(list)
+        }
+        if (newPairs.isNotEmpty()) {
+            val now = ForgettingCurve.nowMinutes()
+            val list = decodeRawPairs(p[pairKey], now).toMutableList()
+            for ((prev, next) in newPairs) {
+                val a = clean(if (prev.contains(' ')) prev else BigDictionary.key(prev))
+                val b = clean(next)
+                if (a.isEmpty() || a.length > 95 || b.length < 2 || b.length > 30) continue
+                if (blockedKeys.isNotEmpty() && (BigDictionary.key(b.lowercase()) in blockedKeys || a.split(' ').any { BigDictionary.key(it) in blockedKeys })) continue
+                val old = list.indexOfFirst { it.first == a && it.second == b }
+                var base = 0.0
+                var uses = 0
+                if (old >= 0) {
+                    val prevEntry = list.removeAt(old)
+                    base = ForgettingCurve.effective(prevEntry, now)
+                    uses = prevEntry.uses
+                }
+                list.add(0, LearnedEntry(a, b, ForgettingCurve.reinforce(base, 1), now, uses + 1))
+            }
+            ForgettingCurve.prune(list, now, MAX_PAIRS)
+            p[pairKey] = encodePairs(list)
+        }
+
+    }
+
+    suspend fun learnAndRank(
+        newWords: List<String>,
+        newPairs: List<Pair<String, String>>,
+        strongWords: List<String>,
+        suspectWords: List<String>,
+        choiceDeltas: List<Triple<String, String, Double>>,
+        profile: String,
+        profileWords: List<String>
+    ): List<String> {
+        val hasLearn = newWords.isNotEmpty() || newPairs.isNotEmpty() || strongWords.isNotEmpty() || suspectWords.isNotEmpty()
+        val hasRank = choiceDeltas.isNotEmpty() || profileWords.isNotEmpty()
+        if (!hasLearn && !hasRank) return emptyList()
+        if (!appContext.isUserStorageUnlocked()) return emptyList()
+        val fresh = ArrayList<String>()
+        store.edit { p ->
+            if (hasLearn) learnInto(p, newWords, newPairs, strongWords, suspectWords, fresh)
+            if (hasRank) rankInto(p, choiceDeltas, profile, profileWords)
         }
         return fresh
     }
@@ -729,8 +760,8 @@ class LearnedWordsRepository(context: Context) {
         words.forEach { removeWord(it) }
     }
 
-    val wordScores: Flow<Map<String, Double>> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[key] }
+    val wordScores: Flow<Map<String, Double>> = store.prefs
+        .map { p: LearnedPrefs -> p[key] }
         .distinctUntilChanged()
         .map { raw ->
             val now = ForgettingCurve.nowMinutes()
@@ -749,8 +780,8 @@ class LearnedWordsRepository(context: Context) {
 
     private class RankEntry(val a: String, val b: String, val score: Double, val last: Long)
 
-    val rankData: Flow<RankData> = appContext.credentialPrefsFlow()
-        .map { p: Preferences -> p[rankChoicesKey] to p[rankProfilesKey] }
+    val rankData: Flow<RankData> = store.prefs
+        .map { p: LearnedPrefs -> p[rankChoicesKey] to p[rankProfilesKey] }
         .distinctUntilChanged()
         .map { (choicesRaw, profilesRaw) ->
             val now = ForgettingCurve.nowMinutes()
@@ -770,34 +801,42 @@ class LearnedWordsRepository(context: Context) {
     suspend fun applyRank(choiceDeltas: List<Triple<String, String, Double>>, profile: String, profileWords: List<String>) {
         if (choiceDeltas.isEmpty() && profileWords.isEmpty()) return
         if (!appContext.isUserStorageUnlocked()) return
-        store.edit { p ->
-            val now = ForgettingCurve.nowMinutes()
-            if (choiceDeltas.isNotEmpty()) {
-                val map = LinkedHashMap<String, RankEntry>()
-                for (e in decodeRank(p[rankChoicesKey])) map[e.a + "|" + e.b] = e
-                for ((prefixKey, wordKey, delta) in choiceDeltas) {
-                    if (prefixKey.isEmpty() || wordKey.isEmpty()) continue
-                    val k = "$prefixKey|$wordKey"
-                    val current = map[k]
-                    val base = if (current != null) rankEffective(current, now) else 0.0
-                    map[k] = RankEntry(prefixKey, wordKey, (base + delta).coerceIn(-3.0, 4.0), now)
-                }
-                p[rankChoicesKey] = encodeRank(pruneRank(map.values.toMutableList(), now, MAX_RANK_CHOICES))
+        store.edit { p -> rankInto(p, choiceDeltas, profile, profileWords) }
+    }
+
+    private fun rankInto(
+        p: LearnedEditor,
+        choiceDeltas: List<Triple<String, String, Double>>,
+        profile: String,
+        profileWords: List<String>
+    ) {
+        val now = ForgettingCurve.nowMinutes()
+        if (choiceDeltas.isNotEmpty()) {
+            val map = LinkedHashMap<String, RankEntry>()
+            for (e in decodeRank(p[rankChoicesKey])) map[e.a + "|" + e.b] = e
+            for ((prefixKey, wordKey, delta) in choiceDeltas) {
+                if (prefixKey.isEmpty() || wordKey.isEmpty()) continue
+                val k = "$prefixKey|$wordKey"
+                val current = map[k]
+                val base = if (current != null) rankEffective(current, now) else 0.0
+                map[k] = RankEntry(prefixKey, wordKey, (base + delta).coerceIn(-3.0, 4.0), now)
             }
-            if (profileWords.isNotEmpty()) {
-                val map = LinkedHashMap<String, RankEntry>()
-                for (e in decodeRank(p[rankProfilesKey])) map[e.a + "|" + e.b] = e
-                for (raw in profileWords) {
-                    val wordKey = BigDictionary.key(raw)
-                    if (wordKey.isEmpty()) continue
-                    val k = "$profile|$wordKey"
-                    val current = map[k]
-                    val base = if (current != null) rankEffective(current, now) else 0.0
-                    map[k] = RankEntry(profile, wordKey, (base + 1.0).coerceAtMost(6.0), now)
-                }
-                p[rankProfilesKey] = encodeRank(pruneRank(map.values.toMutableList(), now, MAX_RANK_PROFILE))
-            }
+            p[rankChoicesKey] = encodeRank(pruneRank(map.values.toMutableList(), now, MAX_RANK_CHOICES))
         }
+        if (profileWords.isNotEmpty()) {
+            val map = LinkedHashMap<String, RankEntry>()
+            for (e in decodeRank(p[rankProfilesKey])) map[e.a + "|" + e.b] = e
+            for (raw in profileWords) {
+                val wordKey = BigDictionary.key(raw)
+                if (wordKey.isEmpty()) continue
+                val k = "$profile|$wordKey"
+                val current = map[k]
+                val base = if (current != null) rankEffective(current, now) else 0.0
+                map[k] = RankEntry(profile, wordKey, (base + 1.0).coerceAtMost(6.0), now)
+            }
+            p[rankProfilesKey] = encodeRank(pruneRank(map.values.toMutableList(), now, MAX_RANK_PROFILE))
+        }
+
     }
 
     private fun rankEffective(e: RankEntry, now: Long): Double {

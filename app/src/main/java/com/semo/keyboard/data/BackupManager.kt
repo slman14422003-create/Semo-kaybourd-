@@ -53,6 +53,11 @@ object BackupManager {
                 }
                 items.put(key.name, entry)
             }
+            val learned = LearnedStore.get(context.applicationContext).snapshot()
+            for (name in LearnedStore.KEYS) {
+                val value = learned[name] ?: continue
+                items.put(name, JSONObject().put("t", "s").put("v", value))
+            }
             root.put("items", items)
             context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(root.toString(1).toByteArray(Charsets.UTF_8)) } != null
         }.getOrDefault(false)
@@ -66,14 +71,25 @@ object BackupManager {
             if (root.optString("app") != APP_ID || root.optInt("format", 0) < 1) return@runCatching ImportResult(false, 0)
             val items = root.getJSONObject("items")
             var count = 0
+            val learnedValues = HashMap<String, String>()
             context.applicationContext.semoDataStore.edit { prefs ->
                 val names = items.keys()
                 while (names.hasNext()) {
                     val name = names.next()
                     if (name in excluded || name.length > 80) continue
                     val entry = items.optJSONObject(name) ?: continue
+                    if (name in LearnedStore.KEYS) {
+                        if (entry.optString("t") == "s") learnedValues[name] = entry.getString("v")
+                        continue
+                    }
                     if (apply(prefs, name, entry)) count++
                 }
+            }
+            if (learnedValues.isNotEmpty()) {
+                LearnedStore.get(context.applicationContext).edit { e ->
+                    for ((name, value) in learnedValues) e[stringPreferencesKey(name)] = value
+                }
+                count += learnedValues.size
             }
             ImportResult(count > 0, count)
         }.getOrDefault(ImportResult(false, 0))
