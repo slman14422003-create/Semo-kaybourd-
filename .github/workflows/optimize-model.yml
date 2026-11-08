@@ -69,7 +69,7 @@ jobs:
 
       - name: Open pull request
         if: inputs.open_pr && env.BEST != 'none'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           base: main
           branch: auto/model-${{ env.BEST }}
