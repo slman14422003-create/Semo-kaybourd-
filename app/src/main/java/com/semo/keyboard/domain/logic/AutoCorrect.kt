@@ -29,6 +29,10 @@ object AutoCorrect {
         "tounge" to "tongue", "truely" to "truly", "writting" to "writing", "yestarday" to "yesterday",
         "thx" to "thanks", "pls" to "please", "plz" to "please", "whos" to "who's",
         "theres" to "there's", "heres" to "here's",
+        "youve" to "you've", "weve" to "we've", "theyve" to "they've", "youll" to "you'll", "theyll" to "they'll",
+        "itll" to "it'll", "thatll" to "that'll", "hows" to "how's", "wheres" to "where's",
+        "waht" to "what", "wnat" to "want", "thsi" to "this", "jsut" to "just", "kno" to "know", "abotu" to "about",
+        "peice" to "piece", "beggining" to "beginning", "begining" to "beginning", "buisness" to "business",
         "wouldve" to "would've", "couldve" to "could've", "shouldve" to "should've", "mustnt" to "mustn't"
     )
 

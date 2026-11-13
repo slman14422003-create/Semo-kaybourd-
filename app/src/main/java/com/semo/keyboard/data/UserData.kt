@@ -78,18 +78,12 @@ private object ForgettingCurve {
 
     fun prune(list: MutableList<LearnedEntry>, now: Long, max: Int) {
         list.removeAll { effective(it, now) < FLOOR }
-        while (list.size > max) {
-            var worst = list.size - 1
-            var worstValue = effective(list[worst], now)
-            for (i in list.size - 2 downTo 0) {
-                val v = effective(list[i], now)
-                if (v < worstValue) {
-                    worst = i
-                    worstValue = v
-                }
-            }
-            list.removeAt(worst)
-        }
+        if (list.size <= max) return
+        // يحذف الأضعف دفعة واحدة (بدل مسح القائمة كاملة لكل عنصر زائد) مع إبقاء ترتيب الباقي كما هو
+        val drop = list.size - max
+        val weakest = list.indices.sortedBy { effective(list[it], now) }.take(drop).toHashSet()
+        var i = 0
+        list.removeAll { weakest.contains(i++) }
     }
 }
 
@@ -939,11 +933,13 @@ class LearnedWordsRepository(context: Context) {
     }
 
     private companion object {
-        const val MAX_WORDS = 2500
-        const val MAX_PAIRS = 3000
-        const val MAX_IGNORED = 500
-        const val MAX_BLOCKED = 2000
-        const val MAX_FIXES = 2000
+        // التعلّم بلا سقف عملي: الكلمة تزول فقط بالنسيان التدريجي (ForgettingCurve) أو بحذف المستخدم لها.
+        // الأرقام أدناه صمّام أمان ضخم فقط كي لا ينتفخ التخزين بلا حدّ لو حدث خلل.
+        const val MAX_WORDS = 1_000_000
+        const val MAX_PAIRS = 1_000_000
+        const val MAX_IGNORED = 20_000
+        const val MAX_BLOCKED = 50_000
+        const val MAX_FIXES = 100_000
         const val MAX_CANDIDATES = 300
         const val CANDIDATE_TTL_MIN = 14L * 24L * 60L
         const val MAX_RANK_CHOICES = 1500

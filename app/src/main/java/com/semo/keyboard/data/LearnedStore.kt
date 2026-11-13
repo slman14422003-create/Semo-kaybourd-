@@ -56,10 +56,34 @@ private class LearnedDb(context: Context) : SQLiteOpenHelper(context.application
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
+    /**
+     * القيم الكبيرة (آلاف الكلمات المتعلَّمة) تُقسَّم على عدة صفوف: نافذة المؤشر (CursorWindow) بأندرويد
+     * حدّها نحو 2 ميغابايت للصف، وتجاوزها يفشل القراءة فتضيع كل البيانات. الجزء الأول يحمل اسم المفتاح،
+     * والأجزاء التالية «المفتاح~رقم».
+     */
     fun readAll(): Map<String, String> {
-        val out = HashMap<String, String>()
+        val whole = HashMap<String, String>()
+        val parts = HashMap<String, java.util.TreeMap<Int, String>>()
         readableDatabase.rawQuery("SELECT k, v FROM kv", null).use { c ->
-            while (c.moveToNext()) out[c.getString(0)] = c.getString(1)
+            while (c.moveToNext()) {
+                val k = c.getString(0)
+                val v = c.getString(1)
+                val cut = k.lastIndexOf(PART_SEP)
+                val index = if (cut > 0) k.substring(cut + 1).toIntOrNull() else null
+                if (index != null) {
+                    parts.getOrPut(k.substring(0, cut)) { java.util.TreeMap() }[index] = v
+                } else {
+                    whole[k] = v
+                }
+            }
+        }
+        val out = HashMap<String, String>(whole.size)
+        for ((k, first) in whole) {
+            val extra = parts[k]
+            out[k] = if (extra == null) first else buildString(first.length + extra.values.sumOf { it.length }) {
+                append(first)
+                for (piece in extra.values) append(piece)
+            }
         }
         return out
     }
@@ -69,14 +93,20 @@ private class LearnedDb(context: Context) : SQLiteOpenHelper(context.application
         db.beginTransaction()
         try {
             for ((k, v) in changes) {
-                if (v == null) {
-                    db.delete("kv", "k = ?", arrayOf(k))
-                } else {
+                db.delete("kv", "k = ? OR k GLOB ?", arrayOf(k, "$k$PART_SEP[0-9]*"))
+                if (v == null) continue
+                var start = 0
+                var index = 0
+                do {
+                    var end = minOf(v.length, start + CHUNK_CHARS)
+                    if (end < v.length && v[end - 1].isHighSurrogate()) end--
                     val cv = ContentValues(2)
-                    cv.put("k", k)
-                    cv.put("v", v)
+                    cv.put("k", if (index == 0) k else "$k$PART_SEP$index")
+                    cv.put("v", v.substring(start, end))
                     db.insertWithOnConflict("kv", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
-                }
+                    start = end
+                    index++
+                } while (start < v.length)
             }
             db.setTransactionSuccessful()
         } finally {
@@ -87,6 +117,8 @@ private class LearnedDb(context: Context) : SQLiteOpenHelper(context.application
     private companion object {
         const val NAME = "semo_learned.db"
         const val VERSION = 1
+        const val PART_SEP = '~'
+        const val CHUNK_CHARS = 150_000
     }
 }
 

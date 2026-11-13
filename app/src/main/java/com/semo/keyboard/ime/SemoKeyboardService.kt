@@ -106,6 +106,8 @@ private const val POLL_STEP_MS = 1500L
 private const val POLL_MAX_MS = 6000L
 private const val SHOT_WINDOW_S = 300L
 private val SHOT_POLL_DELAYS = longArrayOf(0L)
+private const val SHOT_BATCH_MAX = 10
+private const val SHOT_MAX_ROUNDS = 4
 private val SHOT_SHOW_DELAYS = longArrayOf(0L, 700L)
 private val SHOT_EVENT_DELAYS = longArrayOf(250L, 500L, 900L, 1600L, 2600L)
 private val CLIP_FORCE_DELAYS = longArrayOf(0L, 60L, 150L, 300L, 600L, 1200L)
@@ -374,40 +376,49 @@ class SemoKeyboardService :
 
     private class Shot(val id: Long, val uri: android.net.Uri, val mime: String)
 
-    private fun latestScreenshot(): Shot? {
+    /**
+     * لقطات الشاشة الجديدة (أحدث من آخر لقطة حفظناها) بترتيب الأقدم أولًا. سابقًا كنا نقرأ آخر لقطة واحدة فقط،
+     * فلو التُقطت لقطتان متتاليتان تضيع الأولى. أول مرة (قبل أي لقطة محفوظة) نأخذ أحدث لقطة فقط كي لا نستورد القديم.
+     */
+    private fun newScreenshots(): List<Shot> {
         val media = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val cutoff = System.currentTimeMillis() / 1000 - SHOT_WINDOW_S
+        val idCol = android.provider.MediaStore.Images.Media._ID
         val nameCol = android.provider.MediaStore.Images.Media.DISPLAY_NAME
         val like = if (Build.VERSION.SDK_INT >= 29)
             "($nameCol LIKE '%creenshot%' OR $nameCol LIKE 'Screen%' OR ${android.provider.MediaStore.Images.Media.RELATIVE_PATH} LIKE '%creenshot%')"
         else "(${android.provider.MediaStore.Images.Media.DATA} LIKE '%creenshot%' OR $nameCol LIKE 'Screen%')"
-        val sel = "${android.provider.MediaStore.Images.Media.DATE_ADDED} >= ? AND $like"
+        val since = lastShotId
+        val firstRun = since < 0L
+        val sel = "${android.provider.MediaStore.Images.Media.DATE_ADDED} >= ? AND $idCol > ? AND $like"
         val extras = android.os.Bundle().apply {
             putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, sel)
-            putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf(cutoff.toString()))
             putStringArray(
-                android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS,
-                arrayOf(android.provider.MediaStore.Images.Media.DATE_ADDED, android.provider.MediaStore.Images.Media._ID)
+                android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS,
+                arrayOf(cutoff.toString(), (if (firstRun) 0L else since).toString())
             )
+            putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(idCol))
             putInt(
                 android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
-                android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+                if (firstRun) android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+                else android.content.ContentResolver.QUERY_SORT_DIRECTION_ASCENDING
             )
-            putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, 1)
+            putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, if (firstRun) 1 else SHOT_BATCH_MAX)
         }
+        val out = ArrayList<Shot>()
         contentResolver.query(
             media,
-            arrayOf(android.provider.MediaStore.Images.Media._ID, android.provider.MediaStore.Images.Media.MIME_TYPE),
+            arrayOf(idCol, android.provider.MediaStore.Images.Media.MIME_TYPE),
             extras,
             null
         )?.use { c ->
-            if (c.moveToFirst()) {
+            while (c.moveToNext()) {
                 val id = c.getLong(0)
                 val mime = c.getString(1) ?: "image/png"
-                return Shot(id, android.content.ContentUris.withAppendedId(media, id), mime)
+                out.add(Shot(id, android.content.ContentUris.withAppendedId(media, id), mime))
             }
         }
-        return null
+        return out
     }
 
     private val shotTask = Runnable { captureScreenshot(SHOT_EVENT_DELAYS) }
@@ -420,22 +431,47 @@ class SemoKeyboardService :
         }
     }
 
+    /** لقطة جديدة وصلت أثناء معالجة لقطة سابقة: نعيد الفحص بعد انتهائها بدل أن نتجاهلها */
+    @Volatile private var shotRescan = false
+
     private fun captureScreenshot(delaysMs: LongArray = SHOT_POLL_DELAYS) {
         if (!::viewModel.isInitialized || passwordField || !viewModel.uiState.value.clipboardEnabled || !hasMediaPermission()) return
-        if (shotJob?.isActive == true) return
+        if (shotJob?.isActive == true) {
+            shotRescan = true
+            return
+        }
         shotJob = serviceScope.launch {
-            for (wait in delaysMs) {
-                if (wait > 0L) delay(wait)
-                val shot = withContext(Dispatchers.IO) { runCatching { latestScreenshot() }.getOrNull() } ?: continue
-                if (shot.id == lastShotId) return@launch
+            var delays = delaysMs
+            var rounds = 0
+            do {
+                shotRescan = false
+                saveNewScreenshots(delays)
+                delays = SHOT_EVENT_DELAYS
+                rounds++
+            } while (shotRescan && rounds < SHOT_MAX_ROUNDS)
+        }
+    }
+
+    private suspend fun saveNewScreenshots(delaysMs: LongArray) {
+        for (wait in delaysMs) {
+            if (wait > 0L) delay(wait)
+            val shots = withContext(Dispatchers.IO) { runCatching { newScreenshots() }.getOrDefault(emptyList()) }
+            if (shots.isEmpty()) continue
+            var allSaved = true
+            for (shot in shots) {
                 val name = withContext(Dispatchers.IO) {
                     runCatching { imageStore.saveFromUri(shot.uri, shot.mime) }.getOrNull()
-                } ?: continue
-                val stored = clipboardRepository.add(clipImageKey(name, shot.mime)) ?: continue
+                }
+                // لقطة لم تكتمل كتابتها بعد: نتوقف عندها ونعيد المحاولة بعد مهلة دون تخطّيها
+                val stored = if (name != null) clipboardRepository.add(clipImageKey(name, shot.mime)) else null
+                if (stored == null) {
+                    allSaved = false
+                    break
+                }
                 lastShotId = shot.id
                 viewModel.onClipboardCopied(stored)
-                return@launch
             }
+            if (allSaved) return
         }
     }
 

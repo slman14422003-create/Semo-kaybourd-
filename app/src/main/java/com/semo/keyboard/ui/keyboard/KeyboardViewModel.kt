@@ -213,9 +213,10 @@ class KeyboardViewModel(
     )
 
     /** تصحيح تلقائي حصل للتو: الرجوع (Backspace) مباشرة بعده يعيد الكلمة الأصلية */
-    private data class Correction(val original: String, val fixed: String)
+    private data class Correction(val original: String, val fixed: String, val tail: String = " ")
 
     private var undo: Correction? = null
+    private var punctUndo: Correction? = null
     private var lastShiftTap = 0L
 
     private val transient = MutableStateFlow(LocalState())
@@ -646,8 +647,10 @@ class KeyboardViewModel(
                     // علامة ترقيم تنهي الكلمة: نصحّح الاختصار أولًا، وإلا نتعلّم الكلمة (قراءة واحدة من التطبيق)
                     val before = bridge.textBeforeCursorWithin(40, WORD_END_READ_MS, false)
                     if (before != null) {
-                        if (state.correctOnPunctuation && ch in AUTOCORRECT_TRIGGERS && applyAutoCorrect(before) != null) {
+                        val punctFix = if (state.correctOnPunctuation && ch in AUTOCORRECT_TRIGGERS) applyAutoCorrect(before) else null
+                        if (punctFix != null) {
                             editWatch = null
+                            punctUndo = Correction(punctFix.original, punctFix.fixed, typed)
                         } else {
                             val typedWord = SuggestionEngine.currentWord(before)
                             finishEditWatch(before, typedWord)
@@ -657,6 +660,10 @@ class KeyboardViewModel(
                     }
                 }
                 bridge.commitText(typed)
+                if (punctUndo != null) {
+                    undo = punctUndo
+                    punctUndo = null
+                }
                 consumeOneShotShift()
                 // «إبقاء لوحة الرموز مفتوحة» متوقف: بعد كتابة رمز نرجع لصفحة الحروف
                 val page = transient.value.page
@@ -750,10 +757,11 @@ class KeyboardViewModel(
      */
     private fun handleBackspace(pendingUndo: Correction?, swipeWord: String?) {
         if (pendingUndo != null &&
-            readBefore(pendingUndo.fixed.length + 1) == pendingUndo.fixed + " "
+            readBefore(pendingUndo.fixed.length + pendingUndo.tail.length) == pendingUndo.fixed + pendingUndo.tail
         ) {
-            bridge.deleteSurrounding(pendingUndo.fixed.length + 1)
-            bridge.commitText(pendingUndo.original)
+            bridge.deleteSurrounding(pendingUndo.fixed.length + pendingUndo.tail.length)
+            // بعد المسافة نرجع الكلمة الأصلية فقط، وبعد علامة الترقيم نرجعها مع العلامة
+            bridge.commitText(if (pendingUndo.tail == " ") pendingUndo.original else pendingUndo.original + pendingUndo.tail)
             retractPending(pendingUndo.fixed)
             learnStrong(pendingUndo.original)
             launchSafe {
