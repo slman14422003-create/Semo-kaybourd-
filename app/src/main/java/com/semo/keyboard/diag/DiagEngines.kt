@@ -286,7 +286,7 @@ internal object DiagEngines {
         c.probe(g, "Symbols and number pages") {
             val problems = ArrayList<String>()
             var combos = 0
-            val pages = listOf(KeyboardPage.SYMBOLS_1, KeyboardPage.SYMBOLS_2, KeyboardPage.NUMPAD)
+            val pages = listOf(KeyboardPage.SYMBOLS_1, KeyboardPage.SYMBOLS_2, KeyboardPage.SYMBOLS_3, KeyboardPage.NUMPAD)
             for (lang in KeyboardLanguage.values()) for (page in pages) {
                 combos++
                 val rows = KeyboardLayoutProvider.rows(KeyboardUiState(page = page, language = lang))

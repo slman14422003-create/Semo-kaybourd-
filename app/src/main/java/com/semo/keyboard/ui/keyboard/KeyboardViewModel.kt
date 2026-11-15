@@ -667,7 +667,7 @@ class KeyboardViewModel(
                 consumeOneShotShift()
                 // «إبقاء لوحة الرموز مفتوحة» متوقف: بعد كتابة رمز نرجع لصفحة الحروف
                 val page = transient.value.page
-                if (!state.keepSymbolPanel && (page == KeyboardPage.SYMBOLS_1 || page == KeyboardPage.SYMBOLS_2)) {
+                if (!state.keepSymbolPanel && (page == KeyboardPage.SYMBOLS_1 || page == KeyboardPage.SYMBOLS_2 || page == KeyboardPage.SYMBOLS_3)) {
                     setPage(KeyboardPage.LETTERS)
                 }
                 refreshSuggestions()
@@ -728,6 +728,7 @@ class KeyboardViewModel(
             KeyAction.Shift -> toggleShift()
             KeyAction.SwitchToSymbols -> setPage(KeyboardPage.SYMBOLS_1)
             KeyAction.SwitchToSymbols2 -> setPage(KeyboardPage.SYMBOLS_2)
+            KeyAction.SwitchToSymbols3 -> setPage(KeyboardPage.SYMBOLS_3)
             KeyAction.SwitchToLetters -> setPage(KeyboardPage.LETTERS)
             KeyAction.SwitchToNumbers ->
                 setPage(if (state.numKeyTarget == NumKeyTarget.NUMPAD) KeyboardPage.NUMPAD else KeyboardPage.SYMBOLS_1)
@@ -1262,6 +1263,12 @@ class KeyboardViewModel(
         refreshSuggestions()
     }
 
+    val showTick = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+    fun onWindowShown() {
+        showTick.value = showTick.value + 1
+    }
+
     fun openEmojiSearch() {
         closeVoice()
         translateJob?.cancel()
@@ -1279,7 +1286,7 @@ class KeyboardViewModel(
     }
 
     fun closeEmojiSearch() {
-        transient.update { if (it.emojiSearch == null) it else it.copy(emojiSearch = null, page = KeyboardPage.EMOJI) }
+        transient.update { if (it.emojiSearch == null) it else it.copy(emojiSearch = null, page = KeyboardPage.LETTERS) }
     }
 
     private fun handleEmojiSearchKey(action: KeyAction): Boolean {

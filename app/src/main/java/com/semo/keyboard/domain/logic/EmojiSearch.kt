@@ -118,8 +118,13 @@ object EmojiSearch {
         }
     }
 
+    private fun stripAl(t: String): String = if (t.length > 3 && t.startsWith("\u0627\u0644")) t.substring(2) else t
+
     private class Entry(val word: String, val emoji: String) {
-        val tokens: List<String> = word.split(' ')
+        val tokens: List<String> = word.split(' ').let { list ->
+            val extra = list.map { stripAl(it) }.filter { it.isNotEmpty() }
+            (list + extra).distinct()
+        }
     }
 
     @Volatile
@@ -180,16 +185,32 @@ object EmojiSearch {
         val q = normalize(raw)
         if (q.isEmpty()) return emptyList()
         val out = LinkedHashSet<String>()
+        collect(q, limit, out)
+        if (out.size < limit) {
+            val bare = q.split(' ').joinToString(" ") { stripAl(it) }
+            if (bare != q && bare.isNotEmpty()) collect(bare, limit, out)
+        }
+        return out.take(limit)
+    }
+
+    private fun collect(q: String, limit: Int, out: LinkedHashSet<String>) {
         val all = entries
-        for (e in all) if (e.word == q) out.add(e.emoji)
-        if (out.size >= limit) return out.take(limit)
+        for (e in all) if (e.word == q || e.tokens.contains(q)) out.add(e.emoji)
+        if (out.size >= limit) return
         for (e in all) if (e.word.startsWith(q)) out.add(e.emoji)
-        if (out.size >= limit) return out.take(limit)
+        if (out.size >= limit) return
         for (e in all) {
             if (e.tokens.any { it.startsWith(q) }) out.add(e.emoji)
         }
-        if (out.size >= limit) return out.take(limit)
-        if (q.length >= 3) for (e in all) if (e.word.contains(q)) out.add(e.emoji)
+        if (out.size >= limit) return
+        val parts = q.split(' ').filter { it.isNotEmpty() }
+        if (parts.size > 1) {
+            for (e in all) {
+                if (parts.all { part -> e.tokens.any { it.startsWith(part) } }) out.add(e.emoji)
+            }
+            if (out.size >= limit) return
+        }
+        if (q.length >= 2) for (e in all) if (e.word.contains(q)) out.add(e.emoji)
         if (out.size < limit) {
             for (e in nameEntries) {
                 if (e.tokens.any { it.startsWith(q) } || (q.length >= 3 && e.word.contains(q))) out.add(e.emoji)
@@ -203,6 +224,5 @@ object EmojiSearch {
                 }
             }
         }
-        return out.take(limit)
     }
 }

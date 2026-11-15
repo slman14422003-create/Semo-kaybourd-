@@ -366,6 +366,17 @@ fun KeyboardScreen(
 
     // مضاعِف سرعة الحركة من الإعدادات (0 = إيقاف الحركة تمامًا)
     val animScale = state.animationSpeed.multiplier
+    // ظهور اللوحة مثل آيفون: تصعد من أسفل الشاشة بمنحنى iOS سريع التباطؤ عند كل إظهار
+    val showTick by viewModel.showTick.collectAsState()
+    val showSlide = remember { Animatable(if (animScale > 0.001f) 0f else 1f) }
+    LaunchedEffect(showTick, animScale) {
+        if (animScale <= 0.001f) {
+            showSlide.snapTo(1f)
+        } else {
+            showSlide.snapTo(0f)
+            showSlide.animateTo(1f, scaledTween(animScale, 340, easing = IosPush))
+        }
+    }
     val pageAlpha = remember { Animatable(1f) }
     // تبديل اللغة: المفاتيح تنزلق من جهة اتجاه الكتابة الجديدة مع تلاشٍ ونابض ناعم بدل وميض الشفافية
     val langShift = remember { Animatable(0f) }
@@ -429,7 +440,15 @@ fun KeyboardScreen(
         LocalAnimScale provides animScale,
         LocalFrost provides frost
     ) {
-        Box(modifier = Modifier.fillMaxWidth().frostPanel(colors.panel, frost)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    val p = showSlide.value
+                    if (p < 1f) translationY = size.height * (1f - p)
+                }
+                .frostPanel(colors.panel, frost)
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -839,7 +858,7 @@ private fun StripIconButton(
     val animScale = LocalAnimScale.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val press by animateFloatAsState(if (pressed) 0.88f else 1f, scaledSpring(animScale, dampingRatio = 0.7f, stiffness = 700f), label = "stripPress")
+    val press by animateFloatAsState(if (pressed) 0.92f else 1f, scaledSpring(animScale, dampingRatio = 0.78f, stiffness = 900f), label = "stripPress")
     val on by animateFloatAsState(if (active) 1f else 0f, scaledTween(animScale, 200), label = "stripActive")
     val rot by animateFloatAsState(rotate, scaledTween(animScale, 320, easing = IosPush), label = "stripRotate")
     val pop = remember { Animatable(if (popDelay >= 0) 0.6f else 1f) }
@@ -1007,7 +1026,7 @@ private fun SuggestionCell(
     var pressed by remember { mutableStateOf(false) }
     val fill by animateColorAsState(
         if (pressed) colors.divider.copy(alpha = 0.55f) else Color.Transparent,
-        tween(if (pressed) 60 else 180),
+        tween(if (pressed) 0 else 140, easing = IosEaseOut),
         label = "slotFill"
     )
     val size = when {
@@ -1408,7 +1427,7 @@ private fun RowScope.KeyButton(
         else -> colors.key
     }
     // آيفون: الضغط لحظي واللون يتلاشى بسلاسة عند الرفع
-    val animBg = animateColorAsState(bg, scaledTween(LocalAnimScale.current, if (pressed) 0 else 140), label = "keyBg")
+    val animBg = animateColorAsState(bg, scaledTween(LocalAnimScale.current, if (pressed) 0 else 120, easing = IosEaseOut), label = "keyBg")
     val bgShape = if (def.plain) RoundedCornerShape(50) else metrics.keyShape
     val textColor = when {
         shiftOn -> colors.onShiftActive
@@ -1595,15 +1614,15 @@ private fun RowScope.KeyButton(
         LaunchedEffect(pressed) {
             if (pressed) previewVisible = true
             else {
-                delay(130)
+                delay(90)
                 previewVisible = false
             }
         }
         if (showPreview && previewVisible && isLetterKey && !hideLabels && !popupOpen) {
-            val pop = remember { Animatable(0.8f) }
+            val pop = remember { Animatable(0.92f) }
             val previewScale = LocalAnimScale.current
-            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.86f, stiffness = 650f)) }
-            val previewAlpha by animateFloatAsState(if (pressed) 1f else 0f, scaledTween(previewScale, 130, easing = IosEaseOut), label = "previewAlpha")
+            LaunchedEffect(Unit) { pop.animateTo(1f, scaledSpring(previewScale, dampingRatio = 0.9f, stiffness = 1100f)) }
+            val previewAlpha by animateFloatAsState(if (pressed) 1f else 0f, scaledTween(previewScale, 90, easing = IosEaseOut), label = "previewAlpha")
             val headHeight = if (isTopRow) 40.dp else 56.dp
             val inset = 10.dp
             Box(
@@ -1915,8 +1934,8 @@ private suspend fun PointerInputScope.spaceGestures(
 @Composable
 private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pressed: Boolean) {
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.88f else 1f,
-        animationSpec = scaledTween(LocalAnimScale.current, durationMillis = 90),
+        targetValue = if (pressed) 0.92f else 1f,
+        animationSpec = scaledSpring(LocalAnimScale.current, dampingRatio = 0.8f, stiffness = 900f),
         label = "circleKeyScale"
     )
     val top = if (pressed) colors.key else lerp(colors.keySpecial, colors.key, 0.38f)
@@ -2019,7 +2038,7 @@ private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
 
 private fun isSpecial(def: KeyDefinition): Boolean = def.special || when (def.action) {
     KeyAction.Shift, KeyAction.Backspace, KeyAction.Globe, KeyAction.Emoji,
-    KeyAction.SwitchToSymbols, KeyAction.SwitchToSymbols2, KeyAction.SwitchToLetters,
+    KeyAction.SwitchToSymbols, KeyAction.SwitchToSymbols2, KeyAction.SwitchToSymbols3, KeyAction.SwitchToLetters,
     KeyAction.SwitchToNumbers, KeyAction.SwitchToNumpad,
     KeyAction.SwitchLanguage -> true
     KeyAction.Enter -> !def.isAccent

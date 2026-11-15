@@ -895,6 +895,7 @@ class SemoKeyboardService :
         window?.window?.decorView?.let { installViewTreeOwners(it) }
         // نافذة شفافة كي تظهر زوايا اللوحة المدورة بنمط iOS 26
         window?.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        runCatching { window?.window?.setWindowAnimations(0) }
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         return composeView
     }
@@ -1016,6 +1017,7 @@ class SemoKeyboardService :
 
     override fun onWindowShown() {
         super.onWindowShown()
+        if (::viewModel.isInitialized) viewModel.onWindowShown()
         window?.window?.decorView?.post { reapplyBlur() }
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         KeyboardStatusHelper.setImeVisible(this, true)

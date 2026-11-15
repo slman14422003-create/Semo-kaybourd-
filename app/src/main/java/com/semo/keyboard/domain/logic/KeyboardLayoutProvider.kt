@@ -271,6 +271,10 @@ object KeyboardLayoutProvider {
     private val sym1Row3Ar = listOf(".", "،", "؟", "!", "'")
     private val sym2Row1 = listOf("[", "]", "{", "}", "#", "%", "^", "*", "+", "=")
     private val sym2Row2 = listOf("_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•")
+    private val sym3Row1En = listOf("©", "®", "™", "°", "§", "¶", "†", "‡", "№", "‰")
+    private val sym3Row1Ar = listOf("«", "»", "﴾", "﴿", "ـ", "٪", "٫", "٬", "؛", "٭")
+    private val sym3Row2 = listOf("±", "×", "÷", "≠", "≈", "≤", "≥", "√", "∞", "π")
+    private val sym3Row3 = listOf("←", "→", "↑", "↓", "★")
 
     /** Curated categories plus every other emoji of the Unicode set ([EmojiExtra]); built once. */
     val emojiCategories: List<EmojiCategory> by lazy {
@@ -331,8 +335,9 @@ object KeyboardLayoutProvider {
                 }
             }
         }
-        KeyboardPage.SYMBOLS_1 -> symbolRows(state, firstPage = true)
-        KeyboardPage.SYMBOLS_2 -> symbolRows(state, firstPage = false)
+        KeyboardPage.SYMBOLS_1 -> symbolRows(state, 1)
+        KeyboardPage.SYMBOLS_2 -> symbolRows(state, 2)
+        KeyboardPage.SYMBOLS_3 -> symbolRows(state, 3)
         KeyboardPage.NUMPAD -> numpadRows(state)
         KeyboardPage.EMOJI, KeyboardPage.CLIPBOARD, KeyboardPage.EDIT, KeyboardPage.CALC, KeyboardPage.TRANSLATE -> emptyList()
     }
@@ -504,20 +509,36 @@ object KeyboardLayoutProvider {
         return listOf(r1, r2, r3, r4) + utilityTail(state)
     }
 
-    private fun symbolRows(state: KeyboardUiState, firstPage: Boolean): List<List<KeyDefinition>> {
+    private fun symbolRows(state: KeyboardUiState, page: Int): List<List<KeyDefinition>> {
         fun mapRow(chars: List<String>, weight: Float = 1f) =
             chars.map { KeyDefinition(it, KeyAction.Character(it), weight = weight, longPressChars = symbolAlts[it].orEmpty()) }
 
-        val r1 = if (firstPage) digitsFor(state) else sym2Row1
-        val r2 = if (firstPage) sym1Row2 else sym2Row2
-        val r3 = if (state.language.rtl) sym1Row3Ar else sym1Row3En
+        val arabic = state.language.rtl
+        val r1 = when (page) {
+            1 -> digitsFor(state)
+            2 -> sym2Row1
+            else -> if (arabic) sym3Row1Ar else sym3Row1En
+        }
+        val r2 = when (page) {
+            1 -> sym1Row2
+            2 -> sym2Row2
+            else -> sym3Row2
+        }
+        val punct = if (arabic) sym1Row3Ar else sym1Row3En
         val edge = 1.5f - EDGE_GAP
-        val switchKey = if (firstPage)
-            KeyDefinition("#+=", KeyAction.SwitchToSymbols2, weight = edge)
-        else
-            KeyDefinition("123", KeyAction.SwitchToSymbols, weight = edge)
-        val third = listOf(switchKey, KeyDefinition.spacer(EDGE_GAP)) + mapRow(r3, 1.4f) +
-            listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("⌫", KeyAction.Backspace, weight = edge))
+        val switchKey = when (page) {
+            1 -> KeyDefinition("#+=", KeyAction.SwitchToSymbols2, weight = edge)
+            2 -> KeyDefinition("123", KeyAction.SwitchToSymbols, weight = edge)
+            else -> KeyDefinition("#+=", KeyAction.SwitchToSymbols2, weight = edge)
+        }
+        val middle = when (page) {
+            1 -> mapRow(punct, 1.4f)
+            2 -> listOf(KeyDefinition("\u22EF", KeyAction.SwitchToSymbols3, weight = 1.4f, textOnly = true, special = true)) +
+                mapRow(punct.take(4), 1.4f)
+            else -> mapRow(sym3Row3, 1.4f)
+        }
+        val third = listOf(switchKey, KeyDefinition.spacer(EDGE_GAP)) + middle +
+            listOf(KeyDefinition.spacer(EDGE_GAP), KeyDefinition("\u232B", KeyAction.Backspace, weight = edge))
         return listOf(mapRow(r1), mapRow(r2), third, bottomRow(state, letters = false)) + utilityTail(state)
     }
 
@@ -591,21 +612,84 @@ object KeyboardLayoutProvider {
     }
 
     private val symbolAlts = mapOf(
-        "-" to listOf("–", "—", "•"),
-        "$" to listOf("¢", "€", "£", "¥", "₩", "₽"),
-        "&" to listOf("§"),
-        "\"" to listOf("„", "“", "”", "«", "»"),
-        "." to listOf("…"),
-        "?" to listOf("¿"),
-        "!" to listOf("¡"),
-        "'" to listOf("‘", "’", "`"),
-        "0" to listOf("°"),
+        "-" to listOf("–", "—", "•", "‑"),
+        "/" to listOf("\\", "|", "÷"),
+        ":" to listOf(";", "…"),
+        ";" to listOf(":", "؛"),
+        "(" to listOf("[", "{", "<", "⟨"),
+        ")" to listOf("]", "}", ">", "⟩"),
+        "$" to listOf("¢", "€", "£", "¥", "₩", "₽", "₺", "₹", "₪", "₫", "฿", "₦"),
+        "&" to listOf("§", "¶"),
+        "@" to listOf("©", "®", "™"),
+        "\"" to listOf("„", "“", "”", "«", "»", "″"),
+        "." to listOf("…", "·", "•"),
+        "," to listOf("،", "‚"),
+        "?" to listOf("¿", "؟", "⁇"),
+        "!" to listOf("¡", "‼", "⁉"),
+        "'" to listOf("‘", "’", "`", "′", "‹", "›"),
+        "0" to listOf("°", "⁰", "₀", "∅"),
         "٠" to listOf("°"),
-        "%" to listOf("‰"),
-        "=" to listOf("≠", "≈"),
-        "+" to listOf("±"),
-        "<" to listOf("≤", "‹"),
-        ">" to listOf("≥", "›")
+        "1" to listOf("¹", "₁", "½", "⅓", "¼"),
+        "2" to listOf("²", "₂", "⅔"),
+        "3" to listOf("³", "₃", "¾", "⅜"),
+        "4" to listOf("⁴", "₄"),
+        "5" to listOf("⁵", "₅"),
+        "6" to listOf("⁶", "₆"),
+        "7" to listOf("⁷", "₇"),
+        "8" to listOf("⁸", "₈"),
+        "9" to listOf("⁹", "₉"),
+        "%" to listOf("‰", "٪", "‱"),
+        "=" to listOf("≠", "≈", "≡", "≅"),
+        "+" to listOf("±", "∓", "⊕"),
+        "<" to listOf("≤", "‹", "«", "⟨"),
+        ">" to listOf("≥", "›", "»", "⟩"),
+        "[" to listOf("【", "〔", "「"),
+        "]" to listOf("】", "〕", "」"),
+        "{" to listOf("﴾", "⦃"),
+        "}" to listOf("﴿", "⦄"),
+        "#" to listOf("№", "♯", "‖"),
+        "^" to listOf("ˆ", "∧", "↑"),
+        "*" to listOf("×", "†", "‡", "★", "☆", "✱", "٭"),
+        "_" to listOf("‾", "﹏", "ـ"),
+        "\\" to listOf("/", "∖"),
+        "|" to listOf("¦", "‖", "∣"),
+        "~" to listOf("≈", "∼", "≃"),
+        "€" to listOf("$", "£", "¥", "¢", "₿"),
+        "£" to listOf("$", "€", "¥", "¢"),
+        "¥" to listOf("$", "€", "£", "₩"),
+        "•" to listOf("◦", "·", "○", "●", "■", "□", "▪", "▫", "◆", "◇"),
+        "©" to listOf("℗", "Ⓒ"),
+        "®" to listOf("℠", "Ⓡ"),
+        "™" to listOf("℠"),
+        "°" to listOf("′", "″", "℃", "℉"),
+        "§" to listOf("¶", "※"),
+        "¶" to listOf("§"),
+        "†" to listOf("‡", "✝"),
+        "‰" to listOf("‱", "%"),
+        "±" to listOf("∓", "∔"),
+        "×" to listOf("·", "⋅", "∗", "✕", "✖"),
+        "÷" to listOf("∕", "⁄", "∶"),
+        "≠" to listOf("≢", "≉"),
+        "≈" to listOf("≅", "≃", "∼"),
+        "≤" to listOf("⩽", "≪", "<"),
+        "≥" to listOf("⩾", "≫", ">"),
+        "√" to listOf("∛", "∜"),
+        "∞" to listOf("∝", "∅"),
+        "π" to listOf("Ω", "Σ", "Δ", "µ", "θ", "λ", "α", "β"),
+        "←" to listOf("↔", "⇐", "↩", "↶"),
+        "→" to listOf("↔", "⇒", "↪", "↷", "➜"),
+        "↑" to listOf("⇑", "↕", "⬆"),
+        "↓" to listOf("⇓", "↕", "⬇"),
+        "★" to listOf("☆", "✦", "✧", "♥", "♡", "✓", "✗", "✔", "✘", "☺"),
+        "«" to listOf("‹", "„", "“"),
+        "»" to listOf("›", "”", "’"),
+        "﴾" to listOf("﴿", "❨", "❩"),
+        "﴿" to listOf("﴾"),
+        "ـ" to listOf("ً", "ٌ", "ٍ", "َ", "ُ", "ِ", "ّ", "ْ"),
+        "؛" to listOf(";", "،"),
+        "٪" to listOf("%", "‰"),
+        "٫" to listOf(".", ","),
+        "٬" to listOf(",", "،")
     )
 
     private val urlDotAlts = listOf("-", "_", "~")

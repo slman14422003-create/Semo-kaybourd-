@@ -11,6 +11,7 @@ sealed class KeyAction {
     data object Enter : KeyAction()
     data object SwitchToSymbols : KeyAction()
     data object SwitchToSymbols2 : KeyAction()
+    data object SwitchToSymbols3 : KeyAction()
     data object SwitchToLetters : KeyAction()
     /** مفتاح «123» بصفحة الحروف: يفتح لوحة الأرقام أو صفحة الرموز حسب الإعداد */
     data object SwitchToNumbers : KeyAction()
@@ -56,7 +57,7 @@ data class KeyDefinition(
 }
 
 enum class ShiftState { OFF, ON, LOCKED }
-enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, NUMPAD, EMOJI, CLIPBOARD, EDIT, CALC, TRANSLATE }
+enum class KeyboardPage { LETTERS, SYMBOLS_1, SYMBOLS_2, SYMBOLS_3, NUMPAD, EMOJI, CLIPBOARD, EDIT, CALC, TRANSLATE }
 /** نظام الكتابة: يحدّد الحروف الكبيرة (Shift) واتجاه النص */
 enum class Script { LATIN, ARABIC, CYRILLIC }
 
