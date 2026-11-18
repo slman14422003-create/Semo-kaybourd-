@@ -473,3 +473,7 @@
 - VoskModels.MIN_RAM_BYTES restored to 5 GB; it now only gates the other 1 GB plus accurate models (fr, es, de, ru, fa, pt, it).
 - Existing installs that downloaded ar-mgb2-0.4 under the old flag now show as the accurate tier. Installs of the linto model are no longer recognised by id and can be deleted from the downloads page.
 - Static review only, no Gradle build or device run available here.
+
+## 3.30.7 (versionCode 81) - not built here, check CI
+- Panel entrance stutter: the slide state was reset inside a LaunchedEffect, so the panel was drawn fully visible for a frame, then jumped to hidden, then slid in (made worse by the extra frame wait added in 3.30.5). showSlide is now created with remember(showTick, animScale) starting at 0, so the first frame after a show is already hidden. The spring is replaced by a 420 ms IosPush tween, which has a fixed end instead of a long tail.
+- Static review only, no Gradle build or device run available here.

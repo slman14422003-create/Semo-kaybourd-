@@ -185,3 +185,6 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 
 ## Arabic voice model (v3.30.6)
 - Accurate Arabic is ar-mgb2-0.4 (333 MB, 4 GB friendly). The 1.3 GB linto model was dropped on purpose; do not bring it back.
+
+## Entrance rule (v3.30.7)
+- Never reset the entrance animatable in an effect; create it with remember(showTick) so frame one is already hidden. Keep it a plain tween, translation only.

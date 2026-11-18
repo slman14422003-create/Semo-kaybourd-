@@ -380,14 +380,10 @@ fun KeyboardScreen(
     val animScale = state.animationSpeed.multiplier
     // ظهور اللوحة مثل آيفون: تصعد من أسفل الشاشة بمنحنى iOS سريع التباطؤ عند كل إظهار
     val showTick by viewModel.showTick.collectAsState()
-    val showSlide = remember { Animatable(if (animScale > 0.001f) 0f else 1f) }
-    LaunchedEffect(showTick, animScale) {
-        if (animScale <= 0.001f) {
-            showSlide.snapTo(1f)
-        } else {
-            showSlide.snapTo(0f)
-            androidx.compose.runtime.withFrameNanos { }
-            showSlide.animateTo(1f, scaledSpring(animScale, dampingRatio = 1f, stiffness = 360f))
+    val showSlide = remember(showTick, animScale) { Animatable(if (animScale > 0.001f) 0f else 1f) }
+    LaunchedEffect(showSlide) {
+        if (animScale > 0.001f) {
+            showSlide.animateTo(1f, scaledTween(animScale, 420, easing = IosPush))
         }
     }
     val pageAlpha = remember { Animatable(1f) }
