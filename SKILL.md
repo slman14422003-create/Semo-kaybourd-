@@ -182,3 +182,6 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 ## Entrance and RAM gate (v3.30.5)
 - Panel entrance lives in KeyboardScreen (showSlide); keep it translation only.
 - Accurate Arabic (ar-0.22-linto-1.1.0, 1.4 GB) must stay; RAM gate is VoskModels.MIN_RAM_BYTES (3 GB).
+
+## Arabic voice model (v3.30.6)
+- Accurate Arabic is ar-mgb2-0.4 (333 MB, 4 GB friendly). The 1.3 GB linto model was dropped on purpose; do not bring it back.

@@ -467,3 +467,9 @@
 - Panel entrance: now a critically damped spring (stiffness 360) started after the first frame, translation only (no alpha, no per-row stagger), so no offscreen layer is needed during the slide.
 - VoskModels.MIN_RAM_BYTES lowered from 5 GB to 3 GB so phones sold as 4 GB (which report about 3.5 to 3.9 GB) can download the 1.4 GB accurate Arabic model; the model itself is unchanged and not replaced. The existing memory failure path still reports a load failure on devices that cannot hold it.
 - Static review only, no Gradle build or device run available here.
+
+## 3.30.6 (versionCode 80) - not built here, check CI
+- Accurate Arabic model switched from ar-0.22-linto-1.1.0 (1.3 GB) to ar-mgb2-0.4 (about 333 MB, Apache 2.0). Per the Vosk model list it scores 16.40 WER on the MGB-2 dev set against 28.50 for the linto model on the same set (52.87 on Common Voice for linto), and it is below the 700 MB heavy threshold, so it is not RAM gated and fits 4 GB phones. Note the two numbers come from the Vosk list, not from a test on this app.
+- VoskModels.MIN_RAM_BYTES restored to 5 GB; it now only gates the other 1 GB plus accurate models (fr, es, de, ru, fa, pt, it).
+- Existing installs that downloaded ar-mgb2-0.4 under the old flag now show as the accurate tier. Installs of the linto model are no longer recognised by id and can be deleted from the downloads page.
+- Static review only, no Gradle build or device run available here.

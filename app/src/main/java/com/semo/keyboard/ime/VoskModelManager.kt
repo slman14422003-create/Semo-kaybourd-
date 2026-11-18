@@ -45,7 +45,7 @@ class VoskModelSpec(val code: String, val tier: VoskTier, val id: String, val by
 
 object VoskModels {
     private const val HEAVY_BYTES = 700_000_000L
-    private const val MIN_RAM_BYTES = 3_000_000_000L
+    private const val MIN_RAM_BYTES = 5_000_000_000L
 
     private fun std(code: String, id: String, bytes: Long) = VoskModelSpec(code, VoskTier.STANDARD, id, bytes)
     private fun acc(code: String, id: String, bytes: Long) = VoskModelSpec(code, VoskTier.ACCURATE, id, bytes)
@@ -67,7 +67,7 @@ object VoskModels {
     ).associateBy { it.code }
 
     val accurate: Map<String, VoskModelSpec> = listOf(
-        acc("ar", "ar-0.22-linto-1.1.0", 1_377_395_170L),
+        acc("ar", "ar-mgb2-0.4", 333_000_000L),
         acc("en", "en-us-0.22-lgraph", 130_557_655L),
         acc("fr", "fr-0.22", 1_523_026_348L),
         acc("es", "es-0.42", 1_484_681_703L),
