@@ -208,6 +208,7 @@ internal data class BottomPos(
 )
 
 internal val LocalBottomPos = staticCompositionLocalOf { BottomPos() }
+internal val LocalKeyHeight = staticCompositionLocalOf { 40.dp }
 internal val LocalEdgeCenter = staticCompositionLocalOf { 62.dp }
 internal val LocalSidePadding = staticCompositionLocalOf { 3.dp }
 
@@ -277,7 +278,14 @@ fun KeyboardScreen(
         // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
         val fullWidth = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
         val width = minOf(fullWidth, AutoFit.contentMaxWidth(screenWidthDp, screenHeightDp))
-        val base = keyMetrics(state.style, state.size, width, state.keySpacing, state.keyboardScale)
+        val landscapeNow = screenWidthDp > screenHeightDp
+        val base = keyMetrics(state.style, state.size, width, state.keySpacing, state.keyboardScale).let {
+            if (landscapeNow) it.copy(
+                rowSpacing = (it.rowSpacing.value * 0.5f).coerceAtLeast(4f).dp,
+                stripHeight = 40.dp,
+                utilHeight = 38.dp
+            ) else it
+        }
         if (state.autoFit) {
             val rowsCount = if (state.numberRow) 5f else 4f
             val keyH = AutoFit.keyHeight(
@@ -289,7 +297,7 @@ fun KeyboardScreen(
             // الوضع الأفقي: العرض كبير فكانت المفاتيح تطلع بأقصى ارتفاع وتغطي معظم الشاشة.
             // نحصر ارتفاع اللوحة بحوالي نصف الشاشة كي يبقى الحقل النصي ظاهرًا.
             val rowsCount = if (state.numberRow) 5f else 4f
-            val budget = screenHeightDp * 0.56f - base.stripHeight.value - base.utilHeight.value
+            val budget = screenHeightDp * 0.62f - base.stripHeight.value - base.utilHeight.value
             val keyH = (budget / rowsCount - base.rowSpacing.value).coerceIn(30f, base.keyHeight.value)
             base.copy(keyHeight = keyH.dp)
         } else base
@@ -316,7 +324,7 @@ fun KeyboardScreen(
     // صف الأيقونات بنفس ارتفاع شريط التنقل بالضبط، وأيقونة الكرة تتوسّط ارتفاعه تمامًا، لأن النظام
     // يوسّط أزرار الشريط (زر إخفاء الكيبورد) بنفس المنتصف. ويمكن للمستخدم تعديل الفرق الصغير
     // بين الأجهزة من الإعدادات (globeOffsetDp).
-    val utilHeight = if (edgeToEdgeIme) maxOf(navInset, 48.dp) else metrics.utilHeight
+    val utilHeight = if (edgeToEdgeIme) maxOf(navInset, if (screenWidthDp > screenHeightDp) 38.dp else 48.dp) else metrics.utilHeight
     // أزرار النظام (زر إخفاء الكيبورد) تقع بمنتصف شريط ارتفاعه 48dp من أسفل الشاشة حتى لو أبلغ النظام
     // عن inset أصغر (قياس من جهاز One UI: الـ inset ~24dp بينما مركز الزر على 24dp من الأسفل)
     val navCenter = utilHeight / 2
@@ -444,6 +452,7 @@ fun KeyboardScreen(
         LocalTouchTuning provides tuning,
         LocalBottomPos provides bottomPos,
         LocalEdgeCenter provides edgeCenterDp.dp,
+        LocalKeyHeight provides metrics.keyHeight,
         LocalSidePadding provides metrics.sidePadding,
         LocalKeyboardScale provides state.keyboardScale,
         LocalAnimScale provides animScale,
@@ -1565,7 +1574,7 @@ private fun RowScope.KeyButton(
     // منطقة اللمس تشمل الفراغات بين المفاتيح (تقلّل الضغطات الضائعة)، والشكل المرئي أصغر منها
     val verticalPadding = if (def.plain) 0.dp else metrics.rowSpacing / 2
     // دائرة الإخفاء تلتصق بالحافة اليمنى بنفس بعد دائرة الكرة عن الحافة اليسرى (تناظر تام)
-    val endSide = def.action == KeyAction.HideKeyboard
+    val endSide = def.action == KeyAction.HideKeyboard || def.action == KeyAction.Mic
     val bottomPos = LocalBottomPos.current
     val edgeCenter = LocalEdgeCenter.current
     val sidePad = LocalSidePadding.current
@@ -2043,14 +2052,15 @@ private fun KeyContent(def: KeyDefinition, textColor: Color, iconSize: Dp) {
         val isLetter = def.action is KeyAction.Character
         // أحجام خطوط المفاتيح ثابتة كآيفون ولا تكبر مع «حجم الخط» بإعدادات الجهاز (كانت الحروف تكبر وتتزاحم)
         val fontScale = LocalDensity.current.fontScale
-        val labelSize = when {
+        val keyHeightDp = LocalKeyHeight.current.value
+        val labelSize = minOf(when {
             isLetter && def.label.length > 1 -> 16f
             isLetter -> 25f
             def.action == KeyAction.Space -> 16f
             def.action == KeyAction.Enter -> 16f
             def.label.length > 2 -> 16f
             else -> 18f
-        }
+        }, keyHeightDp * 0.66f)
         Text(
             text = def.label,
             color = textColor,

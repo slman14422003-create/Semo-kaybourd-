@@ -174,3 +174,7 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 - Anything that maps touch x to keys (swipeTyping) must use the centered content origin and width.
 - Bottom globe and hide buttons are plain icons drawn by CircleKeyVisual; their center from the screen edge comes from LocalEdgeCenter.
 - Not built here; check CI first.
+
+## Bottom row (v3.30.4)
+- Bottom row is globe (left) and mic (right), both plain icons; the hide action is a long press on the mic. Do not re-add a hide button without being asked.
+- Key label size is capped by LocalKeyHeight in KeyContent; landscape metrics are tightened in KeyboardScreen where metrics are computed.

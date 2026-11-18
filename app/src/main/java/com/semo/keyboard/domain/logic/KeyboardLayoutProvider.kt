@@ -358,12 +358,11 @@ object KeyboardLayoutProvider {
             // مع أكثر من لغتين نعرض رمز اللغة الحالية على الكرة كي يعرف المستخدم أين وصل بالدورة
             badge = if (state.enabledLanguages.size > 2) state.language.badge else ""
         )
-        val hide = when (state.hideButtonMode) {
-            HideButtonMode.OFF -> KeyDefinition.spacer(2.8f)
-            HideButtonMode.RING -> KeyDefinition("⌄", KeyAction.HideKeyboard, weight = 2.8f, plain = true, ringOnly = true)
-            HideButtonMode.ARROW -> KeyDefinition("⌄", KeyAction.HideKeyboard, weight = 2.8f, plain = true)
-        }
-        return listOf(globe, KeyDefinition.spacer(4.4f), hide)
+        val mic = KeyDefinition(
+            "\uD83C\uDFA4", KeyAction.Mic, weight = 2.8f,
+            longPressAction = KeyAction.HideKeyboard, plain = true
+        )
+        return listOf(globe, KeyDefinition.spacer(4.4f), mic)
     }
 
     private fun numberRow(state: KeyboardUiState): List<List<KeyDefinition>> =

@@ -20,7 +20,7 @@ object AutoFit {
         val landscape = widthDp > heightDp
         val shortest = minOf(widthDp, heightDp)
         val fraction = when {
-            landscape -> 0.56f
+            landscape -> 0.62f
             shortest >= 600 -> 0.30f
             heightDp >= 880 -> 0.34f
             heightDp >= 760 -> 0.37f
@@ -29,7 +29,7 @@ object AutoFit {
         }
         val budget = heightDp * fraction - stripHeight - utilHeight
         val fitted = budget / rows - rowSpacing
-        return fitted.coerceIn(30f, baseKeyHeight.coerceAtLeast(30f))
+        return fitted.coerceIn(28f, baseKeyHeight.coerceAtLeast(28f))
     }
 
     fun cornerRadiusDp(context: Context, density: Float): Float {

@@ -457,3 +457,8 @@
 - Panel entrance: slide 460ms with IosPush, fade in over the first 40 percent, and a small per-row stagger driven by showSlide.
 - The mic stays only as the toolbar item; the bottom right slot is the hide button.
 - Static review only, no Gradle build or device run available here.
+
+## 3.30.4 (versionCode 78) - not built here, check CI
+- Correction to 3.30.3: the hide-keyboard button is removed from the bottom row and the speech-to-text mic (KeyAction.Mic, opens the voice panel) takes its place at the bottom right, plain icon, mirrored with the globe. Long press on the mic hides the keyboard. HideButtonMode no longer affects the layout.
+- Landscape clipping: key labels are capped to 0.66 of the key height (LocalKeyHeight) so Arabic descenders are no longer cut. In landscape the row spacing is halved, the strip is 40dp, the util row 38dp, the height budget is 0.62 of the screen and the minimum key height is 28dp, which gives taller keys.
+- Static review only, no Gradle build or device run available here.

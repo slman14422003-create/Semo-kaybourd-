@@ -14,8 +14,8 @@ android {
         applicationId = "com.semo.keyboard"
         minSdk = 26
         targetSdk = 37
-        versionCode = 77
-        versionName = "3.30.3"
+        versionCode = 78
+        versionName = "3.30.4"
         ndk {
             debugSymbolLevel = "NONE"
             if (!providers.gradleProperty("includeX86").isPresent) abiFilters += listOf("arm64-v8a", "armeabi-v7a")
