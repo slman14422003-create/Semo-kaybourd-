@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -207,6 +208,8 @@ internal data class BottomPos(
 )
 
 internal val LocalBottomPos = staticCompositionLocalOf { BottomPos() }
+internal val LocalEdgeCenter = staticCompositionLocalOf { 62.dp }
+internal val LocalSidePadding = staticCompositionLocalOf { 3.dp }
 
 /** صف مفاتيح بلا خلفية (أيقونات عائمة) أو فراغات فقط = الصف الأخير تحت المسافة */
 private fun isUtilityRow(row: List<KeyDefinition>): Boolean =
@@ -272,7 +275,8 @@ fun KeyboardScreen(
     val screenHeightDp = configuration.screenHeightDp
     val metrics = remember(state.style, state.size, state.keySpacing, state.keyboardScale, screenWidthDp, screenHeightDp, state.oneHand, state.numberRow, state.autoFit) {
         // مع اليد الواحدة اللوحة أضيق (0.84 من العرض)، فنحسب القياسات على عرضها الفعلي
-        val width = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
+        val fullWidth = if (state.oneHand != OneHandMode.OFF) screenWidthDp * 0.84f else screenWidthDp.toFloat()
+        val width = minOf(fullWidth, AutoFit.contentMaxWidth(screenWidthDp, screenHeightDp))
         val base = keyMetrics(state.style, state.size, width, state.keySpacing, state.keyboardScale)
         if (state.autoFit) {
             val rowsCount = if (state.numberRow) 5f else 4f
@@ -285,7 +289,7 @@ fun KeyboardScreen(
             // الوضع الأفقي: العرض كبير فكانت المفاتيح تطلع بأقصى ارتفاع وتغطي معظم الشاشة.
             // نحصر ارتفاع اللوحة بحوالي نصف الشاشة كي يبقى الحقل النصي ظاهرًا.
             val rowsCount = if (state.numberRow) 5f else 4f
-            val budget = screenHeightDp * 0.52f - base.stripHeight.value - base.utilHeight.value
+            val budget = screenHeightDp * 0.56f - base.stripHeight.value - base.utilHeight.value
             val keyH = (budget / rowsCount - base.rowSpacing.value).coerceIn(30f, base.keyHeight.value)
             base.copy(keyHeight = keyH.dp)
         } else base
@@ -374,7 +378,7 @@ fun KeyboardScreen(
             showSlide.snapTo(1f)
         } else {
             showSlide.snapTo(0f)
-            showSlide.animateTo(1f, scaledTween(animScale, 340, easing = IosPush))
+            showSlide.animateTo(1f, scaledTween(animScale, 460, easing = IosPush))
         }
     }
     val pageAlpha = remember { Animatable(1f) }
@@ -426,9 +430,12 @@ fun KeyboardScreen(
         TouchTuning(state.holdDelay.millis, state.backspaceSpeed, state.spaceBarAction)
     }
 
-    val autoInset = AutoFit.bottomInset(cornerDp, navButtons)
-    val bottomPos = remember(state.manualBottomPos, state.autoFit, autoInset, state.globeDx, state.globeDy, state.hideDx, state.hideDy) {
-        if (state.autoFit && !state.manualBottomPos) BottomPos(true, autoInset, 0f, autoInset, 0f)
+    val contentMaxDp = if (oneHanded) 10000.dp else AutoFit.contentMaxWidth(screenWidthDp, screenHeightDp).dp
+    val edgeCenterDp = remember(cornerDp, navButtons, screenWidthDp, screenHeightDp) {
+        AutoFit.edgeButtonCenter(cornerDp, navButtons, screenWidthDp, screenHeightDp)
+    }
+    val bottomPos = remember(state.manualBottomPos, state.autoFit, state.globeDx, state.globeDy, state.hideDx, state.hideDy) {
+        if (state.autoFit && !state.manualBottomPos) BottomPos(true, 0f, 0f, 0f, 0f)
         else BottomPos(state.manualBottomPos, state.globeDx, state.globeDy, state.hideDx, state.hideDy)
     }
 
@@ -436,6 +443,8 @@ fun KeyboardScreen(
         LocalLayoutDirection provides LayoutDirection.Ltr,
         LocalTouchTuning provides tuning,
         LocalBottomPos provides bottomPos,
+        LocalEdgeCenter provides edgeCenterDp.dp,
+        LocalSidePadding provides metrics.sidePadding,
         LocalKeyboardScale provides state.keyboardScale,
         LocalAnimScale provides animScale,
         LocalFrost provides frost
@@ -445,7 +454,10 @@ fun KeyboardScreen(
                 .fillMaxWidth()
                 .graphicsLayer {
                     val p = showSlide.value
-                    if (p < 1f) translationY = size.height * (1f - p)
+                    if (p < 1f) {
+                        translationY = size.height * (1f - p)
+                        alpha = (0.35f + 0.65f * (p / 0.4f).coerceIn(0f, 1f))
+                    }
                 }
                 .frostPanel(colors.panel, frost)
         ) {
@@ -512,7 +524,7 @@ fun KeyboardScreen(
                                     alpha = pageAlpha.value
                                     translationX = langShift.value * this.density
                                 }
-                                .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis) { path ->
+                                .swipeTyping(swipeEnabled, rows, rowHeights, trail, state.holdDelay.millis, contentMaxDp) { path ->
                                     viewModel.onSwipeWord(path)
                                 }
                         ) {
@@ -522,25 +534,36 @@ fun KeyboardScreen(
                                     Box(
                                         modifier = Modifier.graphicsLayer {
                                             val p = rowProgress[minOf(index, 7)].value
+                                            val sp = showSlide.value
                                             alpha = 0.25f + 0.75f * p
-                                            translationY = (1f - p) * 14.dp.toPx()
+                                            translationY = (1f - p) * 14.dp.toPx() + (1f - sp) * (index + 1) * 5.dp.toPx()
                                         }
                                     ) {
-                                    KeyRow(
-                                        row = row,
-                                        colors = colors,
-                                        metrics = metrics,
-                                        rowHeight = rowHeights[index],
-                                        showPreview = state.keyPreview,
-                                        hideLabels = trackpad,
-                                        isTopRow = index == 0,
-                                        plainCenterFromBottom = globeCenter,
-                                        viewModel = viewModel,
-                                        onTrackpad = { active ->
-                                            trackpad = active
-                                            if (active) viewModel.onTrackpadStart()
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.TopCenter
+                                    ) {
+                                        Box(
+                                            modifier = if (isUtilityRow(row)) Modifier.fillMaxWidth()
+                                            else Modifier.widthIn(max = contentMaxDp).fillMaxWidth()
+                                        ) {
+                                            KeyRow(
+                                                row = row,
+                                                colors = colors,
+                                                metrics = metrics,
+                                                rowHeight = rowHeights[index],
+                                                showPreview = state.keyPreview,
+                                                hideLabels = trackpad,
+                                                isTopRow = index == 0,
+                                                plainCenterFromBottom = globeCenter,
+                                                viewModel = viewModel,
+                                                onTrackpad = { active ->
+                                                    trackpad = active
+                                                    if (active) viewModel.onTrackpadStart()
+                                                }
+                                            )
                                         }
-                                    )
+                                    }
                                     }
                                 }
                             }
@@ -595,10 +618,13 @@ private fun Modifier.swipeTyping(
     rowHeights: List<Dp>,
     trail: SnapshotStateList<Offset>,
     holdMs: Long,
+    contentMax: Dp,
     onWord: (List<String>) -> Unit
 ): Modifier {
     if (!enabled) return this
-    return pointerInput(rows, rowHeights, holdMs) {
+    return pointerInput(rows, rowHeights, holdMs, contentMax) {
+        val contentW = minOf(size.width.toFloat(), contentMax.toPx())
+        val originX = (size.width - contentW) / 2f
         val holdLimit = if (holdMs > 0L) holdMs else viewConfiguration.longPressTimeoutMillis
         // الحروف التي لها أحرف بديلة: الإمساك عليها = ضغط مطوّل، فلا نحوّله لكتابة بالسحب
         val altLetters = rows.flatten()
@@ -610,7 +636,7 @@ private fun Modifier.swipeTyping(
         val startDistance = 18.dp.toPx()
 
         fun letterAt(pos: Offset): String? {
-            if (pos.x < 0f || pos.x >= size.width) return null
+            if (pos.x < originX || pos.x >= originX + contentW) return null
             var top = 0f
             for (i in rows.indices) {
                 val bottom = top + heightsPx[i]
@@ -621,8 +647,8 @@ private fun Modifier.swipeTyping(
                     if (total <= 0f) return null
                     var left = 0f
                     for (key in row) {
-                        val right = left + size.width * (key.weight / total)
-                        if (pos.x < right) {
+                        val right = left + contentW * (key.weight / total)
+                        if (pos.x - originX < right) {
                             val action = key.action
                             return if (!key.isSpacer && action is KeyAction.Character &&
                                 action.char.length == 1 && action.char[0].isLetter()
@@ -1541,6 +1567,8 @@ private fun RowScope.KeyButton(
     // دائرة الإخفاء تلتصق بالحافة اليمنى بنفس بعد دائرة الكرة عن الحافة اليسرى (تناظر تام)
     val endSide = def.action == KeyAction.HideKeyboard
     val bottomPos = LocalBottomPos.current
+    val edgeCenter = LocalEdgeCenter.current
+    val sidePad = LocalSidePadding.current
     Box(
         modifier = Modifier
             .weight(def.weight)
@@ -1560,7 +1588,11 @@ private fun RowScope.KeyButton(
         contentAlignment = if (def.plain) (if (endSide) Alignment.BottomEnd else Alignment.BottomStart) else Alignment.TopStart
     ) {
         Box(
-            modifier = (if (def.plain) Modifier.widthIn(max = 96.dp).fillMaxWidth().height(48.dp).offset(y = (24.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
+            modifier = (if (def.plain) Modifier
+                .wrapContentWidth(if (endSide) Alignment.End else Alignment.Start, unbounded = true)
+                .width((edgeCenter - sidePad).coerceAtLeast(24.dp) * 2)
+                .height(48.dp)
+                .offset(y = (24.dp - plainCenterFromBottom).coerceAtLeast(0.dp)) else Modifier.fillMaxSize())
                 .then(
                     if (def.plain && bottomPos.enabled) {
                         Modifier.offset(
@@ -1934,14 +1966,15 @@ private suspend fun PointerInputScope.spaceGestures(
 @Composable
 private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pressed: Boolean) {
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.92f else 1f,
+        targetValue = if (pressed) 0.86f else 1f,
         animationSpec = scaledSpring(LocalAnimScale.current, dampingRatio = 0.8f, stiffness = 900f),
-        label = "circleKeyScale"
+        label = "plainKeyScale"
     )
-    val top = if (pressed) colors.key else lerp(colors.keySpecial, colors.key, 0.38f)
-    val bottom = if (pressed) lerp(colors.keySpecial, colors.key, 0.7f) else colors.keySpecial
-    val shadow = colors.keyShadow.copy(alpha = 0.6f)
-    val ring = colors.divider.copy(alpha = 0.85f)
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (pressed) 0.5f else 1f,
+        animationSpec = scaledTween(LocalAnimScale.current, if (pressed) 0 else 160, easing = IosEaseOut),
+        label = "plainKeyAlpha"
+    )
     Box(contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
@@ -1949,20 +1982,12 @@ private fun CircleKeyVisual(def: KeyDefinition, colors: SemoKeyboardColors, pres
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
-                }
-                .drawBehind {
-                    drawCircle(
-                        color = shadow,
-                        radius = size.minDimension / 2f,
-                        center = Offset(size.width / 2f, size.height / 2f + 1.dp.toPx())
-                    )
-                }
-                .background(Brush.verticalGradient(listOf(top, bottom)), CircleShape)
-                .border(0.75.dp, ring, CircleShape),
+                    this.alpha = pressAlpha
+                },
             contentAlignment = Alignment.Center
         ) {
             if (!def.ringOnly) {
-                KeyContent(def, colors.text, iconSize = 24.dp)
+                KeyContent(def, colors.text, iconSize = 26.dp)
             }
         }
         if (def.badge.isNotEmpty()) {

@@ -448,3 +448,12 @@
 ## Baseline profile workflow fix (tooling only, no app change) - not run here, check CI
 - tools/baseline/module/build.gradle.kts: testOptions.managedDevices.devices no longer exists in AGP 9.5 (CI error: Unresolved reference 'devices' and the dependent device, apiLevel, systemImageSource lines). Replaced with testOptions.managedDevices.allDevices, same create<ManagedVirtualDevice> block.
 - The legacy android {} extension for the test module only produces a deprecation warning under android.newDsl=false; left as is.
+
+## 3.30.3 (versionCode 77) - not built here, check CI
+- Landscape and wide screens: letter rows are capped to a centered width (AutoFit.contentMaxWidth: 74 percent of the screen, max 640dp, or 760dp from 900dp wide) so keys keep tablet-like proportions; metrics are computed from that width. The bottom utility row stays full width so the globe and hide buttons keep aligning with the system navigation buttons. Landscape height budget raised from 0.52 to 0.56 of the screen height.
+- swipeTyping hit testing now offsets by the centered content origin and uses the capped width.
+- Globe and hide buttons are plain icons (no circle, no border, no shadow), 26dp, with press scale and alpha. HideButtonMode.RING now draws nothing so only the system arrow shows.
+- Button position is automatic: AutoFit.edgeButtonCenter (40dp + half the display corner radius, 56dp with button navigation, +4dp on wide screens, clamped 48 to 72dp) gives the icon center distance from the screen edge; KeyButton sizes the plain button box from LocalEdgeCenter and LocalSidePadding. Auto mode no longer adds the old inward offset (it double counted the inset). Manual positions are unchanged.
+- Panel entrance: slide 460ms with IosPush, fade in over the first 40 percent, and a small per-row stagger driven by showSlide.
+- The mic stays only as the toolbar item; the bottom right slot is the hide button.
+- Static review only, no Gradle build or device run available here.

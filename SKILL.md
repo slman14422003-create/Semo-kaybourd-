@@ -168,3 +168,9 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 
 ## 3.29.5 (versionCode 73) - not built here, check CI
 - The open items now run from GitHub Actions, details in TASKS_LOG.md 3.29.5. Optimize model workflow (tools/optimize_ruq.py): builds batch, int8 and int8-batch variants of ruq-5m.onnx, scores them against the float model on the Arabic corpus, uploads them as an artifact and can open a PR with the best passing one. Baseline profile workflow (tools/baseline/): patches the build files only inside the CI checkout, runs a Macrobenchmark session on a Gradle managed emulator and can open a PR with app/src/main/baseline-prof.txt. NeuralLm uses a batched beam path automatically when the model input batch axis is dynamic, and re-copies the model when the asset size changes. -PincludeX86 turns off the ABI filter (needed by the emulator).
+
+## Wide layout and bottom buttons (v3.30.3)
+- Wide mode helpers live in domain/logic/AutoFit.kt (isWide, contentMaxWidth, edgeButtonCenter). KeyboardScreen wraps non-utility rows in a centered widthIn box; the utility row stays full width.
+- Anything that maps touch x to keys (swipeTyping) must use the centered content origin and width.
+- Bottom globe and hide buttons are plain icons drawn by CircleKeyVisual; their center from the screen edge comes from LocalEdgeCenter.
+- Not built here; check CI first.

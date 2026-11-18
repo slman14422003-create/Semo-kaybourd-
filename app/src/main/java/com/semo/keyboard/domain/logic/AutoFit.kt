@@ -20,7 +20,7 @@ object AutoFit {
         val landscape = widthDp > heightDp
         val shortest = minOf(widthDp, heightDp)
         val fraction = when {
-            landscape -> 0.52f
+            landscape -> 0.56f
             shortest >= 600 -> 0.30f
             heightDp >= 880 -> 0.34f
             heightDp >= 760 -> 0.37f
@@ -51,5 +51,19 @@ object AutoFit {
     fun bottomInset(cornerRadiusDp: Float, buttonNav: Boolean): Float {
         if (buttonNav) return 0f
         return (cornerRadiusDp * 0.35f).coerceIn(0f, 24f)
+    }
+
+    fun isWide(widthDp: Int, heightDp: Int): Boolean = widthDp > heightDp || widthDp >= 600
+
+    fun contentMaxWidth(widthDp: Int, heightDp: Int): Float {
+        if (!isWide(widthDp, heightDp)) return widthDp.toFloat()
+        val cap = if (widthDp >= 900) 760f else 640f
+        return (widthDp * 0.74f).coerceIn(420f, cap).coerceAtMost(widthDp.toFloat())
+    }
+
+    fun edgeButtonCenter(cornerRadiusDp: Float, buttonNav: Boolean, widthDp: Int, heightDp: Int): Float {
+        val base = if (buttonNav) 56f else 40f + cornerRadiusDp * 0.5f
+        val wideBoost = if (isWide(widthDp, heightDp)) 4f else 0f
+        return (base + wideBoost).coerceIn(48f, 72f)
     }
 }
