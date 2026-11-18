@@ -386,7 +386,8 @@ fun KeyboardScreen(
             showSlide.snapTo(1f)
         } else {
             showSlide.snapTo(0f)
-            showSlide.animateTo(1f, scaledTween(animScale, 460, easing = IosPush))
+            androidx.compose.runtime.withFrameNanos { }
+            showSlide.animateTo(1f, scaledSpring(animScale, dampingRatio = 1f, stiffness = 360f))
         }
     }
     val pageAlpha = remember { Animatable(1f) }
@@ -463,10 +464,7 @@ fun KeyboardScreen(
                 .fillMaxWidth()
                 .graphicsLayer {
                     val p = showSlide.value
-                    if (p < 1f) {
-                        translationY = size.height * (1f - p)
-                        alpha = (0.35f + 0.65f * (p / 0.4f).coerceIn(0f, 1f))
-                    }
+                    if (p < 1f) translationY = size.height * (1f - p)
                 }
                 .frostPanel(colors.panel, frost)
         ) {
@@ -543,9 +541,8 @@ fun KeyboardScreen(
                                     Box(
                                         modifier = Modifier.graphicsLayer {
                                             val p = rowProgress[minOf(index, 7)].value
-                                            val sp = showSlide.value
                                             alpha = 0.25f + 0.75f * p
-                                            translationY = (1f - p) * 14.dp.toPx() + (1f - sp) * (index + 1) * 5.dp.toPx()
+                                            translationY = (1f - p) * 14.dp.toPx()
                                         }
                                     ) {
                                     Box(

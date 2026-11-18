@@ -45,7 +45,7 @@ class VoskModelSpec(val code: String, val tier: VoskTier, val id: String, val by
 
 object VoskModels {
     private const val HEAVY_BYTES = 700_000_000L
-    private const val MIN_RAM_BYTES = 5_000_000_000L
+    private const val MIN_RAM_BYTES = 3_000_000_000L
 
     private fun std(code: String, id: String, bytes: Long) = VoskModelSpec(code, VoskTier.STANDARD, id, bytes)
     private fun acc(code: String, id: String, bytes: Long) = VoskModelSpec(code, VoskTier.ACCURATE, id, bytes)

@@ -462,3 +462,8 @@
 - Correction to 3.30.3: the hide-keyboard button is removed from the bottom row and the speech-to-text mic (KeyAction.Mic, opens the voice panel) takes its place at the bottom right, plain icon, mirrored with the globe. Long press on the mic hides the keyboard. HideButtonMode no longer affects the layout.
 - Landscape clipping: key labels are capped to 0.66 of the key height (LocalKeyHeight) so Arabic descenders are no longer cut. In landscape the row spacing is halved, the strip is 40dp, the util row 38dp, the height budget is 0.62 of the screen and the minimum key height is 28dp, which gives taller keys.
 - Static review only, no Gradle build or device run available here.
+
+## 3.30.5 (versionCode 79) - not built here, check CI
+- Panel entrance: now a critically damped spring (stiffness 360) started after the first frame, translation only (no alpha, no per-row stagger), so no offscreen layer is needed during the slide.
+- VoskModels.MIN_RAM_BYTES lowered from 5 GB to 3 GB so phones sold as 4 GB (which report about 3.5 to 3.9 GB) can download the 1.4 GB accurate Arabic model; the model itself is unchanged and not replaced. The existing memory failure path still reports a load failure on devices that cannot hold it.
+- Static review only, no Gradle build or device run available here.

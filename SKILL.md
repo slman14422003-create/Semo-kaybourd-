@@ -178,3 +178,7 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 ## Bottom row (v3.30.4)
 - Bottom row is globe (left) and mic (right), both plain icons; the hide action is a long press on the mic. Do not re-add a hide button without being asked.
 - Key label size is capped by LocalKeyHeight in KeyContent; landscape metrics are tightened in KeyboardScreen where metrics are computed.
+
+## Entrance and RAM gate (v3.30.5)
+- Panel entrance lives in KeyboardScreen (showSlide); keep it translation only.
+- Accurate Arabic (ar-0.22-linto-1.1.0, 1.4 GB) must stay; RAM gate is VoskModels.MIN_RAM_BYTES (3 GB).
