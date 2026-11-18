@@ -134,4 +134,8 @@
     <string name="diag_issues">المشاكل فقط</string>
     <string name="diag_clear_crash">مسح سجل الانهيارات</string>
     <string name="diag_hint">كل شيء يعمل على جهازك ولا يُرسل أي شيء. انسخ السجل والصقه لإصلاح الأخطاء.</string>
+    <string name="smart_punct_title">علامات الترقيم الذكية</string>
+    <string name="smart_punct_hint">علامات اقتباس منحنية، وكتابة -- تتحول لشرطة طويلة، وكتابة ... تتحول لنقاط الحذف، مثل الآيفون</string>
+    <string name="auto_cap_hint">يكبّر أول حرف بعد النقطة أو علامة الاستفهام أو السطر الجديد</string>
+    <string name="double_space_hint">ضغط المسافة مرتين يضيف نقطة ومسافة</string>
 </resources>

@@ -188,3 +188,10 @@ description: Working notes for the Semo Keyboard Android project (Kotlin, Compos
 
 ## Entrance rule (v3.30.7)
 - Never reset the entrance animatable in an effect; create it with remember(showTick) so frame one is already hidden. Keep it a plain tween, translation only.
+
+## Settings strings (v3.30.8)
+- New settings rows use string resources (values and values-ar) through appString, never hardcoded text.
+
+## Autocorrect (v3.30.9)
+- English fixes: englishBase plus englishMore in AutoCorrect.kt, then inflected() for suffix forms. Add new typos to englishMore. Never add a key that is a real word.
+- Arabic fixes come from assets/dict/ar_fix.txt (tab separated).

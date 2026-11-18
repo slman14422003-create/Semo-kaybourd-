@@ -134,4 +134,8 @@
     <string name="diag_issues">Issues only</string>
     <string name="diag_clear_crash">Clear recorded crashes</string>
     <string name="diag_hint">Everything runs on this device and nothing is sent anywhere. Copy the log and paste it to get the errors fixed.</string>
+    <string name="smart_punct_title">Smart punctuation</string>
+    <string name="smart_punct_hint">Curly quotes, -- becomes an em dash, ... becomes an ellipsis, like iPhone</string>
+    <string name="auto_cap_hint">Capitalizes the first letter after a period, question mark or a new line</string>
+    <string name="double_space_hint">Tapping space twice adds a period and a space</string>
 </resources>

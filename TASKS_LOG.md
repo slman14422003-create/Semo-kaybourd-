@@ -477,3 +477,16 @@
 ## 3.30.7 (versionCode 81) - not built here, check CI
 - Panel entrance stutter: the slide state was reset inside a LaunchedEffect, so the panel was drawn fully visible for a frame, then jumped to hidden, then slid in (made worse by the extra frame wait added in 3.30.5). showSlide is now created with remember(showTick, animScale) starting at 0, so the first frame after a show is already hidden. The spring is replaced by a 420 ms IosPush tween, which has a fixed end instead of a long tail.
 - Static review only, no Gradle build or device run available here.
+
+## 3.30.8 (versionCode 82) - not built here, check CI
+- Smart punctuation row in the typing options was hardcoded English. It now uses string resources smart_punct_title and smart_punct_hint (values and values-ar).
+- The auto capitalize and double space rows gained subtitles (auto_cap_hint, double_space_hint) in both languages.
+- Scanned ui/settings for other hardcoded Latin titles or subtitles: none found.
+- Static review only, no Gradle build or device run available here.
+
+## 3.30.9 (versionCode 83) - not built here, check CI
+- AutoCorrect English table grew from about 110 to 259 entries (englishMore merged into english): common misspellings, run-together phrases (aswell, infact, atleast, thankyou), more contractions without apostrophe (youd, theyd), transposed letters (hte, nad, ahve, wiht, woudl).
+- New inflection rule (AutoCorrect.inflected): a word ending in ing, ed, es, s or d whose stem, or stem plus e, is a known typo is fixed with the same ending (recieved to received, recieving to receiving, adresses to addresses). Contraction and multi-word entries are never inflected. When the English word list is loaded the result must be in it, otherwise no change.
+- AutoCorrectTest gained tests for the new entries, inflection and the contraction guard (not run here).
+- Arabic side left as is: ar_fix.txt already has about 2100 entries and prefix and elongation handling.
+- Static review only, no Gradle build or device run available here.

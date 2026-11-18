@@ -38,4 +38,20 @@ class AutoCorrectTest {
         assertFalse(ArabicText.isArabicWord("book"))
         assertFalse(ArabicText.isArabicWord("123"))
     }
+
+    @Test fun moreEnglishTypos() {
+        assertEquals("definitely", AutoCorrect.fix("definatly"))
+        assertEquals("as well", AutoCorrect.fix("aswell"))
+        assertEquals("Wednesday", AutoCorrect.fix("wendsday"))
+    }
+
+    @Test fun inflectedTyposAreFixed() {
+        assertEquals("received", AutoCorrect.fix("recieved"))
+        assertEquals("receiving", AutoCorrect.fix("recieving"))
+        assertEquals("addresses", AutoCorrect.fix("adresses"))
+    }
+
+    @Test fun contractionsAreNotInflected() {
+        assertNull(AutoCorrect.fix("donts"))
+    }
 }

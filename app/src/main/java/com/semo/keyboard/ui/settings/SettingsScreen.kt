@@ -500,11 +500,15 @@ private fun TypingPage(
             )
         }
         Section(L("خيارات الكتابة")) {
-            SwitchRow(L("حرف كبير تلقائي بأول الجملة"), R.drawable.ic_ios_shift, IconGreen, settings.autoCapitalize) {
+            SwitchRow(L("حرف كبير تلقائي بأول الجملة"), R.drawable.ic_ios_shift, IconGreen, settings.autoCapitalize,
+                subtitle = com.semo.keyboard.ui.appString(R.string.auto_cap_hint)
+            ) {
                 scope.launch { repo.setAutoCapitalize(it) }
             }
             Divider()
-            SwitchRow(L("مسافتان = نقطة ومسافة"), R.drawable.ic_set_spacing, IconOrange, settings.doubleSpacePeriod) {
+            SwitchRow(L("مسافتان = نقطة ومسافة"), R.drawable.ic_set_spacing, IconOrange, settings.doubleSpacePeriod,
+                subtitle = com.semo.keyboard.ui.appString(R.string.double_space_hint)
+            ) {
                 scope.launch { repo.setDoubleSpacePeriod(it) }
             }
             Divider()
@@ -514,8 +518,8 @@ private fun TypingPage(
             ) { scope.launch { repo.setAutoPairs(it) } }
             Divider()
             SwitchRow(
-                "Smart punctuation", R.drawable.ic_set_text, IconGreen, settings.smartPunctuation,
-                subtitle = "Curly quotes, -- becomes an em dash, ... becomes an ellipsis, like iPhone"
+                com.semo.keyboard.ui.appString(R.string.smart_punct_title), R.drawable.ic_set_text, IconGreen, settings.smartPunctuation,
+                subtitle = com.semo.keyboard.ui.appString(R.string.smart_punct_hint)
             ) { scope.launch { repo.setSmartPunctuation(it) } }
             Divider()
             SwitchRow(

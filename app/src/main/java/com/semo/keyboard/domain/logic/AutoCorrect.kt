@@ -4,7 +4,7 @@ import android.content.Context
 
 object AutoCorrect {
 
-    private val english: Map<String, String> = mapOf(
+    private val englishBase: Map<String, String> = mapOf(
         "i" to "I", "im" to "I'm", "ive" to "I've", "i'm" to "I'm", "i'll" to "I'll", "i've" to "I've", "i'd" to "I'd",
         "dont" to "don't", "cant" to "can't", "wont" to "won't", "didnt" to "didn't", "doesnt" to "doesn't",
         "isnt" to "isn't", "arent" to "aren't", "wasnt" to "wasn't", "werent" to "weren't",
@@ -35,6 +35,47 @@ object AutoCorrect {
         "peice" to "piece", "beggining" to "beginning", "begining" to "beginning", "buisness" to "business",
         "wouldve" to "would've", "couldve" to "could've", "shouldve" to "should've", "mustnt" to "mustn't"
     )
+
+    private val englishMore: Map<String, String> = mapOf(
+        "definatly" to "definitely", "definatley" to "definitely", "definitly" to "definitely", "occurence" to "occurrence",
+        "occurrance" to "occurrence", "aswell" to "as well", "infact" to "in fact", "incase" to "in case",
+        "eachother" to "each other", "alittle" to "a little", "thankyou" to "thank you", "everytime" to "every time",
+        "atleast" to "at least", "heigth" to "height", "wieght" to "weight", "lenght" to "length",
+        "stregth" to "strength", "strenght" to "strength", "diffrent" to "different", "diferent" to "different",
+        "diffrence" to "difference", "beautifull" to "beautiful", "beatiful" to "beautiful", "beutiful" to "beautiful",
+        "excelent" to "excellent", "exellent" to "excellent", "experiance" to "experience", "familar" to "familiar",
+        "finaly" to "finally", "gaurd" to "guard", "gratefull" to "grateful", "harrass" to "harass",
+        "humerous" to "humorous", "ignorence" to "ignorance", "imediately" to "immediately", "importent" to "important",
+        "inteligent" to "intelligent", "liason" to "liaison", "lisence" to "license", "mispell" to "misspell",
+        "millenium" to "millennium", "mischievious" to "mischievous", "neice" to "niece", "ocasion" to "occasion",
+        "ocurred" to "occurred", "oppurtunity" to "opportunity", "oppertunity" to "opportunity", "parliment" to "parliament",
+        "particulary" to "particularly", "percieve" to "perceive", "plesant" to "pleasant", "presense" to "presence",
+        "priviledge" to "privilege", "pronounciation" to "pronunciation", "questionaire" to "questionnaire", "reccomend" to "recommend",
+        "recomend" to "recommend", "refering" to "referring", "religous" to "religious", "remeber" to "remember",
+        "repitition" to "repetition", "resistence" to "resistance", "responsability" to "responsibility", "rythm" to "rhythm",
+        "scedule" to "schedule", "secratary" to "secretary", "sieze" to "seize", "similiar" to "similar",
+        "sincerly" to "sincerely", "speach" to "speech", "succes" to "success", "sucess" to "success",
+        "supercede" to "supersede", "suprise" to "surprise", "temperture" to "temperature", "thourough" to "thorough",
+        "transfered" to "transferred", "twelth" to "twelfth", "unforseen" to "unforeseen", "unfortunatly" to "unfortunately",
+        "usally" to "usually", "usualy" to "usually", "vaccum" to "vacuum", "vehical" to "vehicle",
+        "visable" to "visible", "wellcome" to "welcome", "welcom" to "welcome", "wendsday" to "Wednesday",
+        "wensday" to "Wednesday", "withold" to "withhold", "writen" to "written", "youself" to "yourself",
+        "yuo" to "you", "yoru" to "your", "hte" to "the", "nad" to "and",
+        "ahve" to "have", "hvae" to "have", "thta" to "that", "tihs" to "this",
+        "wiht" to "with", "whcih" to "which", "woudl" to "would", "shoudl" to "should",
+        "coudl" to "could", "becuz" to "because", "beacuse" to "because", "becasue" to "because",
+        "becaus" to "because", "becouse" to "because", "cna" to "can", "tehy" to "they",
+        "thye" to "they", "recive" to "receive", "mroe" to "more", "olny" to "only",
+        "veyr" to "very", "verry" to "very", "thanx" to "thanks", "tonite" to "tonight",
+        "sory" to "sorry", "sorrry" to "sorry", "congradulations" to "congratulations", "pleaes" to "please",
+        "plase" to "please", "plesae" to "please", "thnak" to "thank", "thansk" to "thanks",
+        "helo" to "hello", "togeather" to "together", "togather" to "together", "togther" to "together",
+        "youd" to "you'd", "theyd" to "they'd", "oclock" to "o'clock", "recieved" to "received",
+        "recieving" to "receiving", "recieves" to "receives", "freinds" to "friends", "seperated" to "separated",
+        "seperately" to "separately", "definate" to "definite"
+    )
+
+    private val english: Map<String, String> = englishBase + englishMore
 
     /**
      * يصلح الضغط الخاطئ على Caps Lock: «hELLO» ← «Hello». نتحقق أن الصورة المصغّرة كلمة إنجليزية صالحة
@@ -85,7 +126,8 @@ object AutoCorrect {
         if (ArabicText.isArabicWord(word)) return fixArabic(word)
         if (word.length > 14) return null
         capsLockSlip(word)?.let { return it }
-        val fixed = english[word.lowercase()] ?: return null
+        val lower = word.lowercase()
+        val fixed = english[lower] ?: inflected(lower) ?: return null
         if (fixed == word) return null
         val result = when {
             fixed.startsWith("I") -> fixed
@@ -94,6 +136,36 @@ object AutoCorrect {
             else -> fixed
         }
         return if (result == word) null else result
+    }
+
+    private val inflections = listOf("ing", "ed", "es", "s", "d")
+
+    private fun inflected(lower: String): String? {
+        if (lower.length < 6) return null
+        for (suffix in inflections) {
+            if (!lower.endsWith(suffix)) continue
+            val stem = lower.dropLast(suffix.length)
+            if (stem.length < 4) continue
+            val direct = english[stem]
+            if (direct != null && '\'' !in direct && ' ' !in direct) {
+                return validated(direct + suffix)
+            }
+            val withE = english[stem + "e"]
+            if (withE != null && '\'' !in withE && ' ' !in withE) {
+                val joined = when (suffix) {
+                    "ing" -> withE.dropLast(1) + "ing"
+                    "ed" -> withE + "d"
+                    else -> null
+                }
+                if (joined != null) return validated(joined)
+            }
+        }
+        return null
+    }
+
+    private fun validated(candidate: String): String? {
+        val valid = ValidWords.english ?: return candidate
+        return if (valid.contains(candidate)) candidate else null
     }
 
     private val alPrefixes = listOf("وبال", "وكال", "وفال", "وال", "بال", "كال", "فال")
